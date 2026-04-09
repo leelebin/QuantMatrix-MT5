@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuantMatrix MT5</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0e17;--bg2:#111827;--bg3:#1a2332;--bg4:#243044;--border:#2d3748;--text:#e2e8f0;--text2:#94a3b8;--green:#10b981;--red:#ef4444;--blue:#3b82f6;--yellow:#f59e0b;--purple:#8b5cf6;--cyan:#06b6d4}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+a{color:var(--blue);text-decoration:none}
+button{cursor:pointer;border:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;transition:all .2s}
+input,select{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--blue)}
+.btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:#2563eb}
+.btn-success{background:var(--green);color:#fff}.btn-success:hover{background:#059669}
+.btn-danger{background:var(--red);color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}.btn-outline:hover{border-color:var(--blue);color:var(--blue)}
+.btn-sm{padding:4px 10px;font-size:12px}
+
+/* Header */
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;height:56px;gap:24px;flex-shrink:0}
+.header .logo{font-size:18px;font-weight:700;color:var(--cyan);letter-spacing:1px}
+.header .logo span{color:var(--text2);font-weight:400;font-size:13px;margin-left:8px}
+.nav{display:flex;gap:4px;flex:1}
+.nav button{background:transparent;color:var(--text2);padding:8px 16px;border-radius:6px;font-size:13px}
+.nav button.active{background:var(--bg4);color:var(--text)}
+.nav button:hover{color:var(--text)}
+.ws-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--red)}
+.ws-dot.connected{background:var(--green)}
+.ws-dot.connecting{background:var(--yellow);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Layout */
+.main{flex:1;padding:20px 24px;overflow-y:auto}
+.page{display:none}.page.active{display:block}
+.grid{display:grid;gap:16px}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:1fr 1fr 1fr}
+.grid-4{grid-template-columns:1fr 1fr 1fr 1fr}
+@media(max-width:1200px){.grid-4{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.stat-card{text-align:center}
+.stat-value{font-size:28px;font-weight:700;margin:8px 0 4px}
+.stat-label{font-size:12px;color:var(--text2)}
+.stat-value.positive{color:var(--green)}
+.stat-value.negative{color:var(--red)}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+td{padding:10px 12px;border-bottom:1px solid var(--border)}
+tr:hover{background:var(--bg3)}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.tag-buy{background:rgba(16,185,129,.15);color:var(--green)}
+.tag-sell{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-active{background:rgba(59,130,246,.15);color:var(--blue)}
+
+/* Forms */
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+.form-row{display:flex;gap:12px}
+.form-row .form-group{flex:1}
+
+/* Auth */
+.auth-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000}
+.auth-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:40px;width:400px;max-width:90vw}
+.auth-box h2{text-align:center;margin-bottom:24px;color:var(--cyan)}
+.auth-box .form-group{margin-bottom:16px}
+.auth-box button{width:100%;padding:12px;font-size:14px;margin-top:8px}
+.auth-toggle{text-align:center;margin-top:16px;font-size:13px;color:var(--text2)}
+.auth-toggle a{cursor:pointer}
+.auth-error{background:rgba(239,68,68,.1);border:1px solid var(--red);color:var(--red);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;display:none}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:500;display:none}
+.modal-overlay.show{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:600px;max-width:90vw;max-height:80vh;overflow-y:auto}
+.modal h3{margin-bottom:16px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+
+/* Equity curve canvas */
+.equity-canvas{width:100%;height:200px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
+
+/* Toggle switch */
+.toggle{position:relative;width:44px;height:24px;display:inline-block}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;inset:0;background:var(--bg4);border-radius:12px;cursor:pointer;transition:.3s}
+.toggle .slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--text2);border-radius:50%;transition:.3s}
+.toggle input:checked+.slider{background:var(--green)}
+.toggle input:checked+.slider:before{transform:translateX(20px);background:#fff}
+
+/* Progress bar */
+.progress-bar{width:100%;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:var(--blue);border-radius:3px;transition:width .3s}
+
+/* Notification log */
+.log-container{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;max-height:300px;overflow-y:auto;font-family:'Courier New',monospace;font-size:12px;line-height:1.6}
+.log-entry{color:var(--text2)}.log-entry.error{color:var(--red)}.log-entry.success{color:var(--green)}.log-entry.warn{color:var(--yellow)}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+
+/* Empty state */
+.empty{text-align:center;padding:40px;color:var(--text2);font-size:14px}
+</style>
+</head>
+<body>
+
+<!-- Auth Screen -->
+<div class="auth-overlay" id="authScreen">
+  <div class="auth-box">
+    <h2>QuantMatrix MT5</h2>
+    <div class="auth-error" id="authError"></div>
+    <div id="loginForm">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="admin@example.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn-primary" onclick="doLogin()">Login</button>
+      <div class="auth-toggle">No account? <a onclick="showRegister()">Register</a></div>
+    </div>
+    <div id="registerForm" style="display:none">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="regName" placeholder="Your name">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="email@example.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="regPassword" placeholder="Min 6 characters" onkeydown="if(event.key==='Enter')doRegister()">
+      </div>
+      <button class="btn-primary" onclick="doRegister()">Register</button>
+      <div class="auth-toggle">Have an account? <a onclick="showLogin()">Login</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- Main App -->
+<header class="header">
+  <div class="logo">QuantMatrix <span>MT5</span></div>
+  <nav class="nav" id="nav">
+    <button class="active" data-page="dashboard">Dashboard</button>
+    <button data-page="positions">Positions</button>
+    <button data-page="trades">Trades</button>
+    <button data-page="strategies">Strategies</button>
+    <button data-page="backtest">Backtest</button>
+    <button data-page="optimizer">Optimizer</button>
+    <button data-page="settings">Settings</button>
+  </nav>
+  <div class="ws-status">
+    <div class="ws-dot" id="wsDot"></div>
+    <span id="wsLabel">Disconnected</span>
+  </div>
+  <button class="btn-outline btn-sm" onclick="doLogout()" id="logoutBtn" style="display:none">Logout</button>
+</header>
+
+<main class="main">
+<!-- Dashboard Page -->
+<div class="page active" id="page-dashboard">
+  <div class="grid grid-4" style="margin-bottom:16px">
+    <div class="card stat-card">
+      <div class="stat-label">Balance</div>
+      <div class="stat-value" id="statBalance">--</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Equity</div>
+      <div class="stat-value" id="statEquity">--</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Open Positions</div>
+      <div class="stat-value" id="statPositions">0</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Today P/L</div>
+      <div class="stat-value" id="statPnl">--</div>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Trading Status</span>
+        <button class="btn-success btn-sm" id="tradingToggle" onclick="toggleTrading()">Start Trading</button>
+      </div>
+      <table>
+        <tr><td style="color:var(--text2)">MT5 Connection</td><td id="dMt5Status">--</td></tr>
+        <tr><td style="color:var(--text2)">Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
+        <tr><td style="color:var(--text2)">Trading Loop</td><td id="dTradingLoop">--</td></tr>
+        <tr><td style="color:var(--text2)">Position Monitor</td><td id="dMonitor">--</td></tr>
+        <tr><td style="color:var(--text2)">Daily Loss</td><td id="dDailyLoss">--</td></tr>
+        <tr><td style="color:var(--text2)">Max Drawdown</td><td id="dDrawdown">--</td></tr>
+        <tr><td style="color:var(--text2)">WS Clients</td><td id="dWsClients">0</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent Signals</span>
+      </div>
+      <div id="recentSignals" style="max-height:260px;overflow-y:auto">
+        <div class="empty">No signals yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Positions Page -->
+<div class="page" id="page-positions">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Open Positions</span>
+      <button class="btn-outline btn-sm" onclick="loadPositions()">Refresh</button>
+    </div>
+    <div id="positionsTable">
+      <div class="empty">No open positions</div>
+    </div>
+  </div>
+</div>
+
+<!-- Trades Page -->
+<div class="page" id="page-trades">
+  <div class="grid grid-4" style="margin-bottom:16px">
+    <div class="card stat-card"><div class="stat-label">Total Trades</div><div class="stat-value" id="tsTotalTrades">0</div></div>
+    <div class="card stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="tsWinRate">--</div></div>
+    <div class="card stat-card"><div class="stat-label">Total Profit</div><div class="stat-value" id="tsTotalProfit">--</div></div>
+    <div class="card stat-card"><div class="stat-label">Avg Profit</div><div class="stat-value" id="tsAvgProfit">--</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Trade History</span>
+      <button class="btn-outline btn-sm" onclick="loadTrades()">Refresh</button>
+    </div>
+    <div id="tradesTable">
+      <div class="empty">No trades yet</div>
+    </div>
+  </div>
+</div>
+
+<!-- Strategies Page -->
+<div class="page" id="page-strategies">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Trading Strategies</span>
+      <button class="btn-outline btn-sm" onclick="loadStrategies()">Refresh</button>
+    </div>
+    <div id="strategiesList">
+      <div class="empty">Loading strategies...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Backtest Page -->
+<div class="page" id="page-backtest">
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Run Backtest</span></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Symbol</label>
+          <select id="btSymbol"></select>
+        </div>
+        <div class="form-group">
+          <label>Strategy</label>
+          <select id="btStrategy">
+            <option value="TrendFollowing">Trend Following</option>
+            <option value="MeanReversion">Mean Reversion</option>
+            <option value="Momentum">Momentum</option>
+            <option value="Breakout">Breakout</option>
+            <option value="MultiTimeframe">Multi-Timeframe</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Start Date</label>
+          <input type="date" id="btStartDate">
+        </div>
+        <div class="form-group">
+          <label>End Date</label>
+          <input type="date" id="btEndDate">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Initial Balance (USD)</label>
+        <input type="number" id="btBalance" value="10000">
+      </div>
+      <button class="btn-primary" onclick="runBacktest()" id="btRunBtn">Run Backtest</button>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Result</span></div>
+      <div id="btResult"><div class="empty">Run a backtest to see results</div></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Equity Curve</span>
+    </div>
+    <canvas class="equity-canvas" id="equityCanvas"></canvas>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><span class="card-title">Backtest History</span></div>
+    <div id="btHistory"><div class="empty">No previous backtests</div></div>
+  </div>
+</div>
+
+<!-- Optimizer Page -->
+<div class="page" id="page-optimizer">
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Strategy Optimizer</span></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Symbol</label>
+          <select id="optSymbol"></select>
+        </div>
+        <div class="form-group">
+          <label>Strategy</label>
+          <select id="optStrategy" onchange="loadOptRanges()">
+            <option value="TrendFollowing">Trend Following</option>
+            <option value="MeanReversion">Mean Reversion</option>
+            <option value="Momentum">Momentum</option>
+            <option value="Breakout">Breakout</option>
+            <option value="MultiTimeframe">Multi-Timeframe</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Optimize For</label>
+        <select id="optMetric">
+          <option value="profitFactor">Profit Factor</option>
+          <option value="sharpeRatio">Sharpe Ratio</option>
+          <option value="returnPercent">Return %</option>
+          <option value="winRate">Win Rate</option>
+        </select>
+      </div>
+      <div class="card-header" style="margin-top:12px"><span class="card-title">Parameter Ranges</span></div>
+      <div id="optRanges"><div class="empty">Select a strategy</div></div>
+      <button class="btn-primary" onclick="runOptimizer()" id="optRunBtn" style="margin-top:12px">Run Optimizer</button>
+      <div id="optProgress" style="margin-top:12px;display:none">
+        <div class="progress-bar"><div class="progress-fill" id="optProgressFill" style="width:0"></div></div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px" id="optProgressText">0%</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Optimization Results</span></div>
+      <div id="optResult"><div class="empty">Run optimizer to see results</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Page -->
+<div class="page" id="page-settings">
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Telegram Notifications</span></div>
+      <div id="notifyStatus" style="margin-bottom:12px"></div>
+      <button class="btn-primary btn-sm" onclick="testNotification()">Send Test Notification</button>
+      <div id="notifyResult" style="margin-top:8px;font-size:13px"></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">WebSocket Connection Log</span></div>
+      <div class="log-container" id="wsLog"></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><span class="card-title">Account Info</span></div>
+    <div id="accountInfo"><div class="empty">Not connected</div></div>
+  </div>
+</div>
+</main>
+<script>
+// ─── State ───
+const API = '';
+let token = localStorage.getItem('qm_token');
+let refreshToken = localStorage.getItem('qm_refresh');
+let ws = null;
+let wsReconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 20;
+let wsReconnectTimer = null;
+let wsPingInterval = null;
+let wsSubscriptions = ['positions','trades','signals','account','status','notifications'];
+const wsLogEntries = [];
+
+// ─── Symbols list ───
+const SYMBOLS = ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCHF','USDCAD','NZDUSD','EURJPY','GBPJPY','EURGBP','AUDNZD','XAUUSD','XAGUSD','US30','US500','NAS100','USOIL','UKOIL'];
+
+// ─── Init ───
+document.addEventListener('DOMContentLoaded', () => {
+  populateSymbolSelects();
+  setDefaultDates();
+  setupNav();
+  if (token) {
+    showApp();
+    initApp();
+  }
+});
+
+function populateSymbolSelects() {
+  ['btSymbol','optSymbol'].forEach(id => {
+    const sel = document.getElementById(id);
+    SYMBOLS.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+  });
+}
+
+function setDefaultDates() {
+  const now = new Date();
+  const y1 = new Date(now.getTime() - 365*24*60*60*1000);
+  document.getElementById('btEndDate').value = now.toISOString().split('T')[0];
+  document.getElementById('btStartDate').value = y1.toISOString().split('T')[0];
+}
+
+function setupNav() {
+  document.querySelectorAll('.nav button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + btn.dataset.page).classList.add('active');
+      onPageSwitch(btn.dataset.page);
+    });
+  });
+}
+
+function onPageSwitch(page) {
+  if (page === 'positions') loadPositions();
+  else if (page === 'trades') { loadTrades(); loadTradeStats(); }
+  else if (page === 'strategies') loadStrategies();
+  else if (page === 'backtest') loadBacktestHistory();
+  else if (page === 'optimizer') loadOptRanges();
+  else if (page === 'settings') { loadNotifyStatus(); loadAccountInfo(); }
+  else if (page === 'dashboard') loadDashboard();
+}
+
+// ─── Auth ───
+function showApp() {
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('logoutBtn').style.display = '';
+}
+function showAuth() {
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('logoutBtn').style.display = 'none';
+}
+function showLogin() { document.getElementById('loginForm').style.display = ''; document.getElementById('registerForm').style.display = 'none'; }
+function showRegister() { document.getElementById('loginForm').style.display = 'none'; document.getElementById('registerForm').style.display = ''; }
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  try {
+    const r = await api('/api/auth/login', 'POST', { email, password }, true);
+    if (r.success) {
+      token = r.data.accessToken; refreshToken = r.data.refreshToken;
+      localStorage.setItem('qm_token', token);
+      localStorage.setItem('qm_refresh', refreshToken);
+      showApp(); initApp();
+    } else { showAuthError(r.message); }
+  } catch (e) { showAuthError(e.message); }
+}
+
+async function doRegister() {
+  const name = document.getElementById('regName').value;
+  const email = document.getElementById('regEmail').value;
+  const password = document.getElementById('regPassword').value;
+  try {
+    const r = await api('/api/auth/register', 'POST', { name, email, password }, true);
+    if (r.success) {
+      token = r.data.accessToken; refreshToken = r.data.refreshToken;
+      localStorage.setItem('qm_token', token);
+      localStorage.setItem('qm_refresh', refreshToken);
+      showApp(); initApp();
+    } else { showAuthError(r.message); }
+  } catch (e) { showAuthError(e.message); }
+}
+
+function doLogout() {
+  token = null; refreshToken = null;
+  localStorage.removeItem('qm_token');
+  localStorage.removeItem('qm_refresh');
+  if (ws) ws.close();
+  showAuth();
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 5000);
+}
+
+// ─── API helper ───
+async function api(url, method='GET', body=null, noAuth=false) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (!noAuth && token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + url, opts);
+  if (res.status === 401 && !noAuth) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) return api(url, method, body, noAuth);
+    doLogout(); throw new Error('Session expired');
+  }
+  return res.json();
+}
+
+async function tryRefreshToken() {
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(API + '/api/auth/refresh-token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken })
+    });
+    const data = await res.json();
+    if (data.success) {
+      token = data.data.accessToken; refreshToken = data.data.refreshToken;
+      localStorage.setItem('qm_token', token);
+      localStorage.setItem('qm_refresh', refreshToken);
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function initApp() {
+  connectWebSocket();
+  loadDashboard();
+}
+
+// ─── WebSocket with heartbeat, auto-reconnect, re-subscribe, logging ───
+function connectWebSocket() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = proto + '//' + location.host + '/ws';
+  wsLog('info', 'Connecting to ' + url + '...');
+  setWsStatus('connecting');
+
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    wsReconnectAttempts = 0;
+    wsLog('success', 'Connected');
+    setWsStatus('connected');
+
+    // Re-subscribe to topics (disconnect recovery)
+    ws.send(JSON.stringify({ type: 'subscribe', topics: wsSubscriptions }));
+
+    // Start client-side heartbeat ping
+    clearInterval(wsPingInterval);
+    wsPingInterval = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 25000);
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleWsMessage(msg);
+    } catch (e) {}
+  };
+
+  ws.onclose = (event) => {
+    clearInterval(wsPingInterval);
+    const reason = event.reason || 'unknown';
+    const code = event.code;
+    wsLog('warn', 'Disconnected (code: ' + code + ', reason: ' + reason + ')');
+    setWsStatus('disconnected');
+
+    // Auto-reconnect with exponential backoff
+    if (token && wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
+      wsReconnectAttempts++;
+      wsLog('info', 'Reconnecting in ' + (delay/1000) + 's (attempt ' + wsReconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')');
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = setTimeout(connectWebSocket, delay);
+    } else if (wsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      wsLog('error', 'Max reconnect attempts reached. Click to retry.');
+    }
+  };
+
+  ws.onerror = (event) => {
+    wsLog('error', 'WebSocket error occurred');
+  };
+}
+
+function handleWsMessage(msg) {
+  switch (msg.type) {
+    case 'pong': break; // heartbeat response
+    case 'connected': wsLog('success', 'Server: ' + msg.data.message); break;
+    case 'subscribed': wsLog('info', 'Subscribed: ' + msg.data.topics.join(', ')); break;
+    case 'trade_opened':
+      wsLog('success', 'Trade opened: ' + msg.data.type + ' ' + msg.data.symbol);
+      loadPositions(); loadDashboard();
+      break;
+    case 'trade_closed':
+      const pl = msg.data.profitLoss;
+      wsLog(pl >= 0 ? 'success' : 'error', 'Trade closed: ' + msg.data.symbol + ' P/L: ' + (pl>=0?'+':'') + pl.toFixed(2));
+      loadPositions(); loadTrades(); loadTradeStats(); loadDashboard();
+      break;
+    case 'positions_sync':
+      if (document.getElementById('page-positions').classList.contains('active')) renderPositions(msg.data);
+      break;
+    case 'position_update':
+      loadPositions(); loadDashboard();
+      break;
+    case 'trade_rejected':
+      wsLog('warn', 'Trade rejected: ' + msg.data.symbol + ' - ' + msg.data.reason);
+      break;
+    case 'optimizer_complete':
+      wsLog('success', 'Optimizer complete: ' + msg.data.validResults + ' valid results');
+      renderOptResult(msg.data);
+      document.getElementById('optProgress').style.display = 'none';
+      document.getElementById('optRunBtn').disabled = false;
+      break;
+    case 'optimizer_error':
+      wsLog('error', 'Optimizer error: ' + msg.data.error);
+      document.getElementById('optProgress').style.display = 'none';
+      document.getElementById('optRunBtn').disabled = false;
+      break;
+    default:
+      if (msg.topic === 'signals') wsLog('info', 'Signal: ' + JSON.stringify(msg.data).substring(0, 80));
+  }
+}
+
+function setWsStatus(status) {
+  const dot = document.getElementById('wsDot');
+  const label = document.getElementById('wsLabel');
+  dot.className = 'ws-dot';
+  if (status === 'connected') { dot.classList.add('connected'); label.textContent = 'Connected'; }
+  else if (status === 'connecting') { dot.classList.add('connecting'); label.textContent = 'Connecting...'; }
+  else { label.textContent = 'Disconnected'; }
+}
+
+function wsLog(level, message) {
+  const time = new Date().toLocaleTimeString();
+  wsLogEntries.unshift({ level, message, time });
+  if (wsLogEntries.length > 200) wsLogEntries.length = 200;
+  const el = document.getElementById('wsLog');
+  if (el) {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + level;
+    entry.textContent = '[' + time + '] ' + message;
+    el.prepend(entry);
+    while (el.children.length > 200) el.removeChild(el.lastChild);
+  }
+}
+
+// ─── Dashboard ───
+async function loadDashboard() {
+  try {
+    const r = await api('/api/trading/status');
+    if (!r.success) return;
+    const d = r.data;
+    document.getElementById('dMt5Status').innerHTML = d.mt5Connected ? '<span style="color:var(--green)">Connected</span>' : '<span style="color:var(--red)">Disconnected</span>';
+    document.getElementById('dTradingEnabled').innerHTML = d.tradingEnabled ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>';
+    document.getElementById('dTradingLoop').textContent = d.tradingLoopActive ? 'Active' : 'Stopped';
+    document.getElementById('dMonitor').textContent = d.monitor.running ? 'Running' : 'Stopped';
+    document.getElementById('tradingToggle').textContent = d.tradingEnabled ? 'Stop Trading' : 'Start Trading';
+    document.getElementById('tradingToggle').className = d.tradingEnabled ? 'btn-danger btn-sm' : 'btn-success btn-sm';
+
+    if (d.risk) {
+      document.getElementById('statBalance').textContent = '$' + num(d.risk.balance);
+      document.getElementById('statEquity').textContent = '$' + num(d.risk.equity);
+      document.getElementById('statPositions').textContent = d.risk.openPositions;
+      document.getElementById('dDailyLoss').textContent = '$' + num(d.risk.todayLoss) + ' / $' + num(d.risk.dailyLossLimit);
+      document.getElementById('dDrawdown').textContent = d.risk.currentDrawdown.toFixed(1) + '% / ' + d.risk.maxDrawdownLimit + '%';
+    }
+    document.getElementById('dWsClients').textContent = document.getElementById('wsDot').classList.contains('connected') ? '1+' : '0';
+
+    // Recent signals
+    if (d.recentSignals && d.recentSignals.length > 0) {
+      let html = '<table><tr><th>Time</th><th>Symbol</th><th>Signal</th><th>Strategy</th><th>Confidence</th></tr>';
+      d.recentSignals.forEach(s => {
+        html += '<tr><td>' + fmtTime(s.timestamp) + '</td><td>' + s.symbol + '</td>';
+        html += '<td><span class="tag tag-' + s.signal.toLowerCase() + '">' + s.signal + '</span></td>';
+        html += '<td>' + s.strategy + '</td><td>' + (s.confidence*100).toFixed(0) + '%</td></tr>';
+      });
+      html += '</table>';
+      document.getElementById('recentSignals').innerHTML = html;
+    }
+  } catch (e) {}
+}
+
+async function toggleTrading() {
+  const btn = document.getElementById('tradingToggle');
+  const isRunning = btn.textContent === 'Stop Trading';
+  try {
+    btn.disabled = true;
+    if (isRunning) { await api('/api/trading/stop', 'POST'); }
+    else { await api('/api/trading/start', 'POST'); }
+    setTimeout(loadDashboard, 500);
+  } catch (e) { alert(e.message); }
+  finally { btn.disabled = false; }
+}
+
+// ─── Positions ───
+async function loadPositions() {
+  try {
+    const r = await api('/api/positions');
+    if (r.success) renderPositions(r.data);
+  } catch (e) {}
+}
+
+function renderPositions(positions) {
+  const el = document.getElementById('positionsTable');
+  document.getElementById('statPositions').textContent = positions.length;
+  if (!positions || positions.length === 0) { el.innerHTML = '<div class="empty">No open positions</div>'; return; }
+  let html = '<table><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>SL</th><th>TP</th><th>Lot</th><th>Strategy</th><th>P/L</th><th>Action</th></tr>';
+  positions.forEach(p => {
+    const pl = p.unrealizedPl || 0;
+    html += '<tr><td><strong>' + p.symbol + '</strong></td>';
+    html += '<td><span class="tag tag-' + p.type.toLowerCase() + '">' + p.type + '</span></td>';
+    html += '<td>' + p.entryPrice + '</td><td>' + (p.currentSl||'--') + '</td><td>' + (p.currentTp||'--') + '</td>';
+    html += '<td>' + p.lotSize + '</td><td>' + (p.strategy||'--') + '</td>';
+    html += '<td style="color:' + (pl>=0?'var(--green)':'var(--red)') + '">' + (pl>=0?'+':'') + pl.toFixed(2) + '</td>';
+    html += '<td><button class="btn-danger btn-sm" onclick="closePosition(\'' + p._id + '\')">Close</button></td></tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+async function closePosition(id) {
+  if (!confirm('Close this position?')) return;
+  try { await api('/api/positions/' + id + '/close', 'POST'); loadPositions(); loadDashboard(); } catch (e) { alert(e.message); }
+}
+
+// ─── Trades ───
+async function loadTrades() {
+  try {
+    const r = await api('/api/trades?limit=50');
+    if (!r.success) return;
+    const el = document.getElementById('tradesTable');
+    if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No trades yet</div>'; return; }
+    let html = '<table><tr><th>Time</th><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>Lot</th><th>P/L ($)</th><th>Pips</th><th>Reason</th></tr>';
+    r.data.forEach(t => {
+      const pl = t.profitLoss || 0;
+      html += '<tr><td>' + fmtTime(t.openedAt) + '</td><td>' + t.symbol + '</td>';
+      html += '<td><span class="tag tag-' + t.type.toLowerCase() + '">' + t.type + '</span></td>';
+      html += '<td>' + t.entryPrice + '</td><td>' + (t.exitPrice||'--') + '</td><td>' + t.lotSize + '</td>';
+      html += '<td style="color:' + (pl>=0?'var(--green)':'var(--red)') + '">' + (pl>=0?'+':'') + pl.toFixed(2) + '</td>';
+      html += '<td>' + (t.profitPips != null ? t.profitPips.toFixed(1) : '--') + '</td>';
+      html += '<td>' + (t.exitReason||t.status) + '</td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {}
+}
+
+async function loadTradeStats() {
+  try {
+    const r = await api('/api/trades/stats');
+    if (!r.success) return;
+    const s = r.data;
+    document.getElementById('tsTotalTrades').textContent = s.totalTrades;
+    document.getElementById('tsWinRate').textContent = (s.winRate*100).toFixed(1) + '%';
+    document.getElementById('tsWinRate').className = 'stat-value ' + (s.winRate >= 0.5 ? 'positive' : 'negative');
+    document.getElementById('tsTotalProfit').textContent = '$' + num(s.totalProfit);
+    document.getElementById('tsTotalProfit').className = 'stat-value ' + (s.totalProfit >= 0 ? 'positive' : 'negative');
+    document.getElementById('tsAvgProfit').textContent = '$' + num(s.averageProfit);
+  } catch (e) {}
+}
+
+// ─── Strategies ───
+async function loadStrategies() {
+  try {
+    const r = await api('/api/strategies');
+    if (!r.success) return;
+    const el = document.getElementById('strategiesList');
+    if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No strategies found</div>'; return; }
+    let html = '';
+    r.data.forEach(s => {
+      html += '<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;background:var(--bg3)">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+      html += '<div><strong>' + (s.displayName||s.name) + '</strong>';
+      html += ' <span class="tag ' + (s.enabled?'tag-active':'') + '">' + (s.enabled?'Enabled':'Disabled') + '</span></div>';
+      html += '<label class="toggle"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleStrategy(\'' + s._id + '\')"><span class="slider"></span></label>';
+      html += '</div>';
+      html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + (s.description||'') + '</div>';
+      html += '<div style="font-size:12px;color:var(--text2)">Symbols: ' + (s.symbols ? s.symbols.join(', ') : 'None') + '</div>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  } catch (e) {}
+}
+
+async function toggleStrategy(id) {
+  try { await api('/api/strategies/' + id + '/toggle', 'PUT'); } catch (e) { alert(e.message); loadStrategies(); }
+}
+
+// ─── Backtest ───
+async function runBacktest() {
+  const btn = document.getElementById('btRunBtn');
+  btn.disabled = true; btn.textContent = 'Running...';
+  try {
+    const r = await api('/api/backtest/run', 'POST', {
+      symbol: document.getElementById('btSymbol').value,
+      strategyType: document.getElementById('btStrategy').value,
+      startDate: document.getElementById('btStartDate').value,
+      endDate: document.getElementById('btEndDate').value,
+      initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
+    });
+    if (r.success) {
+      renderBacktestResult(r.data);
+      loadBacktestHistory();
+    } else { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>'; }
+  } catch (e) { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>'; }
+  finally { btn.disabled = false; btn.textContent = 'Run Backtest'; }
+}
+
+function renderBacktestResult(data) {
+  const s = data.summary;
+  let html = '<table>';
+  html += '<tr><td style="color:var(--text2)">Total Trades</td><td>' + s.totalTrades + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Win Rate</td><td style="color:' + (s.winRate>=0.5?'var(--green)':'var(--red)') + '">' + (s.winRate*100).toFixed(1) + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Profit Factor</td><td style="color:' + (s.profitFactor>=1?'var(--green)':'var(--red)') + '">' + s.profitFactor + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Return</td><td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Net Profit</td><td>$' + num(s.netProfitMoney) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td style="color:var(--red)">' + s.maxDrawdownPercent + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Sharpe Ratio</td><td>' + s.sharpeRatio + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Avg Win</td><td style="color:var(--green)">' + s.averageWinPips + ' pips</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Avg Loss</td><td style="color:var(--red)">' + s.averageLossPips + ' pips</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Consec. Wins</td><td>' + (s.maxConsecutiveWins||'--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Consec. Losses</td><td>' + (s.maxConsecutiveLosses||'--') + '</td></tr>';
+  html += '</table>';
+  document.getElementById('btResult').innerHTML = html;
+
+  // Draw equity curve
+  if (data.equityCurve) drawEquityCurve(data.equityCurve);
+}
+
+function drawEquityCurve(curve) {
+  const canvas = document.getElementById('equityCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = rect.height;
+  const pad = { top: 20, right: 20, bottom: 30, left: 70 };
+
+  ctx.clearRect(0, 0, w, h);
+  if (curve.length < 2) return;
+
+  const values = curve.map(p => p.equity);
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const range = maxV - minV || 1;
+  const chartW = w - pad.left - pad.right;
+  const chartH = h - pad.top - pad.bottom;
+
+  const toX = (i) => pad.left + (i / (curve.length - 1)) * chartW;
+  const toY = (v) => pad.top + (1 - (v - minV) / range) * chartH;
+
+  // Grid lines
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (i / 4) * chartH;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
+    const val = maxV - (i / 4) * range;
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('$' + num(val), pad.left - 8, y + 4);
+  }
+
+  // Initial balance line
+  const initY = toY(values[0]);
+  ctx.strokeStyle = '#374151';
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(pad.left, initY); ctx.lineTo(w - pad.right, initY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Equity line
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(values[0]));
+  for (let i = 1; i < values.length; i++) {
+    ctx.lineTo(toX(i), toY(values[i]));
+  }
+  const lastVal = values[values.length - 1];
+  ctx.strokeStyle = lastVal >= values[0] ? '#10b981' : '#ef4444';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Fill
+  ctx.lineTo(toX(values.length - 1), pad.top + chartH);
+  ctx.lineTo(toX(0), pad.top + chartH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+  const color = lastVal >= values[0] ? '16,185,129' : '239,68,68';
+  grad.addColorStop(0, 'rgba(' + color + ',0.15)');
+  grad.addColorStop(1, 'rgba(' + color + ',0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+async function loadBacktestHistory() {
+  try {
+    const r = await api('/api/backtest/results?limit=10');
+    if (!r.success) return;
+    const el = document.getElementById('btHistory');
+    if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No previous backtests</div>'; return; }
+    let html = '<table><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th></tr>';
+    r.data.forEach(b => {
+      const s = b.summary;
+      html += '<tr><td>' + fmtTime(b.createdAt) + '</td><td>' + b.symbol + '</td><td>' + b.strategy + '</td>';
+      html += '<td>' + s.totalTrades + '</td>';
+      html += '<td>' + (s.winRate*100).toFixed(1) + '%</td>';
+      html += '<td>' + s.profitFactor + '</td>';
+      html += '<td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {}
+}
+
+// ─── Optimizer ───
+async function loadOptRanges() {
+  const strategy = document.getElementById('optStrategy').value;
+  try {
+    const r = await api('/api/optimizer/ranges/' + strategy);
+    if (!r.success) { document.getElementById('optRanges').innerHTML = '<div class="empty">No ranges for this strategy</div>'; return; }
+    let html = '';
+    Object.entries(r.data).forEach(([param, range]) => {
+      html += '<div class="form-row" style="margin-bottom:8px">';
+      html += '<div class="form-group"><label>' + param + '</label></div>';
+      html += '<div class="form-group"><label>Min</label><input type="number" step="any" value="' + range.min + '" id="opt_' + param + '_min"></div>';
+      html += '<div class="form-group"><label>Max</label><input type="number" step="any" value="' + range.max + '" id="opt_' + param + '_max"></div>';
+      html += '<div class="form-group"><label>Step</label><input type="number" step="any" value="' + range.step + '" id="opt_' + param + '_step"></div>';
+      html += '</div>';
+    });
+    document.getElementById('optRanges').innerHTML = html;
+  } catch (e) { document.getElementById('optRanges').innerHTML = '<div class="empty">Load error</div>'; }
+}
+
+async function runOptimizer() {
+  const btn = document.getElementById('optRunBtn');
+  btn.disabled = true;
+  document.getElementById('optProgress').style.display = 'block';
+
+  // Gather param ranges from inputs
+  const strategy = document.getElementById('optStrategy').value;
+  const paramRanges = {};
+  document.querySelectorAll('#optRanges input').forEach(input => {
+    const parts = input.id.replace('opt_', '').split('_');
+    const field = parts.pop(); // min, max, or step
+    const param = parts.join('_');
+    if (!paramRanges[param]) paramRanges[param] = {};
+    paramRanges[param][field] = parseFloat(input.value);
+  });
+
+  try {
+    await api('/api/optimizer/run', 'POST', {
+      symbol: document.getElementById('optSymbol').value,
+      strategyType: strategy,
+      paramRanges: Object.keys(paramRanges).length > 0 ? paramRanges : undefined,
+      optimizeFor: document.getElementById('optMetric').value,
+    });
+
+    // Poll progress
+    const pollId = setInterval(async () => {
+      try {
+        const pr = await api('/api/optimizer/progress');
+        if (pr.data && pr.data.running && pr.data.progress) {
+          const p = pr.data.progress;
+          document.getElementById('optProgressFill').style.width = p.percent + '%';
+          document.getElementById('optProgressText').textContent = p.current + '/' + p.total + ' (' + p.percent + '%)';
+        }
+        if (pr.data && !pr.data.running) {
+          clearInterval(pollId);
+          // Fetch result
+          const rr = await api('/api/optimizer/result');
+          if (rr.success) renderOptResult(rr.data);
+          document.getElementById('optProgress').style.display = 'none';
+          btn.disabled = false;
+        }
+      } catch (e) { clearInterval(pollId); btn.disabled = false; }
+    }, 2000);
+  } catch (e) {
+    alert(e.message);
+    document.getElementById('optProgress').style.display = 'none';
+    btn.disabled = false;
+  }
+}
+
+function renderOptResult(data) {
+  const el = document.getElementById('optResult');
+  if (!data || !data.bestResult) { el.innerHTML = '<div class="empty">No valid results</div>'; return; }
+
+  let html = '<div style="margin-bottom:16px">';
+  html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">Combinations: ' + data.totalCombinations + ' | Valid: ' + data.validResults + ' | Optimized for: ' + data.optimizeFor + '</div>';
+  html += '</div>';
+
+  html += '<h4 style="margin-bottom:8px;color:var(--cyan)">Best Parameters</h4>';
+  html += '<table>';
+  Object.entries(data.bestResult.parameters).forEach(([k, v]) => {
+    html += '<tr><td style="color:var(--text2)">' + k + '</td><td><strong>' + v + '</strong></td></tr>';
+  });
+  html += '</table>';
+
+  html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Performance</h4>';
+  const s = data.bestResult.summary;
+  html += '<table>';
+  html += '<tr><td style="color:var(--text2)">Trades</td><td>' + s.totalTrades + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Win Rate</td><td>' + (s.winRate*100).toFixed(1) + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Profit Factor</td><td>' + s.profitFactor + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Return</td><td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td>' + s.maxDrawdownPercent + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Sharpe Ratio</td><td>' + s.sharpeRatio + '</td></tr>';
+  html += '</table>';
+
+  if (data.top10 && data.top10.length > 1) {
+    html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Top 10 Combinations</h4>';
+    html += '<table><tr><th>#</th><th>Win Rate</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th></tr>';
+    data.top10.forEach((r, i) => {
+      html += '<tr' + (i===0?' style="background:rgba(6,182,212,.1)"':'') + '><td>' + (i+1) + '</td>';
+      html += '<td>' + (r.summary.winRate*100).toFixed(1) + '%</td>';
+      html += '<td>' + r.summary.profitFactor + '</td>';
+      html += '<td style="color:' + (r.summary.returnPercent>=0?'var(--green)':'var(--red)') + '">' + r.summary.returnPercent + '%</td>';
+      html += '<td>' + r.summary.sharpeRatio + '</td>';
+      html += '<td>' + r.summary.maxDrawdownPercent + '%</td></tr>';
+    });
+    html += '</table>';
+  }
+
+  el.innerHTML = html;
+}
+
+// ─── Settings ───
+async function loadNotifyStatus() {
+  try {
+    const r = await api('/api/notifications/status');
+    const el = document.getElementById('notifyStatus');
+    if (r.data.enabled) {
+      el.innerHTML = '<span style="color:var(--green)">Telegram: Connected</span>';
+    } else {
+      el.innerHTML = '<span style="color:var(--text2)">Telegram: Not configured (set TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in .env)</span>';
+    }
+  } catch (e) {}
+}
+
+async function testNotification() {
+  try {
+    const r = await api('/api/notifications/test', 'POST');
+    document.getElementById('notifyResult').innerHTML = r.success
+      ? '<span style="color:var(--green)">Test notification sent!</span>'
+      : '<span style="color:var(--red)">' + r.message + '</span>';
+  } catch (e) { document.getElementById('notifyResult').innerHTML = '<span style="color:var(--red)">' + e.message + '</span>'; }
+}
+
+async function loadAccountInfo() {
+  try {
+    const r = await api('/api/trading/account');
+    if (!r.success) { document.getElementById('accountInfo').innerHTML = '<div class="empty">Not connected to MT5</div>'; return; }
+    let html = '<table>';
+    Object.entries(r.data).forEach(([k, v]) => {
+      html += '<tr><td style="color:var(--text2);text-transform:capitalize">' + k.replace(/_/g,' ') + '</td><td>' + v + '</td></tr>';
+    });
+    html += '</table>';
+    document.getElementById('accountInfo').innerHTML = html;
+  } catch (e) { document.getElementById('accountInfo').innerHTML = '<div class="empty">Error loading account info</div>'; }
+}
+
+// ─── Helpers ───
+function num(v) { return v != null ? parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '--'; }
+function fmtTime(t) { if (!t) return '--'; const d = new Date(t); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
+
+// Auto-refresh dashboard every 30s
+setInterval(() => {
+  if (token && document.getElementById('page-dashboard').classList.contains('active')) loadDashboard();
+}, 30000);
+</script>
+</body>
+</html>

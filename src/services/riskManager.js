@@ -3,180 +3,425 @@
  * Controls position sizing, validates trades against risk rules
  */
 
-const { getInstrument, INSTRUMENT_CATEGORIES } = require('../config/instruments');
-const { positionsDb, tradesDb } = require('../config/db');
+const { getInstrument } = require('../config/instruments');
+const { positionsDb, paperPositionsDb, riskStateDb } = require('../config/db');
+const RiskProfile = require('../models/RiskProfile');
 
 class RiskManager {
   constructor() {
-    this.dailyLossTracker = {};  // { 'YYYY-MM-DD': totalLoss }
-    this.peakBalance = 0;
+    this.stateByScope = new Map();
+    this.stateLoadPromises = new Map();
+  }
+
+  _normalizeScope(scope = 'live') {
+    return String(scope || 'live').toLowerCase() === 'paper' ? 'paper' : 'live';
+  }
+
+  _getState(scope = 'live') {
+    const normalizedScope = this._normalizeScope(scope);
+
+    if (!this.stateByScope.has(normalizedScope)) {
+      this.stateByScope.set(normalizedScope, {
+        dailyLossTracker: {},
+        peakBalance: 0,
+        peakEquity: 0,
+        createdAt: null,
+        loaded: false,
+      });
+    }
+
+    return this.stateByScope.get(normalizedScope);
+  }
+
+  _getPositionsStore(scope = 'live', overrideStore = null) {
+    if (overrideStore) return overrideStore;
+    return this._normalizeScope(scope) === 'paper' ? paperPositionsDb : positionsDb;
+  }
+
+  _isTradingEnabled(scope = 'live', override = null) {
+    if (typeof override === 'boolean') return override;
+    return this._normalizeScope(scope) === 'paper'
+      ? process.env.PAPER_TRADING_ENABLED === 'true'
+      : process.env.TRADING_ENABLED === 'true';
+  }
+
+  async getActiveRiskSettings() {
+    const profile = await RiskProfile.getActive();
+    return RiskProfile.toRuntimeSettings(profile);
+  }
+
+  async ensureLoaded(scope = 'live') {
+    const normalizedScope = this._normalizeScope(scope);
+    const state = this._getState(normalizedScope);
+
+    if (state.loaded) {
+      return state;
+    }
+
+    if (!this.stateLoadPromises.has(normalizedScope)) {
+      this.stateLoadPromises.set(normalizedScope, (async () => {
+        const persistedState = await riskStateDb.findOne({ _id: normalizedScope });
+        if (persistedState) {
+          state.dailyLossTracker = persistedState.dailyLossTracker || {};
+          state.peakBalance = Number(persistedState.peakBalance) || 0;
+          state.peakEquity = Number(persistedState.peakEquity) || state.peakBalance || 0;
+          state.createdAt = persistedState.createdAt || null;
+        }
+
+        state.loaded = true;
+        this.stateLoadPromises.delete(normalizedScope);
+        return state;
+      })().catch((error) => {
+        this.stateLoadPromises.delete(normalizedScope);
+        throw error;
+      }));
+    }
+
+    return await this.stateLoadPromises.get(normalizedScope);
+  }
+
+  _getDateKey(date = new Date()) {
+    return new Date(date).toISOString().split('T')[0];
+  }
+
+  _pruneDailyLossTracker(state, maxDays = 45) {
+    const cutoff = Date.now() - (maxDays * 24 * 60 * 60 * 1000);
+
+    for (const dateKey of Object.keys(state.dailyLossTracker)) {
+      const timestamp = new Date(`${dateKey}T00:00:00.000Z`).getTime();
+      if (!Number.isFinite(timestamp) || timestamp < cutoff) {
+        delete state.dailyLossTracker[dateKey];
+      }
+    }
+  }
+
+  async _persistState(scope = 'live') {
+    const normalizedScope = this._normalizeScope(scope);
+    const state = await this.ensureLoaded(normalizedScope);
+
+    this._pruneDailyLossTracker(state);
+    if (!state.createdAt) {
+      state.createdAt = new Date();
+    }
+
+    await riskStateDb.update(
+      { _id: normalizedScope },
+      {
+        _id: normalizedScope,
+        scope: normalizedScope,
+        dailyLossTracker: state.dailyLossTracker,
+        peakBalance: state.peakBalance,
+        peakEquity: state.peakEquity,
+        createdAt: state.createdAt,
+        updatedAt: new Date(),
+      },
+      { upsert: true }
+    );
+  }
+
+  async syncAccountState(accountInfo = {}, scope = 'live') {
+    const normalizedScope = this._normalizeScope(scope);
+    const state = await this.ensureLoaded(normalizedScope);
+    const balance = Number(accountInfo.balance) || 0;
+    const equity = Number(accountInfo.equity) || balance;
+    let changed = false;
+
+    if (balance > state.peakBalance) {
+      state.peakBalance = balance;
+      changed = true;
+    }
+
+    if (state.peakEquity <= 0 && state.peakBalance > 0) {
+      state.peakEquity = state.peakBalance;
+      changed = true;
+    }
+
+    if (equity > state.peakEquity) {
+      state.peakEquity = equity;
+      changed = true;
+    }
+
+    if (changed) {
+      await this._persistState(normalizedScope);
+    }
+
+    return {
+      peakBalance: state.peakBalance,
+      peakEquity: state.peakEquity,
+      todayLoss: this._getTodayLossSync(normalizedScope),
+    };
+  }
+
+  _getCurrentDrawdown(peakEquity, equity) {
+    const normalizedPeak = Number(peakEquity) || 0;
+    const normalizedEquity = Number(equity) || 0;
+    return normalizedPeak > 0 ? (normalizedPeak - normalizedEquity) / normalizedPeak : 0;
+  }
+
+  calculateLotSizeDetails(signal, instrument, balance, settings) {
+    const instrumentRiskPercent = Number(instrument?.riskParams?.riskPercent) || 0;
+    const effectiveRiskPercent = Math.min(settings.maxRiskPerTrade, instrumentRiskPercent || settings.maxRiskPerTrade);
+    const riskAmount = balance * effectiveRiskPercent;
+    const currentPrice = Number(signal.entryPrice) || Number(signal.tp) || 0;
+    const stopLoss = Number(signal.sl) || 0;
+    const slDistance = Math.abs(currentPrice - stopLoss);
+    const slPips = instrument.pipSize > 0 ? slDistance / instrument.pipSize : 0;
+
+    if (currentPrice <= 0 || stopLoss <= 0 || slPips <= 0) {
+      return {
+        allowed: false,
+        reason: 'Invalid stop loss distance for risk sizing',
+        finalLotSize: 0,
+        theoreticalLotSize: 0,
+        effectiveRiskPercent,
+        riskAmount,
+        overrideApplied: false,
+        auditMessage: null,
+      };
+    }
+
+    const riskPerPipPerLot = instrument.pipValue;
+    let theoreticalLotSize = riskAmount / (slPips * riskPerPipPerLot);
+    theoreticalLotSize = Math.floor(theoreticalLotSize / instrument.lotStep) * instrument.lotStep;
+    theoreticalLotSize = Math.max(theoreticalLotSize, 0);
+    theoreticalLotSize = parseFloat(theoreticalLotSize.toFixed(4));
+
+    const cappedLotSize = Math.min(theoreticalLotSize, 5.0);
+
+    if (cappedLotSize < instrument.minLot) {
+      if (settings.allowAggressiveMinLot) {
+        const finalLotSize = parseFloat(instrument.minLot.toFixed(2));
+        return {
+          allowed: true,
+          reason: 'All risk checks passed',
+          finalLotSize,
+          theoreticalLotSize: cappedLotSize,
+          effectiveRiskPercent,
+          riskAmount,
+          overrideApplied: true,
+          auditMessage: `Aggressive min-lot override applied: theoretical ${cappedLotSize.toFixed(4)} < minimum ${instrument.minLot.toFixed(2)}. Using ${finalLotSize.toFixed(2)}.`,
+        };
+      }
+
+      return {
+        allowed: false,
+        reason: `Calculated lot size ${cappedLotSize.toFixed(4)} below minimum ${instrument.minLot.toFixed(2)}. Enable aggressive min-lot mode to allow the minimum lot.`,
+        finalLotSize: 0,
+        theoreticalLotSize: cappedLotSize,
+        effectiveRiskPercent,
+        riskAmount,
+        overrideApplied: false,
+        auditMessage: null,
+      };
+    }
+
+    return {
+      allowed: true,
+      reason: 'All risk checks passed',
+      finalLotSize: parseFloat(cappedLotSize.toFixed(2)),
+      theoreticalLotSize: cappedLotSize,
+      effectiveRiskPercent,
+      riskAmount,
+      overrideApplied: false,
+      auditMessage: null,
+    };
   }
 
   /**
    * Check all risk rules before placing a trade
    * @param {object} signal - { symbol, signal, sl, tp }
    * @param {object} accountInfo - { balance, equity }
+   * @param {object} options - { scope, positionsStore, tradingEnabled }
    * @returns {{ allowed: boolean, reason: string, lotSize: number }}
    */
-  async validateTrade(signal, accountInfo) {
+  async validateTrade(signal, accountInfo, options = {}) {
+    const scope = this._normalizeScope(options.scope || 'live');
+    const state = await this.syncAccountState(accountInfo, scope);
+    const settings = await this.getActiveRiskSettings();
     const instrument = getInstrument(signal.symbol);
     if (!instrument) {
       return { allowed: false, reason: `Unknown instrument: ${signal.symbol}`, lotSize: 0 };
     }
 
+    const positionsStore = this._getPositionsStore(scope, options.positionsStore);
     const { balance, equity } = accountInfo;
 
-    // Track peak balance for drawdown calculation
-    if (balance > this.peakBalance) {
-      this.peakBalance = balance;
+    if (!this._isTradingEnabled(scope, options.tradingEnabled)) {
+      const message = scope === 'paper'
+        ? 'Paper trading is disabled'
+        : 'Trading is disabled (TRADING_ENABLED=false)';
+      return { allowed: false, reason: message, lotSize: 0 };
     }
 
-    // 1. Check if trading is enabled
-    if (process.env.TRADING_ENABLED !== 'true') {
-      return { allowed: false, reason: 'Trading is disabled (TRADING_ENABLED=false)', lotSize: 0 };
+    const todayLoss = this._getTodayLossSync(scope);
+    if (todayLoss >= balance * settings.maxDailyLoss) {
+      return {
+        allowed: false,
+        reason: `Daily loss limit reached: ${todayLoss.toFixed(2)} >= ${(balance * settings.maxDailyLoss).toFixed(2)}`,
+        lotSize: 0,
+      };
     }
 
-    // 2. Check daily loss limit
-    const maxDailyLoss = parseFloat(process.env.MAX_DAILY_LOSS || 0.05);
-    const todayLoss = this._getTodayLoss();
-    if (todayLoss >= balance * maxDailyLoss) {
-      return { allowed: false, reason: `Daily loss limit reached: ${todayLoss.toFixed(2)} >= ${(balance * maxDailyLoss).toFixed(2)}`, lotSize: 0 };
+    const currentDrawdown = this._getCurrentDrawdown(state.peakEquity, equity);
+    if (currentDrawdown >= settings.maxDrawdown) {
+      return {
+        allowed: false,
+        reason: `Max drawdown reached: ${(currentDrawdown * 100).toFixed(1)}% >= ${(settings.maxDrawdown * 100).toFixed(1)}%`,
+        lotSize: 0,
+      };
     }
 
-    // 3. Check max drawdown
-    const maxDrawdown = parseFloat(process.env.MAX_DRAWDOWN || 0.10);
-    const currentDrawdown = this.peakBalance > 0 ? (this.peakBalance - equity) / this.peakBalance : 0;
-    if (currentDrawdown >= maxDrawdown) {
-      return { allowed: false, reason: `Max drawdown reached: ${(currentDrawdown * 100).toFixed(1)}% >= ${(maxDrawdown * 100).toFixed(1)}%`, lotSize: 0 };
+    const openPositions = await positionsStore.count({});
+    if (openPositions >= settings.maxConcurrentPositions) {
+      return {
+        allowed: false,
+        reason: `Max positions reached: ${openPositions} >= ${settings.maxConcurrentPositions}`,
+        lotSize: 0,
+      };
     }
 
-    // 4. Check concurrent position limit
-    const maxPositions = parseInt(process.env.MAX_CONCURRENT_POSITIONS || 5);
-    const openPositions = await positionsDb.count({});
-    if (openPositions >= maxPositions) {
-      return { allowed: false, reason: `Max positions reached: ${openPositions} >= ${maxPositions}`, lotSize: 0 };
+    const symbolPositions = await positionsStore.count({ symbol: signal.symbol });
+    if (symbolPositions >= settings.maxPositionsPerSymbol) {
+      return {
+        allowed: false,
+        reason: `Max positions for ${signal.symbol} reached: ${symbolPositions} >= ${settings.maxPositionsPerSymbol}`,
+        lotSize: 0,
+      };
     }
 
-    // 5. Check per-symbol position limit
-    const maxPerSymbol = parseInt(process.env.MAX_POSITIONS_PER_SYMBOL || 2);
-    const symbolPositions = await positionsDb.count({ symbol: signal.symbol });
-    if (symbolPositions >= maxPerSymbol) {
-      return { allowed: false, reason: `Max positions for ${signal.symbol} reached: ${symbolPositions} >= ${maxPerSymbol}`, lotSize: 0 };
-    }
-
-    // 6. Check category correlation limit (max 3 positions in same category)
-    const categoryPositions = await this._getCategoryPositionCount(instrument.category);
+    const categoryPositions = await this._getCategoryPositionCount(instrument.category, positionsStore);
     if (categoryPositions >= 3) {
-      return { allowed: false, reason: `Max correlated positions for ${instrument.category}: ${categoryPositions} >= 3`, lotSize: 0 };
+      return {
+        allowed: false,
+        reason: `Max correlated positions for ${instrument.category}: ${categoryPositions} >= 3`,
+        lotSize: 0,
+      };
     }
 
-    // 7. Calculate position size
-    const lotSize = this.calculateLotSize(signal, instrument, balance);
-    if (lotSize < instrument.minLot) {
-      return { allowed: false, reason: `Calculated lot size ${lotSize} below minimum ${instrument.minLot}`, lotSize: 0 };
+    const sizing = this.calculateLotSizeDetails(signal, instrument, balance, settings);
+    if (!sizing.allowed) {
+      return {
+        allowed: false,
+        reason: sizing.reason,
+        lotSize: 0,
+        theoreticalLotSize: sizing.theoreticalLotSize,
+        effectiveRiskPercent: sizing.effectiveRiskPercent,
+        overrideApplied: false,
+        profileName: settings.profile?.name || null,
+      };
     }
 
-    // 8. Validate SL/TP distance
-    const entryPrice = signal.entryPrice || 0;
-    if (entryPrice > 0 && signal.sl > 0) {
+    const entryPrice = Number(signal.entryPrice) || 0;
+    if (entryPrice > 0 && Number(signal.sl) > 0) {
       const slDistance = Math.abs(entryPrice - signal.sl);
-      const minSlDistance = instrument.spread * instrument.pipSize * 3; // At least 3x spread
+      const minSlDistance = instrument.spread * instrument.pipSize * 3;
       if (slDistance < minSlDistance) {
-        return { allowed: false, reason: `SL too close: ${slDistance.toFixed(5)} < ${minSlDistance.toFixed(5)} (3x spread)`, lotSize: 0 };
+        return {
+          allowed: false,
+          reason: `SL too close: ${slDistance.toFixed(5)} < ${minSlDistance.toFixed(5)} (3x spread)`,
+          lotSize: 0,
+        };
       }
     }
 
-    return { allowed: true, reason: 'All risk checks passed', lotSize };
+    return {
+      allowed: true,
+      reason: sizing.reason,
+      lotSize: sizing.finalLotSize,
+      theoreticalLotSize: sizing.theoreticalLotSize,
+      effectiveRiskPercent: sizing.effectiveRiskPercent,
+      overrideApplied: sizing.overrideApplied,
+      auditMessage: sizing.auditMessage,
+      profileName: settings.profile?.name || null,
+      allowAggressiveMinLot: settings.allowAggressiveMinLot,
+    };
   }
 
-  /**
-   * Calculate position size based on risk parameters
-   * lotSize = (balance × riskPercent) / (slDistance / pipSize × pipValue)
-   */
-  calculateLotSize(signal, instrument, balance) {
-    const riskPercent = instrument.riskParams.riskPercent;
-    const riskAmount = balance * riskPercent;
-    const currentPrice = signal.entryPrice || signal.tp; // approximate
-
-    // Calculate SL distance in pips
-    const slDistance = Math.abs(currentPrice - signal.sl);
-    const slPips = slDistance / instrument.pipSize;
-
-    if (slPips <= 0) return instrument.minLot;
-
-    // Risk per pip per lot
-    const riskPerPipPerLot = instrument.pipValue;
-
-    // Lot size calculation
-    let lotSize = riskAmount / (slPips * riskPerPipPerLot);
-
-    // Round to lot step
-    lotSize = Math.floor(lotSize / instrument.lotStep) * instrument.lotStep;
-
-    // Clamp to min lot
-    lotSize = Math.max(lotSize, instrument.minLot);
-
-    // Max 5 lots as safety cap
-    lotSize = Math.min(lotSize, 5.0);
-
-    return parseFloat(lotSize.toFixed(2));
+  calculateLotSize(signal, instrument, balance, settingsOverride = null) {
+    const settings = settingsOverride || {
+      maxRiskPerTrade: Number(instrument?.riskParams?.riskPercent) || 0,
+      allowAggressiveMinLot: true,
+    };
+    return this.calculateLotSizeDetails(signal, instrument, balance, settings).finalLotSize;
   }
 
-  /**
-   * Record a loss for daily tracking
-   */
-  recordLoss(amount) {
-    const today = new Date().toISOString().split('T')[0];
-    if (!this.dailyLossTracker[today]) {
-      this.dailyLossTracker[today] = 0;
+  async recordLoss(amount, recordedAt = new Date(), scope = 'live') {
+    const normalizedScope = this._normalizeScope(scope);
+    const state = await this.ensureLoaded(normalizedScope);
+    const normalizedAmount = Math.abs(Number(amount) || 0);
+
+    if (normalizedAmount <= 0) {
+      return;
     }
-    this.dailyLossTracker[today] += Math.abs(amount);
+
+    const dateKey = this._getDateKey(recordedAt);
+    if (!state.dailyLossTracker[dateKey]) {
+      state.dailyLossTracker[dateKey] = 0;
+    }
+    state.dailyLossTracker[dateKey] += normalizedAmount;
+    await this._persistState(normalizedScope);
   }
 
-  /**
-   * Get today's total loss
-   */
-  _getTodayLoss() {
-    const today = new Date().toISOString().split('T')[0];
-    return this.dailyLossTracker[today] || 0;
+  _getTodayLossSync(scope = 'live', date = new Date()) {
+    const state = this._getState(scope);
+    const today = this._getDateKey(date);
+    return state.dailyLossTracker[today] || 0;
   }
 
-  /**
-   * Count positions in the same instrument category
-   */
-  async _getCategoryPositionCount(category) {
-    const allPositions = await positionsDb.find({});
-    return allPositions.filter((p) => {
-      const inst = getInstrument(p.symbol);
-      return inst && inst.category === category;
+  async getTodayLoss(date = new Date(), scope = 'live') {
+    await this.ensureLoaded(scope);
+    return this._getTodayLossSync(scope, date);
+  }
+
+  async getPeakBalance(scope = 'live') {
+    const state = await this.ensureLoaded(scope);
+    return state.peakBalance;
+  }
+
+  async getPeakEquity(scope = 'live') {
+    const state = await this.ensureLoaded(scope);
+    return state.peakEquity;
+  }
+
+  async _getCategoryPositionCount(category, positionsStore = positionsDb) {
+    const allPositions = await positionsStore.find({});
+    return allPositions.filter((position) => {
+      const instrument = getInstrument(position.symbol);
+      return instrument && instrument.category === category;
     }).length;
   }
 
-  /**
-   * Get current risk status
-   */
-  async getRiskStatus(accountInfo) {
+  async getRiskStatus(accountInfo, options = {}) {
+    const scope = this._normalizeScope(options.scope || 'live');
+    const settings = await this.getActiveRiskSettings();
+    const state = await this.syncAccountState(accountInfo, scope);
+    const positionsStore = this._getPositionsStore(scope, options.positionsStore);
     const { balance, equity } = accountInfo;
-    const maxDailyLoss = parseFloat(process.env.MAX_DAILY_LOSS || 0.05);
-    const maxDrawdown = parseFloat(process.env.MAX_DRAWDOWN || 0.10);
-    const todayLoss = this._getTodayLoss();
-    const currentDrawdown = this.peakBalance > 0 ? (this.peakBalance - equity) / this.peakBalance : 0;
-    const openPositions = await positionsDb.count({});
+    const todayLoss = this._getTodayLossSync(scope);
+    const currentDrawdown = this._getCurrentDrawdown(state.peakEquity, equity);
+    const openPositions = await positionsStore.count({});
 
     return {
       balance,
       equity,
-      peakBalance: this.peakBalance,
+      peakBalance: state.peakBalance,
+      peakEquity: state.peakEquity,
       todayLoss,
-      dailyLossLimit: balance * maxDailyLoss,
+      dailyLossLimit: balance * settings.maxDailyLoss,
       dailyLossPercent: balance > 0 ? (todayLoss / balance) * 100 : 0,
       currentDrawdown: currentDrawdown * 100,
-      maxDrawdownLimit: maxDrawdown * 100,
+      maxDrawdownLimit: settings.maxDrawdown * 100,
       openPositions,
-      maxPositions: parseInt(process.env.MAX_CONCURRENT_POSITIONS || 5),
-      tradingEnabled: process.env.TRADING_ENABLED === 'true',
-      dailyLossReached: todayLoss >= balance * maxDailyLoss,
-      drawdownReached: currentDrawdown >= maxDrawdown,
+      maxPositions: settings.maxConcurrentPositions,
+      maxPositionsPerSymbol: settings.maxPositionsPerSymbol,
+      tradingEnabled: this._isTradingEnabled(scope, options.tradingEnabled),
+      dailyLossReached: todayLoss >= balance * settings.maxDailyLoss,
+      drawdownReached: currentDrawdown >= settings.maxDrawdown,
+      activeRiskProfileName: settings.profile?.name || null,
+      allowAggressiveMinLot: settings.allowAggressiveMinLot,
+      maxRiskPerTradePct: settings.profile?.maxRiskPerTradePct || 0,
+      maxDailyLossPct: settings.profile?.maxDailyLossPct || 0,
+      maxDrawdownPct: settings.profile?.maxDrawdownPct || 0,
     };
   }
 }

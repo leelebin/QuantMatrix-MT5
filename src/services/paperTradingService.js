@@ -10,9 +10,12 @@ const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
 const TradeLog = require('../models/TradeLog');
+const ExecutionAudit = require('../models/ExecutionAudit');
 const { paperPositionsDb } = require('../config/db');
-const { getInstrument, getAllSymbols } = require('../config/instruments');
+const { getInstrument } = require('../config/instruments');
 const Strategy = require('../models/Strategy');
+const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
+const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
 
 class PaperTradingService {
   constructor() {
@@ -22,6 +25,42 @@ class PaperTradingService {
     this.analysisIntervalMs = 5 * 60 * 1000;  // 5 minutes
     this.monitorIntervalMs = 30 * 1000;        // 30 seconds
     this.startedAt = null;
+  }
+
+  async _recordAudit(stage, status, signal, extra = {}) {
+    const audit = await ExecutionAudit.create({
+      scope: 'paper',
+      stage,
+      status,
+      symbol: signal?.symbol || extra.symbol || null,
+      type: signal?.signal || extra.type || null,
+      strategy: signal?.strategy || null,
+      volume: extra.volume ?? null,
+      code: extra.code ?? null,
+      codeName: extra.codeName || null,
+      message: extra.message || '',
+      accountMode: extra.accountInfo ? mt5Service.getAccountModeName(extra.accountInfo) : null,
+      accountLogin: extra.accountInfo?.login || null,
+      accountServer: extra.accountInfo?.server || null,
+      source: 'paper_trading',
+      details: extra.details || null,
+      createdAt: extra.createdAt || new Date(),
+    });
+
+    websocketService.broadcast('status', 'execution_audit', audit);
+    return audit;
+  }
+
+  _broadcastRejection(signal, reason, extra = {}) {
+    websocketService.broadcast('signals', 'paper_trade_rejected', {
+      symbol: signal.symbol,
+      type: signal.signal,
+      reason,
+      stage: extra.stage || null,
+      code: extra.code ?? null,
+      codeName: extra.codeName || null,
+      scope: 'paper',
+    });
   }
 
   /**
@@ -41,6 +80,7 @@ class PaperTradingService {
 
       // Verify it's a demo account
       const accountInfo = await mt5Service.getAccountInfo();
+      mt5Service.ensurePaperTradingAccount(accountInfo);
       console.log(`[PaperTrading] Connected to account: ${accountInfo.login} | Server: ${accountInfo.server}`);
       console.log(`[PaperTrading] Balance: ${accountInfo.balance} ${accountInfo.currency} | Leverage: 1:${accountInfo.leverage}`);
 
@@ -84,6 +124,7 @@ class PaperTradingService {
             equity: accountInfo.equity,
             currency: accountInfo.currency,
             leverage: accountInfo.leverage,
+            mode: mt5Service.getAccountModeName(accountInfo),
           },
         },
       };
@@ -188,36 +229,88 @@ class PaperTradingService {
 
     try {
       const accountInfo = await mt5Service.getAccountInfo();
+      mt5Service.ensurePaperTradingAccount(accountInfo);
       const priceData = await mt5Service.getPrice(signal.symbol);
-      const entryPrice = signal.signal === 'BUY' ? priceData.ask : priceData.bid;
-      signal.entryPrice = entryPrice;
+      const quotedEntryPrice = signal.signal === 'BUY' ? priceData.ask : priceData.bid;
+      signal.entryPrice = quotedEntryPrice;
 
       // Validate through risk manager (uses paper positions DB)
       const riskCheck = await this._validatePaperTrade(signal, accountInfo);
       if (!riskCheck.allowed) {
-        console.log(`[PaperTrading] Trade rejected: ${signal.symbol} — ${riskCheck.reason}`);
-        websocketService.broadcast('signals', 'paper_trade_rejected', {
-          symbol: signal.symbol,
-          type: signal.signal,
-          reason: riskCheck.reason,
+        await this._recordAudit('risk', 'BLOCKED', signal, {
+          message: riskCheck.reason,
+          code: 'RISK_RULE',
+          codeName: 'RISK_RULE',
+          volume: riskCheck.lotSize || null,
+          accountInfo,
+          details: { riskCheck },
+        });
+        console.log(`[PaperTrading] Trade rejected: ${signal.symbol} - ${riskCheck.reason}`);
+        this._broadcastRejection(signal, riskCheck.reason, {
+          stage: 'risk',
+          code: 'RISK_RULE',
+          codeName: 'RISK_RULE',
         });
         return;
       }
 
+      if (riskCheck.overrideApplied && riskCheck.auditMessage) {
+        await this._recordAudit('risk', 'INFO', signal, {
+          message: riskCheck.auditMessage,
+          code: 'AGGRESSIVE_MIN_LOT',
+          codeName: 'AGGRESSIVE_MIN_LOT',
+          volume: riskCheck.lotSize,
+          accountInfo,
+          details: { riskCheck },
+        });
+      }
+
       // Execute on MT5 demo account
-      const comment = `PT|${signal.strategy}|${signal.confidence.toFixed(2)}`;
+      const brokerComment = buildBrokerComment(signal, 'PT');
+      const tradeComment = buildTradeComment(signal, brokerComment);
+      const preflight = await mt5Service.preflightOrder(
+        signal.symbol,
+        signal.signal,
+        riskCheck.lotSize,
+        signal.sl,
+        signal.tp,
+        brokerComment
+      );
+      if (!mt5Service.isOrderAllowed(preflight)) {
+        const preflightMessage = mt5Service.getPreflightMessage(preflight);
+        await this._recordAudit('preflight', 'BLOCKED', signal, {
+          message: preflightMessage,
+          code: preflight.retcode,
+          codeName: preflight.retcodeName,
+          volume: riskCheck.lotSize,
+          accountInfo,
+          details: preflight,
+        });
+        this._broadcastRejection(signal, preflightMessage, {
+          stage: 'preflight',
+          code: preflight.retcode,
+          codeName: preflight.retcodeName,
+        });
+        return;
+      }
       const result = await mt5Service.placeOrder(
         signal.symbol,
         signal.signal,
         riskCheck.lotSize,
         signal.sl,
         signal.tp,
-        comment
+        brokerComment
       );
 
-      const instrument = getInstrument(signal.symbol);
       const atrAtEntry = signal.indicatorsSnapshot?.atr || 0;
-      const openedAt = new Date();
+      const entryPrice = result.entryDeal?.price || result.price || quotedEntryPrice;
+      const openedAt = result.entryDeal?.time ? new Date(result.entryDeal.time) : new Date();
+      const mt5PositionId = result.positionId || result.orderId || null;
+      const mt5DealId = result.entryDeal?.id || result.dealId || null;
+      const mt5Comment = result.entryDeal?.comment || brokerComment;
+      const entryCommission = Number(result.entryDeal?.commission) || 0;
+      const entrySwap = Number(result.entryDeal?.swap) || 0;
+      const entryFee = Number(result.entryDeal?.fee) || 0;
 
       // Save to paper positions DB
       const position = await paperPositionsDb.insert({
@@ -227,8 +320,11 @@ class PaperTradingService {
         currentSl: signal.sl,
         currentTp: signal.tp,
         lotSize: riskCheck.lotSize,
-        mt5PositionId: result.positionId || result.orderId || null,
+        mt5PositionId,
+        mt5EntryDealId: mt5DealId,
+        mt5Comment,
         strategy: signal.strategy,
+        comment: tradeComment,
         confidence: signal.confidence,
         reason: signal.reason,
         atrAtEntry,
@@ -249,7 +345,13 @@ class PaperTradingService {
         strategy: signal.strategy,
         confidence: signal.confidence,
         indicatorsSnapshot: signal.indicatorsSnapshot,
-        mt5PositionId: result.positionId || result.orderId || null,
+        commission: entryCommission,
+        swap: entrySwap,
+        fee: entryFee,
+        mt5PositionId,
+        mt5DealId,
+        mt5Comment,
+        comment: tradeComment,
         positionDbId: position._id,
         openedAt,
       });
@@ -265,6 +367,31 @@ class PaperTradingService {
 
     } catch (err) {
       console.error(`[PaperTrading] Execute error for ${signal.symbol}:`, err.message);
+      try {
+        const accountInfo = mt5Service.isConnected() ? await mt5Service.getAccountInfo() : null;
+        const auditCode = err.code ?? err.details?.retcode ?? null;
+        const auditCodeName = err.codeName ?? err.details?.retcodeName ?? null;
+        const auditStage = err.method === 'placeOrder'
+          ? 'order_send'
+          : err.method === 'preflightOrder'
+            ? 'preflight'
+            : 'execution';
+
+        await this._recordAudit(auditStage, 'ERROR', signal, {
+          message: err.message,
+          code: auditCode,
+          codeName: auditCodeName,
+          accountInfo,
+          details: err.details || { method: err.method || null },
+        });
+        this._broadcastRejection(signal, err.message, {
+          stage: auditStage,
+          code: auditCode,
+          codeName: auditCodeName,
+        });
+      } catch (auditError) {
+        console.error('[PaperTrading] Failed to record execution audit:', auditError.message);
+      }
     }
   }
 
@@ -272,78 +399,11 @@ class PaperTradingService {
    * Risk validation for paper trades (uses paperPositionsDb instead of positionsDb)
    */
   async _validatePaperTrade(signal, accountInfo) {
-    const instrument = getInstrument(signal.symbol);
-    if (!instrument) {
-      return { allowed: false, reason: `Unknown instrument: ${signal.symbol}`, lotSize: 0 };
-    }
-
-    const { balance, equity } = accountInfo;
-
-    // Track peak balance
-    if (balance > riskManager.peakBalance) {
-      riskManager.peakBalance = balance;
-    }
-
-    // Check paper trading enabled
-    if (process.env.PAPER_TRADING_ENABLED !== 'true') {
-      return { allowed: false, reason: 'Paper trading is disabled', lotSize: 0 };
-    }
-
-    // Daily loss limit
-    const maxDailyLoss = parseFloat(process.env.MAX_DAILY_LOSS || 0.05);
-    const todayLoss = riskManager._getTodayLoss();
-    if (todayLoss >= balance * maxDailyLoss) {
-      return { allowed: false, reason: `Daily loss limit reached: ${todayLoss.toFixed(2)}`, lotSize: 0 };
-    }
-
-    // Max drawdown
-    const maxDrawdown = parseFloat(process.env.MAX_DRAWDOWN || 0.10);
-    const currentDrawdown = riskManager.peakBalance > 0 ? (riskManager.peakBalance - equity) / riskManager.peakBalance : 0;
-    if (currentDrawdown >= maxDrawdown) {
-      return { allowed: false, reason: `Max drawdown reached: ${(currentDrawdown * 100).toFixed(1)}%`, lotSize: 0 };
-    }
-
-    // Concurrent position limit
-    const maxPositions = parseInt(process.env.MAX_CONCURRENT_POSITIONS || 5);
-    const openPositions = await paperPositionsDb.count({});
-    if (openPositions >= maxPositions) {
-      return { allowed: false, reason: `Max positions reached: ${openPositions}/${maxPositions}`, lotSize: 0 };
-    }
-
-    // Per-symbol limit
-    const maxPerSymbol = parseInt(process.env.MAX_POSITIONS_PER_SYMBOL || 2);
-    const symbolPositions = await paperPositionsDb.count({ symbol: signal.symbol });
-    if (symbolPositions >= maxPerSymbol) {
-      return { allowed: false, reason: `Max positions for ${signal.symbol}: ${symbolPositions}/${maxPerSymbol}`, lotSize: 0 };
-    }
-
-    // Category correlation limit
-    const allPaperPositions = await paperPositionsDb.find({});
-    const categoryCount = allPaperPositions.filter((p) => {
-      const inst = getInstrument(p.symbol);
-      return inst && inst.category === instrument.category;
-    }).length;
-    if (categoryCount >= 3) {
-      return { allowed: false, reason: `Max correlated positions for ${instrument.category}: ${categoryCount}/3`, lotSize: 0 };
-    }
-
-    // Calculate position size
-    const lotSize = riskManager.calculateLotSize(signal, instrument, balance);
-    if (lotSize < instrument.minLot) {
-      return { allowed: false, reason: `Lot size ${lotSize} below minimum ${instrument.minLot}`, lotSize: 0 };
-    }
-
-    // SL distance validation
-    const entryPrice = signal.entryPrice || 0;
-    if (entryPrice > 0 && signal.sl > 0) {
-      const slDistance = Math.abs(entryPrice - signal.sl);
-      const minSlDistance = instrument.spread * instrument.pipSize * 3;
-      if (slDistance < minSlDistance) {
-        return { allowed: false, reason: `SL too close: ${slDistance.toFixed(5)} < ${minSlDistance.toFixed(5)}`, lotSize: 0 };
-      }
-    }
-
-    return { allowed: true, reason: 'All risk checks passed', lotSize };
+    return await riskManager.validateTrade(signal, accountInfo, {
+      scope: 'paper',
+      positionsStore: paperPositionsDb,
+      tradingEnabled: process.env.PAPER_TRADING_ENABLED === 'true',
+    });
   }
 
   /**
@@ -406,53 +466,56 @@ class PaperTradingService {
    * Handle a paper position that was closed externally
    */
   async _handlePaperClose(localPos) {
-    const instrument = getInstrument(localPos.symbol);
-    let exitPrice = 0;
-    let exitReason = 'EXTERNAL';
+    let dealSummary = null;
+    if (localPos.mt5PositionId) {
+      const reconciliationStart = localPos.openedAt
+        ? new Date(new Date(localPos.openedAt).getTime() - (60 * 60 * 1000))
+        : new Date(Date.now() - (7 * 24 * 60 * 60 * 1000));
 
-    try {
-      const priceData = await mt5Service.getPrice(localPos.symbol);
-      exitPrice = localPos.type === 'BUY' ? priceData.bid : priceData.ask;
-    } catch (e) {
-      exitPrice = localPos.currentPrice || localPos.entryPrice;
-    }
-
-    // Determine SL or TP hit
-    if (localPos.currentSl && localPos.currentTp) {
-      if (localPos.type === 'BUY') {
-        if (exitPrice <= localPos.currentSl * 1.001) exitReason = 'SL_HIT';
-        else if (exitPrice >= localPos.currentTp * 0.999) exitReason = 'TP_HIT';
-      } else {
-        if (exitPrice >= localPos.currentSl * 0.999) exitReason = 'SL_HIT';
-        else if (exitPrice <= localPos.currentTp * 1.001) exitReason = 'TP_HIT';
+      try {
+        dealSummary = await mt5Service.getPositionDealSummary(
+          localPos.mt5PositionId,
+          reconciliationStart,
+          new Date()
+        );
+      } catch (reconciliationError) {
+        console.warn(`[PaperTrading] Deal reconciliation failed for ${localPos.symbol}: ${reconciliationError.message}`);
       }
     }
 
-    // Calculate P/L
-    const priceDiff = localPos.type === 'BUY'
-      ? exitPrice - localPos.entryPrice
-      : localPos.entryPrice - exitPrice;
-    const profitPips = instrument ? priceDiff / instrument.pipSize : 0;
-    const profitLoss = instrument
-      ? priceDiff * localPos.lotSize * instrument.contractSize
-      : 0;
+    let fallbackExitPrice = null;
+    if (!dealSummary?.exitPrice) {
+      try {
+        const priceData = await mt5Service.getPrice(localPos.symbol);
+        fallbackExitPrice = localPos.type === 'BUY' ? priceData.bid : priceData.ask;
+      } catch (priceError) {
+        fallbackExitPrice = localPos.currentPrice || localPos.entryPrice;
+      }
+    }
 
-    const closedAt = new Date();
+    const closedSnapshot = buildClosedTradeSnapshot(localPos, dealSummary, {
+      exitPrice: fallbackExitPrice,
+      reason: 'EXTERNAL',
+    });
+
     const openedAt = new Date(localPos.openedAt);
 
     // Log closure to trade_log
     await TradeLog.logClose(localPos._id, {
-      exitPrice,
-      exitReason,
-      profitLoss,
-      profitPips,
+      exitPrice: closedSnapshot.exitPrice,
+      exitReason: closedSnapshot.exitReason,
+      profitLoss: closedSnapshot.profitLoss,
+      profitPips: closedSnapshot.profitPips,
+      commission: closedSnapshot.commission,
+      swap: closedSnapshot.swap,
+      fee: closedSnapshot.fee,
       openedAt,
-      closedAt,
+      closedAt: closedSnapshot.closedAt,
     });
 
     // Track loss for daily limit
-    if (profitLoss < 0) {
-      riskManager.recordLoss(Math.abs(profitLoss));
+    if (closedSnapshot.profitLoss < 0) {
+      await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt, 'paper');
     }
 
     // Remove from paper positions
@@ -460,18 +523,14 @@ class PaperTradingService {
 
     const closedTrade = {
       ...localPos,
-      exitPrice,
-      exitReason,
-      profitLoss,
-      profitPips,
-      closedAt,
-      holdingTime: TradeLog.formatHoldingTime(closedAt - openedAt),
+      ...closedSnapshot,
+      holdingTime: TradeLog.formatHoldingTime(closedSnapshot.closedAt - openedAt),
     };
 
     console.log(
       `[PaperTrading] Position closed: ${localPos.symbol} ${localPos.type} `
-      + `| P/L: ${profitLoss.toFixed(2)} (${profitPips.toFixed(1)} pips) `
-      + `| Reason: ${exitReason} | Held: ${closedTrade.holdingTime}`
+      + `| P/L: ${closedSnapshot.profitLoss.toFixed(2)} (${closedSnapshot.profitPips.toFixed(1)} pips) `
+      + `| Reason: ${closedSnapshot.exitReason} | Held: ${closedTrade.holdingTime}`
     );
 
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
@@ -487,61 +546,85 @@ class PaperTradingService {
       return { success: false, message: 'Paper position not found' };
     }
 
+    if (mt5Service.isConnected()) {
+      const accountInfo = await mt5Service.getAccountInfo();
+      mt5Service.ensurePaperTradingAccount(accountInfo);
+    }
+
     // Close on MT5 demo
+    let closeResult = null;
     if (position.mt5PositionId) {
       try {
-        await mt5Service.closePosition(position.mt5PositionId);
+        closeResult = await mt5Service.closePosition(position.mt5PositionId);
       } catch (err) {
         console.error(`[PaperTrading] MT5 close error: ${err.message}`);
       }
     }
 
-    // Get exit price
-    const priceData = await mt5Service.getPrice(position.symbol);
-    const exitPrice = position.type === 'BUY' ? priceData.bid : priceData.ask;
-    const instrument = getInstrument(position.symbol);
+    let dealSummary = null;
+    if (position.mt5PositionId) {
+      const reconciliationStart = position.openedAt
+        ? new Date(new Date(position.openedAt).getTime() - (60 * 60 * 1000))
+        : new Date(Date.now() - (7 * 24 * 60 * 60 * 1000));
 
-    const priceDiff = position.type === 'BUY'
-      ? exitPrice - position.entryPrice
-      : position.entryPrice - exitPrice;
-    const profitPips = instrument ? priceDiff / instrument.pipSize : 0;
-    const profitLoss = instrument
-      ? priceDiff * position.lotSize * instrument.contractSize
-      : 0;
+      try {
+        dealSummary = await mt5Service.getPositionDealSummary(
+          position.mt5PositionId,
+          reconciliationStart,
+          new Date()
+        );
+      } catch (reconciliationError) {
+        console.warn(`[PaperTrading] Deal reconciliation failed for ${position.symbol}: ${reconciliationError.message}`);
+      }
+    }
 
-    const closedAt = new Date();
+    let fallbackExitPrice = closeResult?.closeDeal?.price || closeResult?.price || null;
+    if (!dealSummary?.exitPrice && !fallbackExitPrice) {
+      const priceData = await mt5Service.getPrice(position.symbol);
+      fallbackExitPrice = position.type === 'BUY' ? priceData.bid : priceData.ask;
+    }
+
+    const closedSnapshot = buildClosedTradeSnapshot(position, dealSummary, {
+      exitPrice: fallbackExitPrice,
+      reason,
+    });
+
     const openedAt = new Date(position.openedAt);
 
     // Log to trade_log
     await TradeLog.logClose(position._id, {
-      exitPrice,
-      exitReason: reason,
-      profitLoss,
-      profitPips,
+      exitPrice: closedSnapshot.exitPrice,
+      exitReason: closedSnapshot.exitReason,
+      profitLoss: closedSnapshot.profitLoss,
+      profitPips: closedSnapshot.profitPips,
+      commission: closedSnapshot.commission,
+      swap: closedSnapshot.swap,
+      fee: closedSnapshot.fee,
       openedAt,
-      closedAt,
+      closedAt: closedSnapshot.closedAt,
     });
 
-    if (profitLoss < 0) {
-      riskManager.recordLoss(Math.abs(profitLoss));
+    if (closedSnapshot.profitLoss < 0) {
+      await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt, 'paper');
     }
 
     await paperPositionsDb.remove({ _id: positionDbId });
 
     const closedTrade = {
       ...position,
-      exitPrice,
-      exitReason: reason,
-      profitLoss,
-      profitPips,
-      closedAt,
-      holdingTime: TradeLog.formatHoldingTime(closedAt - openedAt),
+      ...closedSnapshot,
+      holdingTime: TradeLog.formatHoldingTime(closedSnapshot.closedAt - openedAt),
     };
 
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
     await notificationService.notifyTradeClosed(closedTrade);
 
-    return { success: true, profitLoss, profitPips, holdingTime: closedTrade.holdingTime };
+    return {
+      success: true,
+      profitLoss: closedSnapshot.profitLoss,
+      profitPips: closedSnapshot.profitPips,
+      holdingTime: closedTrade.holdingTime,
+    };
   }
 
   /**

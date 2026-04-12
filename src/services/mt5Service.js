@@ -7,6 +7,12 @@ const { spawn } = require('child_process');
 const path = require('path');
 const readline = require('readline');
 
+const ACCOUNT_MODE_NAMES = {
+  0: 'DEMO',
+  1: 'CONTEST',
+  2: 'REAL',
+};
+
 class MT5Service {
   constructor() {
     this.process = null;
@@ -50,7 +56,7 @@ class MT5Service {
             if (response.success) {
               pending.resolve(response.result);
             } else {
-              pending.reject(new Error(response.error));
+              pending.reject(this._createBridgeError(pending.method || 'unknown', response));
             }
           }
         } catch (e) {
@@ -106,7 +112,7 @@ class MT5Service {
       const id = String(++this._requestId);
       const command = JSON.stringify({ id, method, params }) + '\n';
 
-      this._pendingRequests.set(id, { resolve, reject });
+      this._pendingRequests.set(id, { method, resolve, reject });
 
       // Timeout for individual commands
       const timeout = setTimeout(() => {
@@ -120,12 +126,22 @@ class MT5Service {
       const origResolve = this._pendingRequests.get(id).resolve;
       const origReject = this._pendingRequests.get(id).reject;
       this._pendingRequests.set(id, {
+        method,
         resolve: (val) => { clearTimeout(timeout); origResolve(val); },
         reject: (err) => { clearTimeout(timeout); origReject(err); },
       });
 
       this.process.stdin.write(command);
     });
+  }
+
+  _createBridgeError(method, response = {}) {
+    const error = new Error(response.error || `MT5 ${method} failed`);
+    error.method = method;
+    if (response.code != null) error.code = response.code;
+    if (response.codeName) error.codeName = response.codeName;
+    if (response.details) error.details = response.details;
+    return error;
   }
 
   async connect() {
@@ -196,6 +212,55 @@ class MT5Service {
     return await this._sendCommand('getAccountInfo');
   }
 
+  getAccountModeName(accountInfo = {}) {
+    if (accountInfo.tradeModeName) {
+      return String(accountInfo.tradeModeName).toUpperCase();
+    }
+
+    if (typeof accountInfo.tradeMode === 'number') {
+      return ACCOUNT_MODE_NAMES[accountInfo.tradeMode] || `UNKNOWN_${accountInfo.tradeMode}`;
+    }
+
+    if (accountInfo.isReal) return 'REAL';
+    if (accountInfo.isDemo) return 'DEMO';
+    if (accountInfo.isContest) return 'CONTEST';
+    return 'UNKNOWN';
+  }
+
+  isRealAccount(accountInfo = {}) {
+    return accountInfo.isReal === true || this.getAccountModeName(accountInfo) === 'REAL';
+  }
+
+  isDemoLikeAccount(accountInfo = {}) {
+    const mode = this.getAccountModeName(accountInfo);
+    return accountInfo.isDemo === true || accountInfo.isContest === true || mode === 'DEMO' || mode === 'CONTEST';
+  }
+
+  ensurePaperTradingAccount(accountInfo = {}) {
+    const mode = this.getAccountModeName(accountInfo);
+    if (!this.isDemoLikeAccount(accountInfo)) {
+      throw new Error(`Paper trading requires a DEMO or CONTEST MT5 account. Current account mode: ${mode}`);
+    }
+    if (accountInfo.tradeAllowed === false) {
+      throw new Error('The connected MT5 account does not allow trading.');
+    }
+  }
+
+  ensureLiveTradingAllowed(accountInfo = {}) {
+    if (String(process.env.ALLOW_LIVE_TRADING || '').toLowerCase() !== 'true') {
+      throw new Error('Live trading is locked. Set ALLOW_LIVE_TRADING=true only after verifying the real account.');
+    }
+
+    const mode = this.getAccountModeName(accountInfo);
+    if (!this.isRealAccount(accountInfo)) {
+      throw new Error(`Live trading requires a REAL MT5 account. Current account mode: ${mode}. Use paper trading for demo accounts.`);
+    }
+
+    if (accountInfo.tradeAllowed === false) {
+      throw new Error('The connected MT5 account does not allow trading.');
+    }
+  }
+
   async getPositions() {
     this._ensureConnected();
     return await this._sendCommand('getPositions');
@@ -204,6 +269,18 @@ class MT5Service {
   async getOrders() {
     this._ensureConnected();
     return await this._sendCommand('getOrders');
+  }
+
+  async preflightOrder(symbol, type, volume, stopLoss, takeProfit, comment = '') {
+    this._ensureConnected();
+    return await this._sendCommand('preflightOrder', {
+      symbol,
+      type,
+      volume,
+      sl: stopLoss,
+      tp: takeProfit,
+      comment: comment || `QM-${type}-${symbol}`,
+    });
   }
 
   /**
@@ -294,6 +371,115 @@ class MT5Service {
       startTime: startTime instanceof Date ? startTime.toISOString() : startTime,
       endTime: endTime instanceof Date ? endTime.toISOString() : endTime,
     });
+  }
+
+  async getDealsByOrder(orderId, startTime = null, endTime = null) {
+    this._ensureConnected();
+    return await this._sendCommand('getDeals', {
+      ticket: orderId,
+      startTime: startTime instanceof Date ? startTime.toISOString() : startTime,
+      endTime: endTime instanceof Date ? endTime.toISOString() : endTime,
+    });
+  }
+
+  async getDealsByPosition(positionId, startTime = null, endTime = null) {
+    this._ensureConnected();
+    return await this._sendCommand('getDeals', {
+      positionId,
+      startTime: startTime instanceof Date ? startTime.toISOString() : startTime,
+      endTime: endTime instanceof Date ? endTime.toISOString() : endTime,
+    });
+  }
+
+  sortDealsByTime(deals = []) {
+    return [...deals].sort((a, b) => {
+      const timeDiff = new Date(a.time).getTime() - new Date(b.time).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return (a.timeMsc || 0) - (b.timeMsc || 0);
+    });
+  }
+
+  _isEntryDeal(deal = {}) {
+    const entryName = String(deal.entryName || '').toUpperCase();
+    return entryName === 'IN' || entryName === 'INOUT';
+  }
+
+  _isExitDeal(deal = {}) {
+    const entryName = String(deal.entryName || '').toUpperCase();
+    return entryName === 'OUT' || entryName === 'OUT_BY' || entryName === 'INOUT';
+  }
+
+  _sumWeightedPrice(deals = []) {
+    const totalVolume = deals.reduce((sum, deal) => sum + (Number(deal.volume) || 0), 0);
+    if (totalVolume <= 0) return null;
+
+    const weightedPrice = deals.reduce((sum, deal) => (
+      sum + ((Number(deal.price) || 0) * (Number(deal.volume) || 0))
+    ), 0);
+
+    return weightedPrice / totalVolume;
+  }
+
+  _getNetDealProfit(deal = {}) {
+    return (Number(deal.profit) || 0)
+      + (Number(deal.swap) || 0)
+      + (Number(deal.commission) || 0)
+      + (Number(deal.fee) || 0);
+  }
+
+  summarizePositionDeals(deals = []) {
+    const orderedDeals = this.sortDealsByTime(deals);
+    const entryDeals = orderedDeals.filter((deal) => this._isEntryDeal(deal));
+    const exitDeals = orderedDeals.filter((deal) => this._isExitDeal(deal));
+    const lastExitDeal = exitDeals.length > 0 ? exitDeals[exitDeals.length - 1] : null;
+
+    return {
+      deals: orderedDeals,
+      entryDeals,
+      exitDeals,
+      entryPrice: this._sumWeightedPrice(entryDeals),
+      exitPrice: this._sumWeightedPrice(exitDeals),
+      entryTime: entryDeals[0]?.time || orderedDeals[0]?.time || null,
+      exitTime: lastExitDeal?.time || null,
+      positionId: lastExitDeal?.positionId || entryDeals[0]?.positionId || orderedDeals[0]?.positionId || null,
+      entryVolume: entryDeals.reduce((sum, deal) => sum + (Number(deal.volume) || 0), 0),
+      exitVolume: exitDeals.reduce((sum, deal) => sum + (Number(deal.volume) || 0), 0),
+      realizedProfit: orderedDeals.reduce((sum, deal) => sum + this._getNetDealProfit(deal), 0),
+      commission: orderedDeals.reduce((sum, deal) => sum + (Number(deal.commission) || 0), 0),
+      swap: orderedDeals.reduce((sum, deal) => sum + (Number(deal.swap) || 0), 0),
+      fee: orderedDeals.reduce((sum, deal) => sum + (Number(deal.fee) || 0), 0),
+      exitReason: lastExitDeal?.reasonName || null,
+      lastExitDeal,
+    };
+  }
+
+  async getPositionDealSummary(positionId, startTime = null, endTime = null) {
+    const deals = await this.getDealsByPosition(positionId, startTime, endTime);
+    return this.summarizePositionDeals(deals);
+  }
+
+  isOrderAllowed(preflight = {}) {
+    return preflight.allowed === true;
+  }
+
+  getPreflightMessage(preflight = {}) {
+    if (preflight.allowed === false) {
+      if (preflight.retcodeName === 'MARKET_CLOSED') {
+        return 'Market closed';
+      }
+
+      if (preflight.comment && preflight.comment !== 'Done') {
+        return preflight.comment;
+      }
+
+      if (preflight.retcodeName && preflight.retcodeName !== String(preflight.retcode ?? '')) {
+        return preflight.retcodeName.replaceAll('_', ' ');
+      }
+    }
+
+    return preflight.comment
+      || preflight.symbolInfo?.tradeModeName
+      || 'MT5 order preflight rejected';
   }
 
   _ensureConnected() {

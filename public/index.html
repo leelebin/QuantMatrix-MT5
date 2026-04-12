@@ -200,7 +200,9 @@ tr:hover{background:var(--bg3)}
       </div>
       <table>
         <tr><td style="color:var(--text2)">MT5 Connection</td><td id="dMt5Status">--</td></tr>
+        <tr><td style="color:var(--text2)">Account Mode</td><td id="dAccountMode">--</td></tr>
         <tr><td style="color:var(--text2)">Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
+        <tr><td style="color:var(--text2)">Risk Profile</td><td id="dRiskProfile">--</td></tr>
         <tr><td style="color:var(--text2)">Trading Loop</td><td id="dTradingLoop">--</td></tr>
         <tr><td style="color:var(--text2)">Position Monitor</td><td id="dMonitor">--</td></tr>
         <tr><td style="color:var(--text2)">Daily Loss</td><td id="dDailyLoss">--</td></tr>
@@ -243,10 +245,22 @@ tr:hover{background:var(--bg3)}
   <div class="card">
     <div class="card-header">
       <span class="card-title">Trade History</span>
-      <button class="btn-outline btn-sm" onclick="loadTrades()">Refresh</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="reconcileTrades()">Sync With MT5</button>
+        <button class="btn-outline btn-sm" onclick="loadTrades()">Refresh</button>
+      </div>
     </div>
     <div id="tradesTable">
       <div class="empty">No trades yet</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Execution Audit</span>
+      <button class="btn-outline btn-sm" onclick="loadExecutionAudits()">Refresh</button>
+    </div>
+    <div id="executionAuditTable">
+      <div class="empty">No execution events yet</div>
     </div>
   </div>
 </div>
@@ -378,6 +392,67 @@ tr:hover{background:var(--bg3)}
     </div>
   </div>
   <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Risk Management</span>
+      <button class="btn-outline btn-sm" onclick="startNewRiskProfile()">New Profile</button>
+    </div>
+    <div id="riskProfileSummary"><div class="empty">Loading risk profiles...</div></div>
+    <div style="margin-top:12px;padding:12px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);font-size:13px;color:var(--text)">
+      Aggressive min-lot mode is for small-capital live experiments. It allows the broker minimum lot even when the theoretical risk size is smaller, which means actual risk can exceed the configured per-trade limit.
+    </div>
+    <div class="grid grid-2" style="margin-top:16px">
+      <div>
+        <div class="card-header" style="padding:0;margin-bottom:12px"><span class="card-title" id="riskFormTitle">Create Risk Profile</span></div>
+        <div class="form-group">
+          <label>Profile Name</label>
+          <input type="text" id="riskName" placeholder="e.g. Bootstrap Risk">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max Risk / Trade (%)</label>
+            <input type="number" id="riskMaxRiskPerTrade" min="0.01" max="100" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Max Daily Loss (%)</label>
+            <input type="number" id="riskMaxDailyLoss" min="0.01" max="100" step="0.01">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max Drawdown (%)</label>
+            <input type="number" id="riskMaxDrawdown" min="0.01" max="100" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Max Concurrent Positions</label>
+            <input type="number" id="riskMaxPositions" min="1" step="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max Positions / Symbol</label>
+            <input type="number" id="riskMaxPerSymbol" min="1" step="1">
+          </div>
+          <div class="form-group">
+            <label>Aggressive Min-Lot Mode</label>
+            <label class="toggle" style="margin-top:8px">
+              <input type="checkbox" id="riskAllowAggressiveMinLot">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-actions" style="justify-content:flex-start;margin-top:8px">
+          <button class="btn-primary btn-sm" onclick="saveRiskProfile()" id="riskSaveBtn">Create Profile</button>
+          <button class="btn-outline btn-sm" onclick="resetRiskProfileForm()">Reset</button>
+        </div>
+        <div id="riskProfileResult" style="margin-top:10px;font-size:13px"></div>
+      </div>
+      <div>
+        <div class="card-header" style="padding:0;margin-bottom:12px"><span class="card-title">Saved Profiles</span></div>
+        <div id="riskProfilesList"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
     <div class="card-header"><span class="card-title">Account Info</span></div>
     <div id="accountInfo"><div class="empty">Not connected</div></div>
   </div>
@@ -395,9 +470,11 @@ let wsReconnectTimer = null;
 let wsPingInterval = null;
 let wsSubscriptions = ['positions','trades','signals','account','status','notifications'];
 const wsLogEntries = [];
+let riskSettingsState = { profiles: [], activeProfile: null, activeProfileId: null };
+let editingRiskProfileId = null;
 
 // ─── Symbols list ───
-const SYMBOLS = ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCHF','USDCAD','NZDUSD','EURJPY','GBPJPY','EURGBP','AUDNZD','XAUUSD','XAGUSD','US30','US500','NAS100','USOIL','UKOIL'];
+const SYMBOLS = ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCHF','USDCAD','NZDUSD','EURJPY','GBPJPY','EURGBP','AUDNZD','XAUUSD','XAGUSD','US30','SPX500','NAS100','XTIUSD','XBRUSD'];
 
 // ─── Init ───
 document.addEventListener('DOMContentLoaded', () => {
@@ -438,11 +515,11 @@ function setupNav() {
 
 function onPageSwitch(page) {
   if (page === 'positions') loadPositions();
-  else if (page === 'trades') { loadTrades(); loadTradeStats(); }
+  else if (page === 'trades') { loadTrades(); loadTradeStats(); loadExecutionAudits(); }
   else if (page === 'strategies') loadStrategies();
   else if (page === 'backtest') loadBacktestHistory();
   else if (page === 'optimizer') loadOptRanges();
-  else if (page === 'settings') { loadNotifyStatus(); loadAccountInfo(); }
+  else if (page === 'settings') { loadNotifyStatus(); loadAccountInfo(); loadRiskSettings(); }
   else if (page === 'dashboard') loadDashboard();
 }
 
@@ -619,6 +696,15 @@ function handleWsMessage(msg) {
       break;
     case 'trade_rejected':
       wsLog('warn', 'Trade rejected: ' + msg.data.symbol + ' - ' + msg.data.reason);
+      if (document.getElementById('page-trades').classList.contains('active')) loadExecutionAudits();
+      break;
+    case 'paper_trade_rejected':
+      wsLog('warn', 'Paper trade rejected: ' + msg.data.symbol + ' - ' + msg.data.reason);
+      if (document.getElementById('page-trades').classList.contains('active')) loadExecutionAudits();
+      break;
+    case 'execution_audit':
+      wsLog('info', 'Execution audit: ' + (msg.data.stage || 'execution') + ' - ' + msg.data.message);
+      if (document.getElementById('page-trades').classList.contains('active')) loadExecutionAudits();
       break;
     case 'optimizer_complete':
       wsLog('success', 'Optimizer complete: ' + msg.data.validResults + ' valid results');
@@ -666,7 +752,11 @@ async function loadDashboard() {
     if (!r.success) return;
     const d = r.data;
     document.getElementById('dMt5Status').innerHTML = d.mt5Connected ? '<span style="color:var(--green)">Connected</span>' : '<span style="color:var(--red)">Disconnected</span>';
+    document.getElementById('dAccountMode').innerHTML = d.account ? accountModeBadge(d.account.mode) + ' <span style="color:var(--text2)">' + (d.account.login || '--') + '@' + (d.account.server || '--') + '</span>' : '--';
     document.getElementById('dTradingEnabled').innerHTML = d.tradingEnabled ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>';
+    document.getElementById('dRiskProfile').innerHTML = d.risk && d.risk.activeRiskProfileName
+      ? '<strong>' + d.risk.activeRiskProfileName + '</strong>' + (d.risk.allowAggressiveMinLot ? ' <span style="color:var(--yellow)">(Aggressive Min Lot)</span>' : '')
+      : '--';
     document.getElementById('dTradingLoop').textContent = d.tradingLoopActive ? 'Active' : 'Stopped';
     document.getElementById('dMonitor').textContent = d.monitor.running ? 'Running' : 'Stopped';
     document.getElementById('tradingToggle').textContent = d.tradingEnabled ? 'Stop Trading' : 'Start Trading';
@@ -719,13 +809,14 @@ function renderPositions(positions) {
   const el = document.getElementById('positionsTable');
   document.getElementById('statPositions').textContent = positions.length;
   if (!positions || positions.length === 0) { el.innerHTML = '<div class="empty">No open positions</div>'; return; }
-  let html = '<table><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>SL</th><th>TP</th><th>Lot</th><th>Strategy</th><th>P/L</th><th>Action</th></tr>';
+  let html = '<table><tr><th>Symbol</th><th>Type</th><th>Broker Entry</th><th>SL</th><th>TP</th><th>Lot</th><th>Strategy</th><th>Broker Ref</th><th>P/L</th><th>Action</th></tr>';
   positions.forEach(p => {
     const pl = p.unrealizedPl || 0;
     html += '<tr><td><strong>' + p.symbol + '</strong></td>';
     html += '<td><span class="tag tag-' + p.type.toLowerCase() + '">' + p.type + '</span></td>';
-    html += '<td>' + p.entryPrice + '</td><td>' + (p.currentSl||'--') + '</td><td>' + (p.currentTp||'--') + '</td>';
+    html += '<td>' + fmtPrice(p.entryPrice) + '</td><td>' + fmtPrice(p.currentSl) + '</td><td>' + fmtPrice(p.currentTp) + '</td>';
     html += '<td>' + p.lotSize + '</td><td>' + (p.strategy||'--') + '</td>';
+    html += '<td><div>Pos #' + (p.mt5PositionId || '--') + '</div><div style="color:var(--text2);font-size:11px">Deal #' + (p.mt5EntryDealId || '--') + '</div></td>';
     html += '<td style="color:' + (pl>=0?'var(--green)':'var(--red)') + '">' + (pl>=0?'+':'') + pl.toFixed(2) + '</td>';
     html += '<td><button class="btn-danger btn-sm" onclick="closePosition(\'' + p._id + '\')">Close</button></td></tr>';
   });
@@ -745,15 +836,58 @@ async function loadTrades() {
     if (!r.success) return;
     const el = document.getElementById('tradesTable');
     if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No trades yet</div>'; return; }
-    let html = '<table><tr><th>Time</th><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>Lot</th><th>P/L ($)</th><th>Pips</th><th>Reason</th></tr>';
+    let html = '<table><tr><th>MT5 Open</th><th>MT5 Close</th><th>Symbol</th><th>Type</th><th>Strategy</th><th>Comment</th><th>Broker Entry</th><th>Broker Exit</th><th>Lot</th><th>Broker Costs</th><th>P/L ($)</th><th>Pips</th><th>Reason</th><th>Broker Ref</th></tr>';
     r.data.forEach(t => {
       const pl = t.profitLoss || 0;
-      html += '<tr><td>' + fmtTime(t.openedAt) + '</td><td>' + t.symbol + '</td>';
+      html += '<tr><td>' + fmtTime(t.openedAt) + '</td><td>' + fmtTime(t.closedAt) + '</td><td>' + t.symbol + '</td>';
       html += '<td><span class="tag tag-' + t.type.toLowerCase() + '">' + t.type + '</span></td>';
-      html += '<td>' + t.entryPrice + '</td><td>' + (t.exitPrice||'--') + '</td><td>' + t.lotSize + '</td>';
+      html += '<td>' + (t.strategy || '--') + '</td>';
+      html += '<td><div>' + (t.comment || '--') + '</div><div style="color:var(--text2);font-size:11px">MT5: ' + (t.mt5Comment || '--') + '</div></td>';
+      html += '<td>' + fmtPrice(t.entryPrice) + '</td><td>' + fmtPrice(t.exitPrice) + '</td><td>' + t.lotSize + '</td>';
+      html += '<td><div>Comm: ' + fmtSignedNum(t.commission) + '</div><div>Swap: ' + fmtSignedNum(t.swap) + '</div><div>Fee: ' + fmtSignedNum(t.fee) + '</div></td>';
       html += '<td style="color:' + (pl>=0?'var(--green)':'var(--red)') + '">' + (pl>=0?'+':'') + pl.toFixed(2) + '</td>';
       html += '<td>' + (t.profitPips != null ? t.profitPips.toFixed(1) : '--') + '</td>';
-      html += '<td>' + (t.exitReason||t.status) + '</td></tr>';
+      html += '<td>' + (t.exitReason||t.status) + '</td>';
+      html += '<td><div>Pos #' + (t.mt5PositionId || '--') + '</div><div style="color:var(--text2);font-size:11px">Entry #' + (t.mt5EntryDealId || '--') + ' | Exit #' + (t.mt5CloseDealId || '--') + '</div></td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {}
+}
+
+async function reconcileTrades() {
+  try {
+    wsLog('info', 'Reconciling trade history with MT5...');
+    const r = await api('/api/trades/reconcile', 'POST', { limit: 100 });
+    if (!r.success) throw new Error(r.message || 'Failed to reconcile trade history');
+    wsLog('success', r.message || 'Trade history reconciled with MT5');
+    await loadTrades();
+    await loadTradeStats();
+  } catch (e) {
+    wsLog('error', 'Trade reconciliation failed: ' + e.message);
+    alert(e.message);
+  }
+}
+
+async function loadExecutionAudits() {
+  try {
+    const r = await api('/api/trades/execution-audits?limit=30');
+    if (!r.success) return;
+    const el = document.getElementById('executionAuditTable');
+    if (!r.data || r.data.length === 0) {
+      el.innerHTML = '<div class="empty">No execution events yet</div>';
+      return;
+    }
+
+    let html = '<table><tr><th>Time</th><th>Scope</th><th>Stage</th><th>Symbol</th><th>Status</th><th>Code</th><th>Message</th></tr>';
+    r.data.forEach((a) => {
+      html += '<tr><td>' + fmtTime(a.createdAt) + '</td>';
+      html += '<td>' + badge(a.scope || '--', a.scope === 'live' ? 'var(--red)' : 'var(--blue)') + '</td>';
+      html += '<td>' + badge(a.stage || '--', 'var(--yellow)') + '</td>';
+      html += '<td>' + (a.symbol ? (a.symbol + ' ' + (a.type || '')) : '--') + '</td>';
+      html += '<td>' + badge(a.status || '--', auditStatusColor(a.status)) + '</td>';
+      html += '<td>' + ((a.codeName || a.code) ? ((a.codeName || a.code) + (a.code && a.codeName ? ' (' + a.code + ')' : '')) : '--') + '</td>';
+      html += '<td>' + (a.message || '--') + '</td></tr>';
     });
     html += '</table>';
     el.innerHTML = html;
@@ -1067,10 +1201,20 @@ async function loadAccountInfo() {
   try {
     const r = await api('/api/trading/account');
     if (!r.success) { document.getElementById('accountInfo').innerHTML = '<div class="empty">Not connected to MT5</div>'; return; }
+    const a = r.data;
     let html = '<table>';
-    Object.entries(r.data).forEach(([k, v]) => {
-      html += '<tr><td style="color:var(--text2);text-transform:capitalize">' + k.replace(/_/g,' ') + '</td><td>' + v + '</td></tr>';
-    });
+    html += '<tr><td style="color:var(--text2)">Login</td><td>' + (a.login || '--') + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Server</td><td>' + (a.server || '--') + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Account Mode</td><td>' + accountModeBadge(a.tradeModeName) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Trade Allowed</td><td>' + boolBadge(a.tradeAllowed) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Balance</td><td>$' + num(a.balance) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Equity</td><td>$' + num(a.equity) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Profit</td><td>' + fmtSignedMoney(a.profit) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Margin</td><td>$' + num(a.margin) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Free Margin</td><td>$' + num(a.freeMargin) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Leverage</td><td>1:' + (a.leverage || '--') + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Company</td><td>' + (a.company || '--') + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Name</td><td>' + (a.name || '--') + '</td></tr>';
     html += '</table>';
     document.getElementById('accountInfo').innerHTML = html;
   } catch (e) { document.getElementById('accountInfo').innerHTML = '<div class="empty">Error loading account info</div>'; }
@@ -1078,6 +1222,24 @@ async function loadAccountInfo() {
 
 // ─── Helpers ───
 function num(v) { return v != null ? parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '--'; }
+function fmtPrice(v) { return v != null && v !== '' ? parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 5 }) : '--'; }
+function fmtSignedNum(v) { if (v == null) return '--'; const n = parseFloat(v); return (n >= 0 ? '+' : '') + n.toFixed(2); }
+function fmtSignedMoney(v) { if (v == null) return '--'; return fmtSignedNum(v) + ' USD'; }
+function boolBadge(v) { return v ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>'; }
+function accountModeBadge(mode) {
+  const normalized = (mode || 'UNKNOWN').toUpperCase();
+  const color = normalized === 'REAL' ? 'var(--red)' : normalized === 'DEMO' || normalized === 'CONTEST' ? 'var(--green)' : 'var(--text2)';
+  return '<span style="color:' + color + ';font-weight:600">' + normalized + '</span>';
+}
+function badge(label, color) {
+  return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:rgba(255,255,255,0.06);color:' + color + '">' + label + '</span>';
+}
+function auditStatusColor(status) {
+  const normalized = (status || '').toUpperCase();
+  if (normalized === 'ERROR') return 'var(--red)';
+  if (normalized === 'BLOCKED' || normalized === 'REJECTED') return 'var(--yellow)';
+  return 'var(--green)';
+}
 function fmtTime(t) { if (!t) return '--'; const d = new Date(t); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
 
 // Auto-refresh dashboard every 30s

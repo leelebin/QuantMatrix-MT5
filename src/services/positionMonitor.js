@@ -9,7 +9,7 @@ const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
 const { positionsDb, tradesDb } = require('../config/db');
-const { getInstrument } = require('../config/instruments');
+const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 
 class PositionMonitor {
   constructor() {
@@ -128,56 +128,57 @@ class PositionMonitor {
    */
   async _handleExternalClose(localPos) {
     console.log(`[Monitor] Position closed externally: ${localPos.symbol} ${localPos.type}`);
+    let dealSummary = null;
+    if (localPos.mt5PositionId) {
+      const reconciliationStart = localPos.openedAt
+        ? new Date(new Date(localPos.openedAt).getTime() - (60 * 60 * 1000))
+        : new Date(Date.now() - (7 * 24 * 60 * 60 * 1000));
 
-    const instrument = getInstrument(localPos.symbol);
-
-    // Try to determine exit reason and price
-    let exitPrice = 0;
-    let exitReason = 'EXTERNAL';
-
-    try {
-      // Try to get the last price as approximation
-      const priceData = await mt5Service.getPrice(localPos.symbol);
-      exitPrice = localPos.type === 'BUY' ? priceData.bid : priceData.ask;
-    } catch (e) {
-      exitPrice = localPos.currentPrice || localPos.entryPrice;
-    }
-
-    // Determine if SL or TP was hit
-    if (localPos.currentSl && localPos.currentTp) {
-      if (localPos.type === 'BUY') {
-        if (exitPrice <= localPos.currentSl * 1.001) exitReason = 'SL_HIT';
-        else if (exitPrice >= localPos.currentTp * 0.999) exitReason = 'TP_HIT';
-      } else {
-        if (exitPrice >= localPos.currentSl * 0.999) exitReason = 'SL_HIT';
-        else if (exitPrice <= localPos.currentTp * 1.001) exitReason = 'TP_HIT';
+      try {
+        dealSummary = await mt5Service.getPositionDealSummary(
+          localPos.mt5PositionId,
+          reconciliationStart,
+          new Date()
+        );
+      } catch (reconciliationError) {
+        console.warn(`[Monitor] Deal reconciliation failed for ${localPos.symbol}: ${reconciliationError.message}`);
       }
     }
 
-    // Calculate P/L
-    const priceDiff = localPos.type === 'BUY'
-      ? exitPrice - localPos.entryPrice
-      : localPos.entryPrice - exitPrice;
-    const profitPips = instrument ? priceDiff / instrument.pipSize : 0;
-    const profitLoss = instrument
-      ? priceDiff * localPos.lotSize * instrument.contractSize
-      : 0;
+    let fallbackExitPrice = null;
+    if (!dealSummary?.exitPrice) {
+      try {
+        const priceData = await mt5Service.getPrice(localPos.symbol);
+        fallbackExitPrice = localPos.type === 'BUY' ? priceData.bid : priceData.ask;
+      } catch (priceError) {
+        fallbackExitPrice = localPos.currentPrice || localPos.entryPrice;
+      }
+    }
+
+    const closedSnapshot = buildClosedTradeSnapshot(localPos, dealSummary, {
+      exitPrice: fallbackExitPrice,
+      reason: 'EXTERNAL',
+    });
 
     // Update trade record
     await tradesDb.update({ positionDbId: localPos._id }, {
       $set: {
         status: 'CLOSED',
-        exitPrice,
-        exitReason,
-        profitLoss,
-        profitPips,
-        closedAt: new Date(),
+        exitPrice: closedSnapshot.exitPrice,
+        exitReason: closedSnapshot.exitReason,
+        profitLoss: closedSnapshot.profitLoss,
+        profitPips: closedSnapshot.profitPips,
+        closedAt: closedSnapshot.closedAt,
+        commission: closedSnapshot.commission,
+        swap: closedSnapshot.swap,
+        fee: closedSnapshot.fee,
+        mt5CloseDealId: dealSummary?.lastExitDeal?.id || null,
       },
     });
 
     // Track loss for daily limit
-    if (profitLoss < 0) {
-      riskManager.recordLoss(Math.abs(profitLoss));
+    if (closedSnapshot.profitLoss < 0) {
+      await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt);
     }
 
     // Remove from active positions
@@ -185,11 +186,7 @@ class PositionMonitor {
 
     const closedTrade = {
       ...localPos,
-      exitPrice,
-      exitReason,
-      profitLoss,
-      profitPips,
-      closedAt: new Date(),
+      ...closedSnapshot,
     };
 
     // Broadcast via WebSocket

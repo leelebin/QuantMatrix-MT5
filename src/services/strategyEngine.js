@@ -16,8 +16,9 @@ class StrategyEngine {
     this.strategies = {};
     this.running = false;
     this.interval = null;
-    this.signals = [];       // Recent signals log
+    this.signals = [];
     this.maxSignalHistory = 200;
+    this.lastEmittedSignals = new Map();
     this._initStrategies();
   }
 
@@ -29,14 +30,7 @@ class StrategyEngine {
     this.strategies[STRATEGY_TYPES.BREAKOUT] = new BreakoutStrategy();
   }
 
-  /**
-   * Run analysis for a single symbol
-   * @param {string} symbol - Trading symbol
-   * @param {Array} candles - OHLC candle data
-   * @param {Array} higherTfCandles - Higher TF candles (for multi-timeframe strategy)
-   * @returns {{ signal, symbol, strategy, timestamp }}
-   */
-  analyzeSymbol(symbol, candles, higherTfCandles = null) {
+  analyzeSymbol(symbol, candles, higherTfCandles = null, entryCandles = null) {
     const instrument = instruments[symbol];
     if (!instrument) {
       return { signal: 'NONE', symbol, strategy: null, reason: 'Unknown symbol' };
@@ -47,15 +41,35 @@ class StrategyEngine {
       return { signal: 'NONE', symbol, strategy: null, reason: 'No strategy assigned' };
     }
 
-    // Calculate indicators
-    const ind = indicatorService.calculateAll(candles);
+    const closedCandles = candles.length > 1 ? candles.slice(0, -1) : [];
+    const closedHigherTfCandles = higherTfCandles && higherTfCandles.length > 1
+      ? higherTfCandles.slice(0, -1)
+      : [];
+    const closedEntryCandles = entryCandles && entryCandles.length > 1
+      ? entryCandles.slice(0, -1)
+      : [];
 
-    // For multi-timeframe strategy, set higher TF trend
-    if (instrument.strategyType === STRATEGY_TYPES.MULTI_TIMEFRAME && higherTfCandles) {
-      const htfCloses = higherTfCandles.map((c) => c.close);
+    if (closedCandles.length < 50) {
+      return { signal: 'NONE', symbol, strategy: instrument.strategyType, reason: 'Need more closed candles' };
+    }
+
+    if (instrument.entryTimeframe && closedEntryCandles.length < 50) {
+      return {
+        signal: 'NONE',
+        symbol,
+        strategy: instrument.strategyType,
+        reason: `Need more closed ${instrument.entryTimeframe} candles`,
+      };
+    }
+
+    const ind = indicatorService.calculateAll(closedCandles);
+    const entryInd = closedEntryCandles.length > 0 ? indicatorService.calculateAll(closedEntryCandles) : null;
+
+    if (instrument.strategyType === STRATEGY_TYPES.MULTI_TIMEFRAME && closedHigherTfCandles.length > 0) {
+      const htfCloses = closedHigherTfCandles.map((c) => c.close);
       const htfEma200 = indicatorService.ema(htfCloses, 200);
       const latestHtfEma = htfEma200.length > 0 ? htfEma200[htfEma200.length - 1] : null;
-      const latestHtfPrice = higherTfCandles[higherTfCandles.length - 1].close;
+      const latestHtfPrice = closedHigherTfCandles[closedHigherTfCandles.length - 1].close;
 
       if (latestHtfEma) {
         const trend = latestHtfPrice > latestHtfEma ? 'BULLISH' : 'BEARISH';
@@ -63,8 +77,14 @@ class StrategyEngine {
       }
     }
 
-    const result = strategy.analyze(candles, ind, instrument);
+    const result = strategy.analyze(closedCandles, ind, instrument, {
+      higherTfCandles: closedHigherTfCandles,
+      entryCandles: closedEntryCandles,
+      entryIndicators: entryInd,
+    });
 
+    const analyzedCandle = closedCandles[closedCandles.length - 1];
+    const latestEntryCandle = closedEntryCandles[closedEntryCandles.length - 1] || null;
     const signalRecord = {
       symbol,
       strategy: instrument.strategyType,
@@ -74,11 +94,42 @@ class StrategyEngine {
       tp: result.tp,
       reason: result.reason,
       indicatorsSnapshot: result.indicatorsSnapshot,
-      timestamp: new Date().toISOString(),
+      setupTimeframe: result.setupTimeframe || instrument.timeframe || null,
+      entryTimeframe: result.entryTimeframe || instrument.entryTimeframe || null,
+      triggerReason: result.triggerReason || '',
+      setupActive: result.setupActive === true,
+      setupDirection: result.setupDirection || null,
+      status: result.status || (result.signal !== 'NONE' ? 'TRIGGERED' : 'NO_SETUP'),
+      setupCandleTime: result.setupCandleTime || analyzedCandle.time,
+      entryCandleTime: result.entryCandleTime || latestEntryCandle?.time || null,
+      timestamp: result.entryCandleTime || latestEntryCandle?.time || analyzedCandle.time,
+      candleTime: analyzedCandle.time,
     };
 
-    // Store signal in history
-    if (result.signal !== 'NONE') {
+    if (result.signal !== 'NONE' || result.setupActive) {
+      const signalKey = [
+        instrument.strategyType,
+        signalRecord.status,
+        signalRecord.setupDirection || result.signal,
+        signalRecord.setupCandleTime || analyzedCandle.time,
+        signalRecord.entryCandleTime || signalRecord.candleTime,
+      ].join(':');
+
+      if (this.lastEmittedSignals.get(symbol) === signalKey) {
+        return {
+          ...signalRecord,
+          signal: 'NONE',
+          confidence: 0,
+          sl: 0,
+          tp: 0,
+          reason: 'Signal already processed for the latest setup/entry candle',
+          indicatorsSnapshot: {},
+          setupActive: false,
+          status: 'DUPLICATE',
+        };
+      }
+
+      this.lastEmittedSignals.set(symbol, signalKey);
       this.signals.unshift(signalRecord);
       if (this.signals.length > this.maxSignalHistory) {
         this.signals = this.signals.slice(0, this.maxSignalHistory);
@@ -88,12 +139,6 @@ class StrategyEngine {
     return signalRecord;
   }
 
-  /**
-   * Run analysis for all enabled symbols
-   * @param {Function} getCandlesFn - async (symbol, timeframe, count) => candles[]
-   * @param {Function} onSignalFn - async (signalRecord) => void
-   * @param {string[]} enabledSymbols - List of symbols to analyze
-   */
   async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null) {
     const symbolsToAnalyze = enabledSymbols || Object.keys(instruments);
 
@@ -102,19 +147,23 @@ class StrategyEngine {
         const instrument = instruments[symbol];
         if (!instrument) continue;
 
-        const candles = await getCandlesFn(symbol, instrument.timeframe, 250);
+        const candles = await getCandlesFn(symbol, instrument.timeframe, 251);
         if (!candles || candles.length < 50) {
           console.log(`[Engine] Insufficient data for ${symbol}: ${candles ? candles.length : 0} candles`);
           continue;
         }
 
-        // Get higher TF candles for metals
         let higherTfCandles = null;
         if (instrument.higherTimeframe) {
-          higherTfCandles = await getCandlesFn(symbol, instrument.higherTimeframe, 250);
+          higherTfCandles = await getCandlesFn(symbol, instrument.higherTimeframe, 251);
         }
 
-        const result = this.analyzeSymbol(symbol, candles, higherTfCandles);
+        let entryCandles = null;
+        if (instrument.entryTimeframe) {
+          entryCandles = await getCandlesFn(symbol, instrument.entryTimeframe, 251);
+        }
+
+        const result = this.analyzeSymbol(symbol, candles, higherTfCandles, entryCandles);
 
         if (result.signal !== 'NONE' && onSignalFn) {
           await onSignalFn(result);
@@ -125,11 +174,6 @@ class StrategyEngine {
     }
   }
 
-  /**
-   * Get recent signals
-   * @param {string} symbol - Optional filter by symbol
-   * @param {number} limit - Max signals to return
-   */
   getRecentSignals(symbol = null, limit = 50) {
     let filtered = this.signals;
     if (symbol) {
@@ -138,9 +182,6 @@ class StrategyEngine {
     return filtered.slice(0, limit);
   }
 
-  /**
-   * Get strategy info
-   */
   getStrategiesInfo() {
     return Object.entries(this.strategies).map(([type, strategy]) => ({
       type,
@@ -151,7 +192,6 @@ class StrategyEngine {
   }
 }
 
-// Singleton
 const strategyEngine = new StrategyEngine();
 
 module.exports = strategyEngine;

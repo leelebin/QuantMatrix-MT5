@@ -6,6 +6,7 @@ Communicates with Node.js via stdin/stdout JSON-line protocol
 import sys
 import json
 import traceback
+import os
 from datetime import datetime, timezone
 
 try:
@@ -54,6 +55,348 @@ TIMEFRAME_MAP = {
     "1mn": mt5.TIMEFRAME_MN1,
 }
 
+try:
+    STALE_TICK_THRESHOLD_SECONDS = max(0, int(os.getenv("MT5_STALE_TICK_THRESHOLD_SECONDS", "900")))
+except ValueError:
+    STALE_TICK_THRESHOLD_SECONDS = 900
+
+ACCOUNT_TRADE_MODE_NAMES = {
+    getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0): "DEMO",
+    getattr(mt5, "ACCOUNT_TRADE_MODE_CONTEST", 1): "CONTEST",
+    getattr(mt5, "ACCOUNT_TRADE_MODE_REAL", 2): "REAL",
+}
+
+SYMBOL_TRADE_MODE_NAMES = {
+    getattr(mt5, "SYMBOL_TRADE_MODE_DISABLED", 0): "DISABLED",
+    getattr(mt5, "SYMBOL_TRADE_MODE_LONGONLY", 1): "LONGONLY",
+    getattr(mt5, "SYMBOL_TRADE_MODE_SHORTONLY", 2): "SHORTONLY",
+    getattr(mt5, "SYMBOL_TRADE_MODE_CLOSEONLY", 3): "CLOSEONLY",
+    getattr(mt5, "SYMBOL_TRADE_MODE_FULL", 4): "FULL",
+}
+
+TRADE_RETCODE_NAMES = {
+    getattr(mt5, "TRADE_RETCODE_REQUOTE", 10004): "REQUOTE",
+    getattr(mt5, "TRADE_RETCODE_REJECT", 10006): "REJECT",
+    getattr(mt5, "TRADE_RETCODE_CANCEL", 10007): "CANCEL",
+    getattr(mt5, "TRADE_RETCODE_PLACED", 10008): "PLACED",
+    getattr(mt5, "TRADE_RETCODE_DONE", 10009): "DONE",
+    getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", 10010): "DONE_PARTIAL",
+    getattr(mt5, "TRADE_RETCODE_ERROR", 10011): "ERROR",
+    getattr(mt5, "TRADE_RETCODE_TIMEOUT", 10012): "TIMEOUT",
+    getattr(mt5, "TRADE_RETCODE_INVALID", 10013): "INVALID",
+    getattr(mt5, "TRADE_RETCODE_INVALID_VOLUME", 10014): "INVALID_VOLUME",
+    getattr(mt5, "TRADE_RETCODE_INVALID_PRICE", 10015): "INVALID_PRICE",
+    getattr(mt5, "TRADE_RETCODE_INVALID_STOPS", 10016): "INVALID_STOPS",
+    getattr(mt5, "TRADE_RETCODE_TRADE_DISABLED", 10017): "TRADE_DISABLED",
+    getattr(mt5, "TRADE_RETCODE_MARKET_CLOSED", 10018): "MARKET_CLOSED",
+    getattr(mt5, "TRADE_RETCODE_NO_MONEY", 10019): "NO_MONEY",
+    getattr(mt5, "TRADE_RETCODE_PRICE_CHANGED", 10020): "PRICE_CHANGED",
+    getattr(mt5, "TRADE_RETCODE_PRICE_OFF", 10021): "PRICE_OFF",
+    getattr(mt5, "TRADE_RETCODE_INVALID_EXPIRATION", 10022): "INVALID_EXPIRATION",
+    getattr(mt5, "TRADE_RETCODE_ORDER_CHANGED", 10023): "ORDER_CHANGED",
+    getattr(mt5, "TRADE_RETCODE_TOO_MANY_REQUESTS", 10024): "TOO_MANY_REQUESTS",
+    getattr(mt5, "TRADE_RETCODE_NO_CHANGES", 10025): "NO_CHANGES",
+    getattr(mt5, "TRADE_RETCODE_SERVER_DISABLES_AT", 10026): "SERVER_DISABLES_AT",
+    getattr(mt5, "TRADE_RETCODE_CLIENT_DISABLES_AT", 10027): "CLIENT_DISABLES_AT",
+    getattr(mt5, "TRADE_RETCODE_LOCKED", 10028): "LOCKED",
+    getattr(mt5, "TRADE_RETCODE_FROZEN", 10029): "FROZEN",
+    getattr(mt5, "TRADE_RETCODE_INVALID_FILL", 10030): "INVALID_FILL",
+    getattr(mt5, "TRADE_RETCODE_CONNECTION", 10031): "CONNECTION",
+    getattr(mt5, "TRADE_RETCODE_ONLY_REAL", 10032): "ONLY_REAL",
+    getattr(mt5, "TRADE_RETCODE_LIMIT_ORDERS", 10033): "LIMIT_ORDERS",
+    getattr(mt5, "TRADE_RETCODE_LIMIT_VOLUME", 10034): "LIMIT_VOLUME",
+}
+
+DEAL_ENTRY_NAMES = {
+    getattr(mt5, "DEAL_ENTRY_IN", 0): "IN",
+    getattr(mt5, "DEAL_ENTRY_OUT", 1): "OUT",
+    getattr(mt5, "DEAL_ENTRY_INOUT", 2): "INOUT",
+    getattr(mt5, "DEAL_ENTRY_OUT_BY", 3): "OUT_BY",
+}
+
+DEAL_REASON_NAMES = {
+    getattr(mt5, "DEAL_REASON_CLIENT", 0): "CLIENT",
+    getattr(mt5, "DEAL_REASON_MOBILE", 1): "MOBILE",
+    getattr(mt5, "DEAL_REASON_WEB", 2): "WEB",
+    getattr(mt5, "DEAL_REASON_EXPERT", 3): "EXPERT",
+    getattr(mt5, "DEAL_REASON_SL", 4): "SL",
+    getattr(mt5, "DEAL_REASON_TP", 5): "TP",
+    getattr(mt5, "DEAL_REASON_SO", 6): "STOP_OUT",
+    getattr(mt5, "DEAL_REASON_ROLLOVER", 7): "ROLLOVER",
+    getattr(mt5, "DEAL_REASON_VMARGIN", 8): "VMARGIN",
+    getattr(mt5, "DEAL_REASON_SPLIT", 9): "SPLIT",
+}
+
+DEAL_TYPE_NAMES = {
+    getattr(mt5, "DEAL_TYPE_BUY", 0): "BUY",
+    getattr(mt5, "DEAL_TYPE_SELL", 1): "SELL",
+    getattr(mt5, "DEAL_TYPE_BALANCE", 2): "BALANCE",
+    getattr(mt5, "DEAL_TYPE_CREDIT", 3): "CREDIT",
+    getattr(mt5, "DEAL_TYPE_CHARGE", 4): "CHARGE",
+    getattr(mt5, "DEAL_TYPE_CORRECTION", 5): "CORRECTION",
+    getattr(mt5, "DEAL_TYPE_BONUS", 6): "BONUS",
+    getattr(mt5, "DEAL_TYPE_COMMISSION", 7): "COMMISSION",
+    getattr(mt5, "DEAL_TYPE_COMMISSION_DAILY", 8): "COMMISSION_DAILY",
+    getattr(mt5, "DEAL_TYPE_COMMISSION_MONTHLY", 9): "COMMISSION_MONTHLY",
+    getattr(mt5, "DEAL_TYPE_COMMISSION_AGENT_DAILY", 10): "COMMISSION_AGENT_DAILY",
+    getattr(mt5, "DEAL_TYPE_COMMISSION_AGENT_MONTHLY", 11): "COMMISSION_AGENT_MONTHLY",
+    getattr(mt5, "DEAL_TYPE_INTEREST", 12): "INTEREST",
+    getattr(mt5, "DEAL_TYPE_BUY_CANCELED", 13): "BUY_CANCELED",
+    getattr(mt5, "DEAL_TYPE_SELL_CANCELED", 14): "SELL_CANCELED",
+}
+
+
+def parse_datetime(value, default_value):
+    if not value:
+        return default_value
+
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (ValueError, AttributeError, TypeError):
+        try:
+            return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc)
+        except (ValueError, TypeError):
+            return default_value
+
+
+def sort_deals(deals):
+    return sorted(
+        deals or [],
+        key=lambda deal: (getattr(deal, "time_msc", 0), getattr(deal, "ticket", 0))
+    )
+
+
+def serialize_deal(deal):
+    if deal is None:
+        return None
+
+    deal_type = getattr(deal, "type", None)
+    entry = getattr(deal, "entry", None)
+    reason = getattr(deal, "reason", None)
+
+    return {
+        "id": str(deal.ticket),
+        "orderId": str(deal.order),
+        "positionId": str(deal.position_id),
+        "symbol": deal.symbol,
+        "type": deal_type,
+        "typeName": DEAL_TYPE_NAMES.get(deal_type, str(deal_type) if deal_type is not None else None),
+        "volume": deal.volume,
+        "price": deal.price,
+        "profit": deal.profit,
+        "swap": deal.swap,
+        "commission": deal.commission,
+        "fee": getattr(deal, "fee", 0.0),
+        "comment": deal.comment,
+        "entry": entry,
+        "entryName": DEAL_ENTRY_NAMES.get(entry, str(entry) if entry is not None else None),
+        "reason": reason,
+        "reasonName": DEAL_REASON_NAMES.get(reason, str(reason) if reason is not None else None),
+        "time": datetime.fromtimestamp(deal.time, tz=timezone.utc).isoformat(),
+        "timeMsc": getattr(deal, "time_msc", 0),
+    }
+
+
+def error_response(message, code=None, details=None):
+    response = {"success": False, "error": message}
+    if code is not None:
+        response["code"] = int(code)
+        response["codeName"] = TRADE_RETCODE_NAMES.get(code, str(code))
+    if details is not None:
+        response["details"] = details
+    return response
+
+
+def get_tick_age_seconds(tick):
+    if tick is None:
+        return None
+
+    tick_time = datetime.fromtimestamp(tick.time, tz=timezone.utc)
+    return max(0, int((datetime.now(timezone.utc) - tick_time).total_seconds()))
+
+
+def serialize_tick(tick):
+    if tick is None:
+        return None
+
+    tick_time = datetime.fromtimestamp(tick.time, tz=timezone.utc)
+    return {
+        "bid": tick.bid,
+        "ask": tick.ask,
+        "last": tick.last,
+        "time": tick_time.isoformat(),
+        "timeMsc": getattr(tick, "time_msc", 0),
+        "ageSeconds": get_tick_age_seconds(tick),
+    }
+
+
+def serialize_symbol_info(symbol_info, tick=None):
+    if symbol_info is None:
+        return None
+
+    return {
+        "symbol": symbol_info.name,
+        "visible": symbol_info.visible,
+        "tradeMode": symbol_info.trade_mode,
+        "tradeModeName": SYMBOL_TRADE_MODE_NAMES.get(symbol_info.trade_mode, str(symbol_info.trade_mode)),
+        "spread": symbol_info.spread,
+        "digits": symbol_info.digits,
+        "point": symbol_info.point,
+        "stopsLevel": symbol_info.trade_stops_level,
+        "freezeLevel": symbol_info.trade_freeze_level,
+        "volumeMin": symbol_info.volume_min,
+        "volumeMax": symbol_info.volume_max,
+        "volumeStep": symbol_info.volume_step,
+        "sessionDeals": getattr(symbol_info, "session_deals", None),
+        "sessionBuyOrders": getattr(symbol_info, "session_buy_orders", None),
+        "sessionSellOrders": getattr(symbol_info, "session_sell_orders", None),
+        "tick": serialize_tick(tick),
+    }
+
+
+def serialize_order_request(request):
+    if request is None:
+        return None
+
+    if hasattr(request, "_asdict"):
+        return request._asdict()
+    if isinstance(request, dict):
+        return request
+    return str(request)
+
+
+def ensure_symbol_ready(symbol):
+    symbol_info = mt5.symbol_info(symbol)
+    if symbol_info is None:
+        return None, None, error_response(f"Symbol {symbol} not found")
+    if not symbol_info.visible and not mt5.symbol_select(symbol, True):
+        return None, None, error_response(f"Failed to select symbol {symbol}")
+
+    symbol_info = mt5.symbol_info(symbol)
+    tick = mt5.symbol_info_tick(symbol)
+    if tick is None:
+        return None, None, error_response(f"Failed to get price for {symbol}: {mt5.last_error()}")
+
+    return symbol_info, tick, None
+
+
+def is_tick_stale(tick):
+    tick_age = get_tick_age_seconds(tick)
+    return (
+        STALE_TICK_THRESHOLD_SECONDS > 0
+        and tick_age is not None
+        and tick_age > STALE_TICK_THRESHOLD_SECONDS
+    )
+
+
+def build_market_closed_result(symbol_info, tick, request=None, message="Market closed"):
+    return {
+        "allowed": False,
+        "retcode": getattr(mt5, "TRADE_RETCODE_MARKET_CLOSED", 10018),
+        "retcodeName": "MARKET_CLOSED",
+        "comment": message,
+        "symbolInfo": serialize_symbol_info(symbol_info, tick),
+        "request": serialize_order_request(request),
+    }
+
+
+def build_market_closed_error(symbol_info, tick, request=None, message="Market closed"):
+    return error_response(
+        message,
+        code=getattr(mt5, "TRADE_RETCODE_MARKET_CLOSED", 10018),
+        details={
+            "reason": "stale_tick",
+            "tickAgeSeconds": get_tick_age_seconds(tick),
+            "symbolInfo": serialize_symbol_info(symbol_info, tick),
+            "request": serialize_order_request(request),
+        },
+    )
+
+
+def normalize_stops(symbol_info, order_type, price, sl, tp):
+    digits = symbol_info.digits
+    point = symbol_info.point
+    spread = symbol_info.spread * point
+    min_stop_dist = max(symbol_info.trade_stops_level * point * 3, spread * 5, point * 50)
+
+    if sl != 0:
+        if order_type == "BUY" and (price - sl) < min_stop_dist:
+            sl = round(price - min_stop_dist, digits)
+        elif order_type == "SELL" and (sl - price) < min_stop_dist:
+            sl = round(price + min_stop_dist, digits)
+
+    if tp != 0:
+        if order_type == "BUY" and (tp - price) < min_stop_dist:
+            tp = round(price + min_stop_dist * 2, digits)
+        elif order_type == "SELL" and (price - tp) < min_stop_dist:
+            tp = round(price - min_stop_dist * 2, digits)
+
+    return sl, tp
+
+
+def build_market_order_request(symbol, order_type, volume, sl=0.0, tp=0.0, comment="", position_id=None):
+    symbol_info, tick, error = ensure_symbol_ready(symbol)
+    if error:
+        return None, None, None, error
+
+    if order_type == "BUY":
+        mt5_type = mt5.ORDER_TYPE_BUY
+        price = tick.ask
+    else:
+        mt5_type = mt5.ORDER_TYPE_SELL
+        price = tick.bid
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": volume,
+        "type": mt5_type,
+        "price": price,
+        "deviation": 20,
+        "magic": 202400,
+        "comment": comment,
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": get_filling_mode(symbol),
+    }
+
+    if position_id is not None:
+        request["position"] = int(position_id)
+    else:
+        normalized_sl, normalized_tp = normalize_stops(symbol_info, order_type, price, sl, tp)
+        request["sl"] = normalized_sl
+        request["tp"] = normalized_tp
+
+    return request, symbol_info, tick, None
+
+
+def serialize_trade_check(check_result, symbol_info=None, tick=None):
+    retcode = getattr(check_result, "retcode", None)
+
+    return {
+        "allowed": retcode == getattr(mt5, "TRADE_RETCODE_DONE", 10009),
+        "retcode": retcode,
+        "retcodeName": TRADE_RETCODE_NAMES.get(retcode, str(retcode) if retcode is not None else None),
+        "comment": getattr(check_result, "comment", None),
+        "balance": getattr(check_result, "balance", None),
+        "equity": getattr(check_result, "equity", None),
+        "profit": getattr(check_result, "profit", None),
+        "margin": getattr(check_result, "margin", None),
+        "freeMargin": getattr(check_result, "margin_free", None),
+        "marginLevel": getattr(check_result, "margin_level", None),
+        "symbolInfo": serialize_symbol_info(symbol_info, tick),
+        "request": serialize_order_request(getattr(check_result, "request", None)),
+    }
+
+
+def get_order_deals(order_ticket):
+    deals = mt5.history_deals_get(ticket=int(order_ticket))
+    return sort_deals(deals)
+
+
+def get_position_deals(position_id):
+    deals = mt5.history_deals_get(position=int(position_id))
+    return sort_deals(deals)
+
 
 def handle_connect(params):
     """Initialize MT5 connection with broker credentials"""
@@ -89,6 +432,8 @@ def handle_get_account_info(_params):
     if info is None:
         return {"success": False, "error": f"Failed to get account info: {mt5.last_error()}"}
 
+    trade_mode_name = ACCOUNT_TRADE_MODE_NAMES.get(info.trade_mode, str(info.trade_mode))
+
     return {"success": True, "result": {
         "balance": info.balance,
         "equity": info.equity,
@@ -101,6 +446,13 @@ def handle_get_account_info(_params):
         "server": info.server,
         "name": info.name,
         "tradeAllowed": info.trade_allowed,
+        "tradeMode": info.trade_mode,
+        "tradeModeName": trade_mode_name,
+        "isDemo": trade_mode_name == "DEMO",
+        "isContest": trade_mode_name == "CONTEST",
+        "isReal": trade_mode_name == "REAL",
+        "company": getattr(info, "company", None),
+        "tradeExpert": getattr(info, "trade_expert", None),
     }}
 
 
@@ -161,6 +513,58 @@ def handle_get_orders(_params):
     return {"success": True, "result": result}
 
 
+def handle_preflight_order(params):
+    """Validate whether a market order is currently tradable without sending it"""
+    symbol = params["symbol"]
+    order_type = params["type"]
+    volume = float(params["volume"])
+    sl = float(params.get("sl", 0))
+    tp = float(params.get("tp", 0))
+    comment = params.get("comment", "")
+
+    request, symbol_info, tick, error = build_market_order_request(
+        symbol, order_type, volume, sl, tp, comment
+    )
+    if error:
+        return error
+
+    if is_tick_stale(tick):
+        return {"success": True, "result": build_market_closed_result(symbol_info, tick, request)}
+
+    check = mt5.order_check(request)
+    if check is None:
+        last_error = mt5.last_error()
+        return error_response(
+            f"Order preflight failed: {last_error}",
+            code=last_error[0] if isinstance(last_error, tuple) and len(last_error) > 0 else None,
+            details={
+                "symbolInfo": serialize_symbol_info(symbol_info, tick),
+                "request": serialize_order_request(request),
+                "lastError": last_error,
+            },
+        )
+
+    check_result = serialize_trade_check(check, symbol_info, tick)
+    trade_mode_name = check_result["symbolInfo"]["tradeModeName"] if check_result["symbolInfo"] else "UNKNOWN"
+    if trade_mode_name == "DISABLED":
+        check_result["allowed"] = False
+        check_result["comment"] = "Symbol trading is disabled"
+    elif trade_mode_name == "CLOSEONLY":
+        check_result["allowed"] = False
+        check_result["comment"] = "Symbol is close-only"
+    elif trade_mode_name == "LONGONLY" and order_type == "SELL":
+        check_result["allowed"] = False
+        check_result["comment"] = "Symbol is long-only"
+    elif trade_mode_name == "SHORTONLY" and order_type == "BUY":
+        check_result["allowed"] = False
+        check_result["comment"] = "Symbol is short-only"
+
+    if not check_result["allowed"] and check_result["retcode"] in (None, 0) and is_tick_stale(tick):
+        check_result = build_market_closed_result(symbol_info, tick, request)
+
+    return {"success": True, "result": check_result}
+
+
 def handle_place_order(params):
     """Place a market order"""
     symbol = params["symbol"]
@@ -169,73 +573,50 @@ def handle_place_order(params):
     sl = float(params.get("sl", 0))
     tp = float(params.get("tp", 0))
     comment = params.get("comment", "")
-
-    # Ensure symbol is available
-    symbol_info = mt5.symbol_info(symbol)
-    if symbol_info is None:
-        return {"success": False, "error": f"Symbol {symbol} not found"}
-    if not symbol_info.visible:
-        if not mt5.symbol_select(symbol, True):
-            return {"success": False, "error": f"Failed to select symbol {symbol}"}
-
-    # Get current price
-    tick = mt5.symbol_info_tick(symbol)
-    if tick is None:
-        return {"success": False, "error": f"Failed to get price for {symbol}"}
-
-    if order_type == "BUY":
-        mt5_type = mt5.ORDER_TYPE_BUY
-        price = tick.ask
-    else:
-        mt5_type = mt5.ORDER_TYPE_SELL
-        price = tick.bid
-
-    # Enforce minimum stop distance required by broker
-    digits = symbol_info.digits
-    point = symbol_info.point
-    spread = symbol_info.spread * point
-    # Use stops_level + spread + generous buffer to avoid retcode=10016
-    min_stop_dist = max(symbol_info.trade_stops_level * point * 3, spread * 5, point * 50)
-
-    if sl != 0:
-        if order_type == "BUY" and (price - sl) < min_stop_dist:
-            sl = round(price - min_stop_dist, digits)
-        elif order_type == "SELL" and (sl - price) < min_stop_dist:
-            sl = round(price + min_stop_dist, digits)
-
-    if tp != 0:
-        if order_type == "BUY" and (tp - price) < min_stop_dist:
-            tp = round(price + min_stop_dist * 2, digits)
-        elif order_type == "SELL" and (price - tp) < min_stop_dist:
-            tp = round(price - min_stop_dist * 2, digits)
-
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": symbol,
-        "volume": volume,
-        "type": mt5_type,
-        "price": price,
-        "sl": sl,
-        "tp": tp,
-        "deviation": 20,
-        "magic": 202400,
-        "comment": comment,
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": get_filling_mode(symbol),
-    }
+    request, symbol_info, tick, error = build_market_order_request(
+        symbol, order_type, volume, sl, tp, comment
+    )
+    if error:
+        return error
+    if is_tick_stale(tick):
+        return build_market_closed_error(symbol_info, tick, request)
 
     result = mt5.order_send(request)
     if result is None:
-        return {"success": False, "error": f"Order send failed: {mt5.last_error()}"}
+        last_error = mt5.last_error()
+        return error_response(
+            f"Order send failed: {last_error}",
+            code=last_error[0] if isinstance(last_error, tuple) and len(last_error) > 0 else None,
+            details={
+                "symbol": symbol,
+                "symbolInfo": serialize_symbol_info(symbol_info, tick),
+                "request": serialize_order_request(request),
+                "lastError": last_error,
+            },
+        )
     if result.retcode != mt5.TRADE_RETCODE_DONE:
-        return {"success": False, "error": f"Order failed: retcode={result.retcode}, comment={result.comment}"}
+        return error_response(
+            f"Order failed: retcode={result.retcode}, comment={result.comment}",
+            code=result.retcode,
+            details={
+                "comment": result.comment,
+                "symbol": symbol,
+                "symbolInfo": serialize_symbol_info(symbol_info, tick),
+                "request": serialize_order_request(request),
+            },
+        )
+
+    order_deals = get_order_deals(result.order)
+    executed_deal = order_deals[-1] if order_deals else None
+    position_id = getattr(executed_deal, "position_id", None) or result.order
 
     return {"success": True, "result": {
-        "positionId": str(result.order),
+        "positionId": str(position_id),
         "orderId": str(result.order),
-        "deal": str(result.deal),
+        "dealId": str(result.deal),
         "volume": result.volume,
         "price": result.price,
+        "entryDeal": serialize_deal(executed_deal),
     }}
 
 
@@ -252,40 +633,56 @@ def handle_close_position(params):
     symbol = position.symbol
     volume = position.volume
 
-    # Determine close type (opposite of position type)
-    if position.type == mt5.ORDER_TYPE_BUY:
-        close_type = mt5.ORDER_TYPE_SELL
-        tick = mt5.symbol_info_tick(symbol)
-        price = tick.bid if tick else 0
-    else:
-        close_type = mt5.ORDER_TYPE_BUY
-        tick = mt5.symbol_info_tick(symbol)
-        price = tick.ask if tick else 0
-
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": symbol,
-        "volume": volume,
-        "type": close_type,
-        "position": position_id,
-        "price": price,
-        "deviation": 20,
-        "magic": 202400,
-        "comment": "close",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": get_filling_mode(symbol),
-    }
+    close_type = "SELL" if position.type == mt5.ORDER_TYPE_BUY else "BUY"
+    request, symbol_info, tick, error = build_market_order_request(
+        symbol, close_type, volume, 0, 0, "close", position_id=position_id
+    )
+    if error:
+        return error
+    if is_tick_stale(tick):
+        return build_market_closed_error(symbol_info, tick, request)
 
     result = mt5.order_send(request)
     if result is None:
-        return {"success": False, "error": f"Close failed: {mt5.last_error()}"}
+        last_error = mt5.last_error()
+        return error_response(
+            f"Close failed: {last_error}",
+            code=last_error[0] if isinstance(last_error, tuple) and len(last_error) > 0 else None,
+            details={
+                "symbol": symbol,
+                "symbolInfo": serialize_symbol_info(symbol_info, tick),
+                "request": serialize_order_request(request),
+                "lastError": last_error,
+            },
+        )
     if result.retcode != mt5.TRADE_RETCODE_DONE:
-        return {"success": False, "error": f"Close failed: retcode={result.retcode}, comment={result.comment}"}
+        return error_response(
+            f"Close failed: retcode={result.retcode}, comment={result.comment}",
+            code=result.retcode,
+            details={
+                "comment": result.comment,
+                "symbol": symbol,
+                "symbolInfo": serialize_symbol_info(symbol_info, tick),
+                "request": serialize_order_request(request),
+            },
+        )
+
+    order_deals = get_order_deals(result.order)
+    close_deal = None
+    for deal in reversed(order_deals):
+        if str(getattr(deal, "position_id", "")) == str(position_id):
+            close_deal = deal
+            break
+    if close_deal is None and order_deals:
+        close_deal = order_deals[-1]
 
     return {"success": True, "result": {
+        "positionId": str(position_id),
         "orderId": str(result.order),
+        "dealId": str(result.deal),
         "volume": result.volume,
         "price": result.price,
+        "closeDeal": serialize_deal(close_deal),
     }}
 
 
@@ -395,15 +792,19 @@ def handle_get_deals(params):
     """Get deal history"""
     start_time = params.get("startTime")
     end_time = params.get("endTime")
+    ticket = params.get("ticket")
+    position_id = params.get("positionId")
 
-    try:
-        dt_from = datetime.fromisoformat(start_time.replace("Z", "+00:00")) if start_time else datetime(2020, 1, 1, tzinfo=timezone.utc)
-        dt_to = datetime.fromisoformat(end_time.replace("Z", "+00:00")) if end_time else datetime.now(timezone.utc)
-    except (ValueError, AttributeError):
-        dt_from = datetime(2020, 1, 1, tzinfo=timezone.utc)
-        dt_to = datetime.now(timezone.utc)
+    dt_from = parse_datetime(start_time, datetime(2020, 1, 1, tzinfo=timezone.utc))
+    dt_to = parse_datetime(end_time, datetime.now(timezone.utc))
 
-    deals = mt5.history_deals_get(dt_from, dt_to)
+    if ticket:
+        deals = get_order_deals(ticket)
+    elif position_id:
+        deals = get_position_deals(position_id)
+    else:
+        deals = mt5.history_deals_get(dt_from, dt_to)
+
     if deals is None:
         error = mt5.last_error()
         if error[0] != 0:
@@ -411,21 +812,11 @@ def handle_get_deals(params):
         return {"success": True, "result": []}
 
     result = []
-    for d in deals:
-        result.append({
-            "id": str(d.ticket),
-            "orderId": str(d.order),
-            "positionId": str(d.position_id),
-            "symbol": d.symbol,
-            "type": d.type,
-            "volume": d.volume,
-            "price": d.price,
-            "profit": d.profit,
-            "swap": d.swap,
-            "commission": d.commission,
-            "comment": d.comment,
-            "time": datetime.fromtimestamp(d.time, tz=timezone.utc).isoformat(),
-        })
+    for d in sort_deals(deals):
+        deal_time = datetime.fromtimestamp(d.time, tz=timezone.utc)
+        if deal_time < dt_from or deal_time > dt_to:
+            continue
+        result.append(serialize_deal(d))
 
     return {"success": True, "result": result}
 
@@ -437,6 +828,7 @@ HANDLERS = {
     "getAccountInfo": handle_get_account_info,
     "getPositions": handle_get_positions,
     "getOrders": handle_get_orders,
+    "preflightOrder": handle_preflight_order,
     "placeOrder": handle_place_order,
     "closePosition": handle_close_position,
     "modifyPosition": handle_modify_position,

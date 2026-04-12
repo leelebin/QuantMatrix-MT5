@@ -13,6 +13,7 @@ const backtestRoutes = require('./routes/backtestRoutes');
 const optimizerRoutes = require('./routes/optimizerRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const paperTradingRoutes = require('./routes/paperTradingRoutes');
+const riskSettingsRoutes = require('./routes/riskSettingsRoutes');
 const websocketService = require('./services/websocketService');
 const notificationService = require('./services/notificationService');
 
@@ -88,6 +89,7 @@ app.use('/api/backtest', backtestRoutes);
 app.use('/api/optimizer', optimizerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/paper-trading', paperTradingRoutes);
+app.use('/api/risk-settings', riskSettingsRoutes);
 
 // WebSocket status endpoint
 app.get('/api/ws/status', (req, res) => {
@@ -136,6 +138,18 @@ const server = app.listen(PORT, () => {
 
   // Initialize WebSocket on the HTTP server
   websocketService.init(server);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[Server] Port ${PORT} is already in use.`);
+    console.error(`[Server] If QuantMatrix is already running, open http://localhost:${PORT} in your browser.`);
+    console.error('[Server] Otherwise stop the process using this port, or change PORT in .env.');
+    process.exit(1);
+  }
+
+  console.error('[Server] Failed to start:', err.message);
+  process.exit(1);
 });
 
 // Graceful shutdown

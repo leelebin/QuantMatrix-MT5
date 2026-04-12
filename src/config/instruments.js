@@ -32,6 +32,7 @@ const instruments = {
     lotStep: 0.01,
     spread: 1.2,        // average spread in pips
     timeframe: '1h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
   },
   GBPUSD: {
@@ -45,6 +46,7 @@ const instruments = {
     lotStep: 0.01,
     spread: 1.5,
     timeframe: '1h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
   },
   USDJPY: {
@@ -58,6 +60,7 @@ const instruments = {
     lotStep: 0.01,
     spread: 1.3,
     timeframe: '1h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
   },
   AUDUSD: {
@@ -71,6 +74,7 @@ const instruments = {
     lotStep: 0.01,
     spread: 1.4,
     timeframe: '1h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
   },
   USDCHF: {
@@ -84,6 +88,7 @@ const instruments = {
     lotStep: 0.01,
     spread: 1.5,
     timeframe: '1h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
   },
   USDCAD: {
@@ -97,6 +102,7 @@ const instruments = {
     lotStep: 0.01,
     spread: 1.6,
     timeframe: '1h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
   },
   NZDUSD: {
@@ -110,6 +116,7 @@ const instruments = {
     lotStep: 0.01,
     spread: 1.8,
     timeframe: '1h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
   },
 
@@ -180,6 +187,7 @@ const instruments = {
     spread: 25,         // in pips (0.25 USD)
     timeframe: '1h',
     higherTimeframe: '4h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.015, slMultiplier: 2, tpMultiplier: 5 },
   },
   XAGUSD: {
@@ -194,6 +202,7 @@ const instruments = {
     spread: 30,
     timeframe: '1h',
     higherTimeframe: '4h',
+    entryTimeframe: '15m',
     riskParams: { riskPercent: 0.015, slMultiplier: 2.5, tpMultiplier: 5 },
   },
 

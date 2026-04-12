@@ -55,8 +55,22 @@ class BaseStrategy {
   /**
    * Helper: build a no-signal response
    */
-  noSignal() {
-    return { signal: 'NONE', confidence: 0, sl: 0, tp: 0, reason: '', indicatorsSnapshot: {} };
+  noSignal(extra = {}) {
+    return {
+      signal: 'NONE',
+      confidence: 0,
+      sl: 0,
+      tp: 0,
+      reason: '',
+      indicatorsSnapshot: {},
+      setupTimeframe: null,
+      entryTimeframe: null,
+      triggerReason: '',
+      setupActive: false,
+      setupDirection: null,
+      status: 'NO_SETUP',
+      ...extra,
+    };
   }
 }
 

@@ -1,6 +1,13 @@
 const backtestEngine = require('../services/backtestEngine');
 const mt5Service = require('../services/mt5Service');
 const { getInstrument, getAllSymbols } = require('../config/instruments');
+const {
+  DEFAULT_WARMUP_BARS,
+  estimateFetchLimit,
+  filterCandlesByRange,
+  getWarmupStart,
+  normalizeDateRange,
+} = require('../utils/candleRange');
 
 // @desc    Run a backtest
 // @route   POST /api/backtest/run
@@ -31,24 +38,50 @@ exports.runBacktest = async (req, res) => {
     }
 
     const tf = timeframe || instrument.timeframe || '1h';
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000); // Default 1 year
-    const end = endDate ? new Date(endDate) : new Date();
+    const { start, endExclusive } = normalizeDateRange(startDate, endDate);
+    const rangeEnd = new Date(endExclusive.getTime() - 1);
+    const fetchStart = getWarmupStart(start, tf, DEFAULT_WARMUP_BARS);
+    const candleLimit = estimateFetchLimit(tf, fetchStart, endExclusive);
 
-    console.log(`[Backtest] Starting: ${symbol} ${strategyType} ${tf} from ${start.toISOString()} to ${end.toISOString()}`);
+    console.log(`[Backtest] Starting: ${symbol} ${strategyType} ${tf} from ${start.toISOString()} to ${rangeEnd.toISOString()}`);
 
     // Fetch historical candles
-    const candles = await mt5Service.getCandles(symbol, tf, start, 10000);
-    if (!candles || candles.length < 300) {
+    const rawCandles = await mt5Service.getCandles(symbol, tf, fetchStart, candleLimit);
+    const candles = filterCandlesByRange(rawCandles, fetchStart, endExclusive);
+    const inRangeCandles = filterCandlesByRange(rawCandles, start, endExclusive);
+
+    if (!candles || candles.length < DEFAULT_WARMUP_BARS + 2 || inRangeCandles.length < 50) {
       return res.status(400).json({
         success: false,
-        message: `Insufficient historical data for ${symbol}: got ${candles ? candles.length : 0} candles, need at least 300`,
+        message: `Insufficient historical data for ${symbol} in the selected range: got ${inRangeCandles.length} candles, need at least 50 after warmup`,
       });
     }
 
     // Fetch higher TF candles if needed
     let higherTfCandles = null;
     if (instrument.higherTimeframe) {
-      higherTfCandles = await mt5Service.getCandles(symbol, instrument.higherTimeframe, start, 5000);
+      const higherTfStart = getWarmupStart(start, instrument.higherTimeframe, DEFAULT_WARMUP_BARS);
+      const higherTfLimit = estimateFetchLimit(instrument.higherTimeframe, higherTfStart, endExclusive);
+      const rawHigherTfCandles = await mt5Service.getCandles(
+        symbol,
+        instrument.higherTimeframe,
+        higherTfStart,
+        higherTfLimit
+      );
+      higherTfCandles = filterCandlesByRange(rawHigherTfCandles, higherTfStart, endExclusive);
+    }
+
+    let lowerTfCandles = null;
+    if (instrument.entryTimeframe) {
+      const lowerTfStart = getWarmupStart(start, instrument.entryTimeframe, DEFAULT_WARMUP_BARS);
+      const lowerTfLimit = estimateFetchLimit(instrument.entryTimeframe, lowerTfStart, endExclusive);
+      const rawLowerTfCandles = await mt5Service.getCandles(
+        symbol,
+        instrument.entryTimeframe,
+        lowerTfStart,
+        lowerTfLimit
+      );
+      lowerTfCandles = filterCandlesByRange(rawLowerTfCandles, lowerTfStart, endExclusive);
     }
 
     // Run backtest
@@ -58,7 +91,10 @@ exports.runBacktest = async (req, res) => {
       timeframe: tf,
       candles,
       higherTfCandles,
+      lowerTfCandles,
       initialBalance: initialBalance || 10000,
+      tradeStartTime: start.toISOString(),
+      tradeEndTime: rangeEnd.toISOString(),
     });
 
     console.log(`[Backtest] Completed: ${result.summary.totalTrades} trades, WR: ${(result.summary.winRate * 100).toFixed(1)}%, PF: ${result.summary.profitFactor}`);

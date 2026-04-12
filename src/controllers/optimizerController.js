@@ -3,6 +3,13 @@ const mt5Service = require('../services/mt5Service');
 const websocketService = require('../services/websocketService');
 const notificationService = require('../services/notificationService');
 const { getInstrument, getAllSymbols } = require('../config/instruments');
+const {
+  DEFAULT_WARMUP_BARS,
+  estimateFetchLimit,
+  filterCandlesByRange,
+  getWarmupStart,
+  normalizeDateRange,
+} = require('../utils/candleRange');
 
 // @desc    Run optimizer
 // @route   POST /api/optimizer/run
@@ -36,21 +43,47 @@ exports.runOptimizer = async (req, res) => {
     }
 
     const tf = timeframe || instrument.timeframe || '1h';
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-    const end = endDate ? new Date(endDate) : new Date();
+    const { start, endExclusive } = normalizeDateRange(startDate, endDate);
+    const rangeEnd = new Date(endExclusive.getTime() - 1);
+    const fetchStart = getWarmupStart(start, tf, DEFAULT_WARMUP_BARS);
+    const candleLimit = estimateFetchLimit(tf, fetchStart, endExclusive);
 
     // Fetch candles
-    const candles = await mt5Service.getCandles(symbol, tf, start, 10000);
-    if (!candles || candles.length < 300) {
+    const rawCandles = await mt5Service.getCandles(symbol, tf, fetchStart, candleLimit);
+    const candles = filterCandlesByRange(rawCandles, fetchStart, endExclusive);
+    const inRangeCandles = filterCandlesByRange(rawCandles, start, endExclusive);
+
+    if (!candles || candles.length < DEFAULT_WARMUP_BARS + 2 || inRangeCandles.length < 50) {
       return res.status(400).json({
         success: false,
-        message: `Insufficient data: got ${candles ? candles.length : 0} candles, need 300+`,
+        message: `Insufficient data in the selected range: got ${inRangeCandles.length} candles, need at least 50 after warmup`,
       });
     }
 
     let higherTfCandles = null;
     if (instrument.higherTimeframe) {
-      higherTfCandles = await mt5Service.getCandles(symbol, instrument.higherTimeframe, start, 5000);
+      const higherTfStart = getWarmupStart(start, instrument.higherTimeframe, DEFAULT_WARMUP_BARS);
+      const higherTfLimit = estimateFetchLimit(instrument.higherTimeframe, higherTfStart, endExclusive);
+      const rawHigherTfCandles = await mt5Service.getCandles(
+        symbol,
+        instrument.higherTimeframe,
+        higherTfStart,
+        higherTfLimit
+      );
+      higherTfCandles = filterCandlesByRange(rawHigherTfCandles, higherTfStart, endExclusive);
+    }
+
+    let lowerTfCandles = null;
+    if (instrument.entryTimeframe) {
+      const lowerTfStart = getWarmupStart(start, instrument.entryTimeframe, DEFAULT_WARMUP_BARS);
+      const lowerTfLimit = estimateFetchLimit(instrument.entryTimeframe, lowerTfStart, endExclusive);
+      const rawLowerTfCandles = await mt5Service.getCandles(
+        symbol,
+        instrument.entryTimeframe,
+        lowerTfStart,
+        lowerTfLimit
+      );
+      lowerTfCandles = filterCandlesByRange(rawLowerTfCandles, lowerTfStart, endExclusive);
     }
 
     // Start optimizer in background
@@ -72,8 +105,11 @@ exports.runOptimizer = async (req, res) => {
         strategyType,
         candles,
         higherTfCandles,
+        lowerTfCandles,
         paramRanges: paramRanges || undefined,
         optimizeFor: optimizeFor || 'profitFactor',
+        tradeStartTime: start.toISOString(),
+        tradeEndTime: rangeEnd.toISOString(),
       });
 
       websocketService.broadcast('status', 'optimizer_complete', result);

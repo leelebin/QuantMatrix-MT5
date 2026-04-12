@@ -30,6 +30,7 @@ class BacktestEngine {
    * @param {string} params.timeframe - Candle timeframe
    * @param {Array} params.candles - Historical OHLC data
    * @param {Array} [params.higherTfCandles] - Higher TF candles for multi-timeframe
+   * @param {Array} [params.lowerTfCandles] - Lower TF candles for entry timing
    * @param {number} [params.initialBalance=10000] - Starting balance
    * @param {number} [params.spreadPips=0] - Simulated spread in pips (0 = use instrument default)
    * @param {number} [params.slippagePips=0.5] - Simulated slippage in pips
@@ -42,9 +43,12 @@ class BacktestEngine {
       timeframe,
       candles,
       higherTfCandles = null,
+      lowerTfCandles = null,
       initialBalance = 10000,
       spreadPips = 0,
       slippagePips = 0.5,
+      tradeStartTime = null,
+      tradeEndTime = null,
     } = params;
 
     const instrument = getInstrument(symbol);
@@ -62,17 +66,34 @@ class BacktestEngine {
     let equity = initialBalance;
     let peakBalance = initialBalance;
     const trades = [];
-    const equityCurve = [{ time: candles[0]?.time || '', equity: initialBalance }];
+    const equityCurve = [{ time: tradeStartTime || candles[0]?.time || '', equity: initialBalance }];
     let openPosition = null;
     const warmupPeriod = 250; // Need enough data for indicators
+    const tradeStartMs = tradeStartTime ? new Date(tradeStartTime).getTime() : null;
+
+    if (!candles || candles.length < warmupPeriod + 2) {
+      throw new Error(`Need at least ${warmupPeriod + 2} candles including warmup, got ${candles ? candles.length : 0}`);
+    }
 
     // Process candles sequentially
     for (let i = warmupPeriod; i < candles.length; i++) {
       const currentCandle = candles[i];
+      const nextCandle = candles[i + 1] || null;
       const historicalCandles = candles.slice(Math.max(0, i - 250), i + 1);
+      let pendingEntry = null;
 
       // Calculate indicators
       const ind = indicatorService.calculateAll(historicalCandles);
+      let lowerHistoricalCandles = null;
+      let lowerInd = null;
+      if (lowerTfCandles && instrument.entryTimeframe) {
+        lowerHistoricalCandles = lowerTfCandles
+          .filter((c) => new Date(c.time) <= new Date(currentCandle.time))
+          .slice(-251);
+        if (lowerHistoricalCandles.length > 1) {
+          lowerInd = indicatorService.calculateAll(lowerHistoricalCandles);
+        }
+      }
 
       // Handle higher TF for multi-timeframe strategy
       if (strategyType === 'MultiTimeframe' && higherTfCandles) {
@@ -114,16 +135,20 @@ class BacktestEngine {
       }
 
       // ─── Generate new signal if no position ───
-      if (!openPosition) {
-        const result = strategy.analyze(historicalCandles, ind, instrument);
+      if (!openPosition && nextCandle && (tradeStartMs === null || new Date(currentCandle.time).getTime() >= tradeStartMs)) {
+        const result = strategy.analyze(historicalCandles, ind, instrument, {
+          higherTfCandles,
+          entryCandles: lowerHistoricalCandles,
+          entryIndicators: lowerInd,
+        });
 
         if (result.signal !== 'NONE') {
           // Simulate entry with spread and slippage
           let entryPrice;
           if (result.signal === 'BUY') {
-            entryPrice = currentCandle.close + spread / 2 + slippage;
+            entryPrice = nextCandle.open + spread / 2 + slippage;
           } else {
-            entryPrice = currentCandle.close - spread / 2 - slippage;
+            entryPrice = nextCandle.open - spread / 2 - slippage;
           }
 
           // Calculate lot size (risk-based)
@@ -137,11 +162,11 @@ class BacktestEngine {
           // Get current ATR for trailing stop
           const currentAtr = ind.atr && ind.atr.length > 0 ? ind.atr[ind.atr.length - 1] : 0;
 
-          openPosition = {
+          pendingEntry = {
             id: trades.length + 1,
             type: result.signal,
             entryPrice,
-            entryTime: currentCandle.time,
+            entryTime: nextCandle.time,
             sl: result.sl,
             tp: result.tp,
             currentSl: result.sl,
@@ -154,7 +179,7 @@ class BacktestEngine {
       }
 
       // Update equity curve periodically
-      if (i % 10 === 0) {
+      if ((i % 10 === 0 || i === candles.length - 1) && (tradeStartMs === null || new Date(currentCandle.time).getTime() >= tradeStartMs)) {
         let currentEquity = balance;
         if (openPosition) {
           const priceDiff = openPosition.type === 'BUY'
@@ -164,6 +189,10 @@ class BacktestEngine {
         }
         equity = currentEquity;
         equityCurve.push({ time: currentCandle.time, equity: currentEquity });
+      }
+
+      if (!openPosition && pendingEntry) {
+        openPosition = pendingEntry;
       }
     }
 
@@ -185,8 +214,8 @@ class BacktestEngine {
       strategy: strategyType,
       timeframe,
       period: {
-        start: candles[warmupPeriod]?.time || '',
-        end: candles[candles.length - 1]?.time || '',
+        start: tradeStartTime || candles[warmupPeriod]?.time || '',
+        end: tradeEndTime || candles[candles.length - 1]?.time || '',
       },
       parameters: this._getStrategyParams(strategyType, instrument),
       summary,

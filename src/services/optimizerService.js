@@ -102,7 +102,7 @@ class OptimizerService {
   /**
    * Run a single backtest with custom parameters
    */
-  _runSingleBacktest(strategy, candles, instrument, params, higherTfCandles = null) {
+  _runSingleBacktest(strategy, candles, instrument, params, higherTfCandles = null, lowerTfCandles = null, tradeStartTime = null) {
     const spread = instrument.spread * instrument.pipSize;
     const slippage = 0.5 * instrument.pipSize;
     let balance = 10000;
@@ -110,14 +110,32 @@ class OptimizerService {
     const trades = [];
     let openPosition = null;
     const warmupPeriod = 250;
+    const tradeStartMs = tradeStartTime ? new Date(tradeStartTime).getTime() : null;
+
+    if (!candles || candles.length < warmupPeriod + 2) {
+      throw new Error(`Need at least ${warmupPeriod + 2} candles including warmup, got ${candles ? candles.length : 0}`);
+    }
 
     for (let i = warmupPeriod; i < candles.length; i++) {
       const currentCandle = candles[i];
+      const nextCandle = candles[i + 1] || null;
       const historicalCandles = candles.slice(Math.max(0, i - 250), i + 1);
       const closes = historicalCandles.map((c) => c.close);
+      let pendingEntry = null;
 
       // Build custom indicators based on params
       const ind = this._calculateIndicatorsWithParams(historicalCandles, closes, params);
+      let lowerHistoricalCandles = null;
+      let lowerInd = null;
+      if (lowerTfCandles && instrument.entryTimeframe) {
+        lowerHistoricalCandles = lowerTfCandles
+          .filter((c) => new Date(c.time) <= new Date(currentCandle.time))
+          .slice(-251);
+        if (lowerHistoricalCandles.length > 1) {
+          const lowerCloses = lowerHistoricalCandles.map((c) => c.close);
+          lowerInd = this._calculateIndicatorsWithParams(lowerHistoricalCandles, lowerCloses, params);
+        }
+      }
 
       // Handle higher TF
       if (higherTfCandles && strategy.setHigherTimeframeTrend) {
@@ -170,7 +188,7 @@ class OptimizerService {
       }
 
       // Generate signal if no position
-      if (!openPosition) {
+      if (!openPosition && nextCandle && (tradeStartMs === null || new Date(currentCandle.time).getTime() >= tradeStartMs)) {
         // Override instrument risk params with optimizer params
         const testInstrument = {
           ...instrument,
@@ -181,14 +199,18 @@ class OptimizerService {
           },
         };
 
-        const result = strategy.analyze(historicalCandles, ind, testInstrument);
+        const result = strategy.analyze(historicalCandles, ind, testInstrument, {
+          higherTfCandles,
+          entryCandles: lowerHistoricalCandles,
+          entryIndicators: lowerInd,
+        });
 
         if (result.signal !== 'NONE') {
           let entryPrice;
           if (result.signal === 'BUY') {
-            entryPrice = currentCandle.close + spread / 2 + slippage;
+            entryPrice = nextCandle.open + spread / 2 + slippage;
           } else {
-            entryPrice = currentCandle.close - spread / 2 - slippage;
+            entryPrice = nextCandle.open - spread / 2 - slippage;
           }
 
           const slDistance = Math.abs(entryPrice - result.sl);
@@ -200,11 +222,11 @@ class OptimizerService {
 
           const currentAtr = ind.atr && ind.atr.length > 0 ? ind.atr[ind.atr.length - 1] : 0;
 
-          openPosition = {
+          pendingEntry = {
             id: trades.length + 1,
             type: result.signal,
             entryPrice,
-            entryTime: currentCandle.time,
+            entryTime: nextCandle.time,
             sl: result.sl,
             tp: result.tp,
             currentSl: result.sl,
@@ -213,6 +235,10 @@ class OptimizerService {
             reason: result.reason,
           };
         }
+      }
+
+      if (!openPosition && pendingEntry) {
+        openPosition = pendingEntry;
       }
     }
 
@@ -312,6 +338,7 @@ class OptimizerService {
    * @param {string} params.strategyType
    * @param {Array} params.candles - Historical candles
    * @param {Array} params.higherTfCandles - Higher TF candles (optional)
+   * @param {Array} params.lowerTfCandles - Lower TF candles (optional)
    * @param {object} params.paramRanges - Custom parameter ranges (optional)
    * @param {string} params.optimizeFor - Metric to optimize: 'profitFactor', 'sharpeRatio', 'returnPercent', 'winRate'
    * @param {Function} params.onProgress - Progress callback
@@ -322,8 +349,10 @@ class OptimizerService {
       strategyType,
       candles,
       higherTfCandles = null,
+      lowerTfCandles = null,
       paramRanges = null,
       optimizeFor = 'profitFactor',
+      tradeStartTime = null,
     } = params;
 
     if (this.running) {
@@ -359,7 +388,15 @@ class OptimizerService {
 
       try {
         const strategy = new StrategyClass();
-        const summary = this._runSingleBacktest(strategy, candles, instrument, combo, higherTfCandles);
+        const summary = this._runSingleBacktest(
+          strategy,
+          candles,
+          instrument,
+          combo,
+          higherTfCandles,
+          lowerTfCandles,
+          tradeStartTime
+        );
 
         if (summary.totalTrades >= 5) { // Need at least 5 trades to be meaningful
           results.push({

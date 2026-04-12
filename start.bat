@@ -310,19 +310,48 @@ echo.
 :: Step 7: Start the server and open browser
 :: ============================================================
 
+set "APP_PORT=5000"
+if exist "%PROJECT_DIR%.env" (
+    for /f "usebackq tokens=1,* delims==" %%A in ("%PROJECT_DIR%.env") do (
+        if /I "%%A"=="PORT" set "APP_PORT=%%B"
+    )
+)
+if not defined APP_PORT set "APP_PORT=5000"
+
+set "DASHBOARD_URL=http://localhost:%APP_PORT%"
+set "API_URL=%DASHBOARD_URL%/api/health"
+set "WS_URL=ws://localhost:%APP_PORT%/ws"
+
+:: If QuantMatrix is already running on this port, just open the dashboard.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -Uri '%API_URL%' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200 -and $r.Content -match '\"success\":true') { exit 10 } else { exit 0 } } catch { exit 0 }" >nul 2>nul
+if %errorlevel% equ 10 (
+    echo [OK] QuantMatrix server is already running on port %APP_PORT%.
+    echo [INFO] Opening dashboard...
+    start "" "%DASHBOARD_URL%"
+    exit /b 0
+)
+
+:: If another program is using the port, stop here with a friendly message.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$conn = Get-NetTCPConnection -LocalPort %APP_PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($conn) { $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue; if ($proc) { Write-Host ('[ERROR] Port %APP_PORT% is already in use by PID ' + $proc.Id + ' (' + $proc.ProcessName + ').') } else { Write-Host '[ERROR] Port %APP_PORT% is already in use.' }; exit 12 } else { exit 0 }"
+if %errorlevel% equ 12 (
+    echo [TIP] Close the existing process, or change PORT in .env before starting QuantMatrix.
+    pause
+    exit /b 1
+)
+
 echo ========================================================
 echo   Starting QuantMatrix MT5 Server...
 echo.
-echo   Dashboard: http://localhost:5000
-echo   API:       http://localhost:5000/api/health
-echo   WebSocket: ws://localhost:5000/ws
+echo   Dashboard: %DASHBOARD_URL%
+echo   API:       %API_URL%
+echo   WebSocket: %WS_URL%
 echo.
 echo   Press Ctrl+C to stop the server
 echo ========================================================
 echo.
 
 :: Open browser after a short delay
-start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:5000"
+start "" cmd /c "timeout /t 2 /nobreak >nul && start %DASHBOARD_URL%"
 
 pushd "%PROJECT_DIR%"
 call "%NODE_CMD%" src/server.js

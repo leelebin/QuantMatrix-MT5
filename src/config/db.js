@@ -46,6 +46,21 @@ const paperPositionsDb = Datastore.create({
   autoload: true,
 });
 
+const riskStateDb = Datastore.create({
+  filename: path.join(DATA_DIR, 'risk_state.db'),
+  autoload: true,
+});
+
+const riskProfilesDb = Datastore.create({
+  filename: path.join(DATA_DIR, 'risk_profiles.db'),
+  autoload: true,
+});
+
+const executionAuditDb = Datastore.create({
+  filename: path.join(DATA_DIR, 'execution_audit.db'),
+  autoload: true,
+});
+
 // Ensure indexes
 usersDb.ensureIndex({ fieldName: 'email', unique: true });
 strategiesDb.ensureIndex({ fieldName: 'name', unique: true });
@@ -56,6 +71,13 @@ tradeLogDb.ensureIndex({ fieldName: 'symbol' });
 tradeLogDb.ensureIndex({ fieldName: 'closedAt' });
 tradeLogDb.ensureIndex({ fieldName: 'openedAt' });
 paperPositionsDb.ensureIndex({ fieldName: 'symbol' });
+riskProfilesDb.ensureIndex({ fieldName: 'nameKey', unique: true });
+riskProfilesDb.ensureIndex({ fieldName: 'isActive' });
+executionAuditDb.ensureIndex({ fieldName: 'symbol' });
+executionAuditDb.ensureIndex({ fieldName: 'scope' });
+executionAuditDb.ensureIndex({ fieldName: 'stage' });
+executionAuditDb.ensureIndex({ fieldName: 'status' });
+executionAuditDb.ensureIndex({ fieldName: 'createdAt' });
 
 const connectDB = async () => {
   try {
@@ -66,6 +88,9 @@ const connectDB = async () => {
     await backtestsDb.count({});
     await tradeLogDb.count({});
     await paperPositionsDb.count({});
+    await riskStateDb.count({});
+    await riskProfilesDb.count({});
+    await executionAuditDb.count({});
     console.log('Database Connected: NeDB (local file storage)');
     console.log(`Data directory: ${DATA_DIR}`);
   } catch (error) {
@@ -82,3 +107,6 @@ module.exports.positionsDb = positionsDb;
 module.exports.backtestsDb = backtestsDb;
 module.exports.tradeLogDb = tradeLogDb;
 module.exports.paperPositionsDb = paperPositionsDb;
+module.exports.riskStateDb = riskStateDb;
+module.exports.riskProfilesDb = riskProfilesDb;
+module.exports.executionAuditDb = executionAuditDb;

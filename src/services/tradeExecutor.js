@@ -7,8 +7,11 @@ const mt5Service = require('./mt5Service');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
+const breakevenService = require('./breakevenService');
 const { positionsDb, tradesDb } = require('../config/db');
 const ExecutionAudit = require('../models/ExecutionAudit');
+const RiskProfile = require('../models/RiskProfile');
+const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
 
@@ -151,6 +154,9 @@ class TradeExecutor {
       const entryCommission = Number(result.entryDeal?.commission) || 0;
       const entrySwap = Number(result.entryDeal?.swap) || 0;
       const entryFee = Number(result.entryDeal?.fee) || 0;
+      const activeProfile = await RiskProfile.getActive();
+      const strategyRecord = signal.strategy ? await Strategy.findByName(signal.strategy) : null;
+      const breakevenConfig = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyRecord);
 
       // Save position to local DB
       const position = await positionsDb.insert({
@@ -168,6 +174,7 @@ class TradeExecutor {
         confidence: signal.confidence,
         reason: signal.reason,
         atrAtEntry,
+        breakevenConfig,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
@@ -184,6 +191,7 @@ class TradeExecutor {
         strategy: signal.strategy,
         confidence: signal.confidence,
         reason: signal.reason,
+        breakevenConfig,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         commission: entryCommission,
         swap: entrySwap,

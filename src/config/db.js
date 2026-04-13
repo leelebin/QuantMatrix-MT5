@@ -61,11 +61,22 @@ const executionAuditDb = Datastore.create({
   autoload: true,
 });
 
+const batchBacktestJobsDb = Datastore.create({
+  filename: path.join(DATA_DIR, 'batch_backtest_jobs.db'),
+  autoload: true,
+});
+
 // Ensure indexes
 usersDb.ensureIndex({ fieldName: 'email', unique: true });
 strategiesDb.ensureIndex({ fieldName: 'name', unique: true });
 tradesDb.ensureIndex({ fieldName: 'symbol' });
+tradesDb.ensureIndex({ fieldName: 'openedAt' });
 tradesDb.ensureIndex({ fieldName: 'closedAt' });
+tradesDb.ensureIndex({ fieldName: 'brokerSyncedAt' });
+tradesDb.ensureIndex({ fieldName: 'mt5PositionId' });
+tradesDb.ensureIndex({ fieldName: 'mt5OrderId' });
+tradesDb.ensureIndex({ fieldName: 'mt5EntryDealId' });
+tradesDb.ensureIndex({ fieldName: 'mt5CloseDealId' });
 positionsDb.ensureIndex({ fieldName: 'symbol' });
 tradeLogDb.ensureIndex({ fieldName: 'symbol' });
 tradeLogDb.ensureIndex({ fieldName: 'closedAt' });
@@ -78,6 +89,9 @@ executionAuditDb.ensureIndex({ fieldName: 'scope' });
 executionAuditDb.ensureIndex({ fieldName: 'stage' });
 executionAuditDb.ensureIndex({ fieldName: 'status' });
 executionAuditDb.ensureIndex({ fieldName: 'createdAt' });
+batchBacktestJobsDb.ensureIndex({ fieldName: 'status' });
+batchBacktestJobsDb.ensureIndex({ fieldName: 'createdAt' });
+batchBacktestJobsDb.ensureIndex({ fieldName: 'completedAt' });
 
 const connectDB = async () => {
   try {
@@ -91,6 +105,7 @@ const connectDB = async () => {
     await riskStateDb.count({});
     await riskProfilesDb.count({});
     await executionAuditDb.count({});
+    await batchBacktestJobsDb.count({});
     console.log('Database Connected: NeDB (local file storage)');
     console.log(`Data directory: ${DATA_DIR}`);
   } catch (error) {
@@ -110,3 +125,4 @@ module.exports.paperPositionsDb = paperPositionsDb;
 module.exports.riskStateDb = riskStateDb;
 module.exports.riskProfilesDb = riskProfilesDb;
 module.exports.executionAuditDb = executionAuditDb;
+module.exports.batchBacktestJobsDb = batchBacktestJobsDb;

@@ -3,6 +3,17 @@ const Trade = require('../models/Trade');
 const ExecutionAudit = require('../models/ExecutionAudit');
 const tradeExecutor = require('../services/tradeExecutor');
 const tradeHistoryService = require('../services/tradeHistoryService');
+const { LIVE_TRADE_COLUMNS, buildCsv, buildExportFilename } = require('../utils/tradeExport');
+
+function getTradeFilters(source = {}) {
+  return {
+    symbol: source.symbol || undefined,
+    strategy: source.strategy || undefined,
+    status: source.status || undefined,
+    startDate: source.startDate || undefined,
+    endDate: source.endDate || undefined,
+  };
+}
 
 // @desc    Get all open positions
 // @route   GET /api/positions
@@ -52,11 +63,8 @@ exports.closePosition = async (req, res) => {
 exports.getTrades = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
-    const symbol = req.query.symbol;
-    const query = {};
-    if (symbol) query.symbol = symbol;
-
-    const trades = await Trade.findAll(query, limit);
+    const filters = getTradeFilters(req.query);
+    const trades = await Trade.findByFilters(filters, limit);
     res.json({ success: true, data: trades, count: trades.length });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -67,8 +75,26 @@ exports.getTrades = async (req, res) => {
 // @route   GET /api/trades/stats
 exports.getTradeStats = async (req, res) => {
   try {
-    const stats = await Trade.getStats();
+    const filters = getTradeFilters(req.query);
+    const stats = await Trade.getStats(filters);
     res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Export trade history as CSV
+// @route   GET /api/trades/export.csv
+exports.exportTradesCsv = async (req, res) => {
+  try {
+    const filters = getTradeFilters(req.query);
+    const trades = await Trade.findForExport(filters);
+    const csv = buildCsv(LIVE_TRADE_COLUMNS, trades);
+    const filename = buildExportFilename(filters);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -78,13 +104,23 @@ exports.getTradeStats = async (req, res) => {
 // @route   POST /api/trades/reconcile
 exports.reconcileTrades = async (req, res) => {
   try {
-    const limit = parseInt(req.body.limit ?? req.query.limit, 10) || 100;
+    const parsedLimit = parseInt(req.body.limit ?? req.query.limit, 10);
+    const limit = Number.isFinite(parsedLimit) && parsedLimit >= 0 ? parsedLimit : 500;
+    const mode = req.body.mode ?? req.query.mode ?? 'incremental';
     const symbol = req.body.symbol ?? req.query.symbol;
-    const result = await tradeHistoryService.reconcileClosedTrades({ limit, symbol });
+    const startDate = req.body.startDate ?? req.query.startDate;
+    const endDate = req.body.endDate ?? req.query.endDate;
+    const result = await tradeHistoryService.syncTradesFromBroker({
+      mode,
+      limit,
+      symbol,
+      startDate,
+      endDate,
+    });
 
     res.json({
       success: true,
-      message: `Reconciled ${result.updated} of ${result.checked} trades against MT5 history`,
+      message: `MT5 sync complete: ${result.imported || 0} imported, ${result.updated || 0} updated, ${result.skipped || 0} skipped across ${result.checked || 0} broker trades`,
       data: result,
     });
   } catch (err) {

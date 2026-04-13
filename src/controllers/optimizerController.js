@@ -2,6 +2,9 @@ const optimizerService = require('../services/optimizerService');
 const mt5Service = require('../services/mt5Service');
 const websocketService = require('../services/websocketService');
 const notificationService = require('../services/notificationService');
+const Strategy = require('../models/Strategy');
+const RiskProfile = require('../models/RiskProfile');
+const breakevenService = require('../services/breakevenService');
 const { getInstrument, getAllSymbols } = require('../config/instruments');
 const {
   DEFAULT_WARMUP_BARS,
@@ -16,6 +19,9 @@ const {
 exports.runOptimizer = async (req, res) => {
   try {
     const { symbol, strategyType, timeframe, startDate, endDate, paramRanges, optimizeFor } = req.body;
+    const strategyConfig = await Strategy.findByName(strategyType);
+    const activeProfile = await RiskProfile.getActive();
+    const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyConfig);
 
     const instrument = getInstrument(symbol);
     if (!instrument) {
@@ -49,9 +55,13 @@ exports.runOptimizer = async (req, res) => {
     const candleLimit = estimateFetchLimit(tf, fetchStart, endExclusive);
 
     // Fetch candles
-    const rawCandles = await mt5Service.getCandles(symbol, tf, fetchStart, candleLimit);
+    const rawCandles = await mt5Service.getCandles(symbol, tf, fetchStart, candleLimit, endExclusive);
     const candles = filterCandlesByRange(rawCandles, fetchStart, endExclusive);
     const inRangeCandles = filterCandlesByRange(rawCandles, start, endExclusive);
+
+    console.log(
+      `[Optimizer] Candle fetch: ${rawCandles.length} raw, ${candles.length} with warmup, ${inRangeCandles.length} in range`
+    );
 
     if (!candles || candles.length < DEFAULT_WARMUP_BARS + 2 || inRangeCandles.length < 50) {
       return res.status(400).json({
@@ -68,7 +78,8 @@ exports.runOptimizer = async (req, res) => {
         symbol,
         instrument.higherTimeframe,
         higherTfStart,
-        higherTfLimit
+        higherTfLimit,
+        endExclusive
       );
       higherTfCandles = filterCandlesByRange(rawHigherTfCandles, higherTfStart, endExclusive);
     }
@@ -81,7 +92,8 @@ exports.runOptimizer = async (req, res) => {
         symbol,
         instrument.entryTimeframe,
         lowerTfStart,
-        lowerTfLimit
+        lowerTfLimit,
+        endExclusive
       );
       lowerTfCandles = filterCandlesByRange(rawLowerTfCandles, lowerTfStart, endExclusive);
     }
@@ -110,6 +122,11 @@ exports.runOptimizer = async (req, res) => {
         optimizeFor: optimizeFor || 'profitFactor',
         tradeStartTime: start.toISOString(),
         tradeEndTime: rangeEnd.toISOString(),
+        storedStrategyParameters: strategyConfig?.parameters || null,
+        breakevenConfig: effectiveBreakeven,
+        onProgress: (progress) => {
+          websocketService.broadcast('status', 'optimizer_progress', progress);
+        },
       });
 
       websocketService.broadcast('status', 'optimizer_complete', result);

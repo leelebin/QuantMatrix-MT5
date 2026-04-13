@@ -97,18 +97,30 @@ const indicatorService = {
    * @param {Array<{open: number, high: number, low: number, close: number, time: string}>} candles
    * @returns {object} All indicator values
    */
-  calculateAll(candles) {
+  calculateAll(candles, params = {}) {
     const closes = candles.map((c) => c.close);
+    const ema20Period = Number(params.ema_fast) || 20;
+    const ema50Period = Number(params.ema_period || params.ema_slow) || 50;
+    const ema200Period = Number(params.ema_trend) || 200;
+    const rsiPeriod = Number(params.rsi_period) || 14;
+    const macdFast = Number(params.macd_fast) || 12;
+    const macdSlow = Number(params.macd_slow) || 26;
+    const macdSignal = Number(params.macd_signal) || 9;
+    const bbPeriod = Number(params.bb_period) || 20;
+    const bbStdDev = Number(params.bb_stddev) || 2;
+    const atrPeriod = Number(params.atr_period) || 14;
+    const stochPeriod = Number(params.stoch_period) || 14;
+    const stochSignal = Number(params.stoch_signal) || 3;
 
     return {
-      ema20: this.ema(closes, 20),
-      ema50: this.ema(closes, 50),
-      ema200: this.ema(closes, 200),
-      rsi: this.rsi(closes, 14),
-      macd: this.macd(closes),
-      bollingerBands: this.bollingerBands(closes),
-      atr: this.atr(candles),
-      stochastic: this.stochastic(candles),
+      ema20: this.ema(closes, ema20Period),
+      ema50: this.ema(closes, ema50Period),
+      ema200: this.ema(closes, ema200Period),
+      rsi: this.rsi(closes, rsiPeriod),
+      macd: this.macd(closes, macdFast, macdSlow, macdSignal),
+      bollingerBands: this.bollingerBands(closes, bbPeriod, bbStdDev),
+      atr: this.atr(candles, atrPeriod),
+      stochastic: this.stochastic(candles, stochPeriod, stochSignal),
     };
   },
 

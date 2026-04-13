@@ -1,5 +1,6 @@
 jest.mock('../src/config/db', () => ({
   tradesDb: {
+    findOne: jest.fn(),
     update: jest.fn(),
   },
 }));
@@ -20,6 +21,7 @@ const { buildClosedTradeSnapshot } = require('../src/utils/mt5Reconciliation');
 describe('trade history reconciliation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    tradesDb.findOne.mockResolvedValue({ _id: 'trade-1' });
   });
 
   test('uses pipValue fallback so JPY pairs are approximated in account currency', () => {

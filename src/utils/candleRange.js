@@ -70,7 +70,33 @@ function filterCandlesByRange(candles, start, endExclusive) {
   });
 }
 
+function clampDateRangeToNow(start, endExclusive, now = new Date()) {
+  const nowDate = now instanceof Date ? now : new Date(now);
+  if (Number.isNaN(nowDate.getTime())) {
+    throw new Error('Invalid current time reference');
+  }
+
+  if (start >= nowDate) {
+    throw new Error('Selected startDate is in the future');
+  }
+
+  if (endExclusive > nowDate) {
+    return {
+      start,
+      endExclusive: nowDate,
+      clamped: true,
+    };
+  }
+
+  return {
+    start,
+    endExclusive,
+    clamped: false,
+  };
+}
+
 module.exports = {
+  clampDateRangeToNow,
   DEFAULT_WARMUP_BARS,
   estimateFetchLimit,
   filterCandlesByRange,

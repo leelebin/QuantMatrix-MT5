@@ -722,6 +722,7 @@ def handle_get_candles(params):
     timeframe_str = params.get("timeframe", "1h")
     limit = int(params.get("limit", 500))
     start_time = params.get("startTime")
+    end_time = params.get("endTime")
 
     tf = TIMEFRAME_MAP.get(timeframe_str)
     if tf is None:
@@ -734,8 +735,23 @@ def handle_get_candles(params):
     if not symbol_info.visible:
         mt5.symbol_select(symbol, True)
 
-    if start_time:
-        # Parse ISO date string
+    if start_time and end_time:
+        try:
+            dt_from = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            dt_from = datetime.fromtimestamp(int(start_time) / 1000, tz=timezone.utc)
+
+        try:
+            dt_to = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            dt_to = datetime.fromtimestamp(int(end_time) / 1000, tz=timezone.utc)
+
+        rates = mt5.copy_rates_range(symbol, tf, dt_from, dt_to)
+        if rates is not None and len(rates) > limit:
+            rates = rates[-limit:]
+    elif start_time:
+        # copy_rates_from returns candles at/before the requested time, so keep this
+        # path only for backward-looking fetches used by live analysis.
         try:
             dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
         except (ValueError, AttributeError):

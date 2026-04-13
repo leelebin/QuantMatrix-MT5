@@ -1,0 +1,2 @@
+[WARNING] Using default/generated JWT_SECRET. Please set a proper one in .env file.
+[WARNING] Using default/generated JWT_REFRESH_SECRET. Please set a proper one in .env file.

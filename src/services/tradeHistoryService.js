@@ -1,7 +1,13 @@
-const { tradesDb } = require('../config/db');
+const Trade = require('../models/Trade');
+const { UNKNOWN_STRATEGY } = require('../models/Trade');
 const mt5Service = require('./mt5Service');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildTradeComment, parseStrategyFromBrokerComment } = require('../utils/tradeComment');
+const { normalizeDateStart, normalizeDateEnd } = require('../utils/tradeExport');
+
+const FULL_HISTORY_START = new Date('2020-01-01T00:00:00.000Z');
+const INCREMENTAL_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+const VOLUME_TOLERANCE = 1e-8;
 
 class TradeHistoryService {
   _normalizeDate(value) {
@@ -10,22 +16,316 @@ class TradeHistoryService {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
+  _coerceNumber(value, fallback = null) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
   _unique(values = []) {
     return [...new Set(values.filter(Boolean).map((value) => String(value)))];
   }
 
-  _getReconciliationWindow(trade = {}) {
-    const openedAt = this._normalizeDate(trade.openedAt);
-    const closedAt = this._normalizeDate(trade.closedAt);
+  _isTradeDeal(deal = {}) {
+    const typeName = String(deal.typeName || deal.type || '').toUpperCase();
+    return typeName.includes('BUY') || typeName.includes('SELL');
+  }
+
+  _getGroupKey(deal = {}) {
+    return String(deal.positionId || deal.orderId || deal.id || '').trim();
+  }
+
+  _groupDealsByTrade(deals = []) {
+    const groups = new Map();
+
+    deals.filter((deal) => this._isTradeDeal(deal)).forEach((deal) => {
+      const key = this._getGroupKey(deal);
+      if (!key) return;
+
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(deal);
+    });
+
+    return groups;
+  }
+
+  _buildTradeQuery({ symbol, startDate, endDate, status } = {}) {
+    const query = {};
+    if (symbol) query.symbol = symbol;
+    if (status) query.status = status;
+
+    const start = normalizeDateStart(startDate);
+    const end = normalizeDateEnd(endDate);
+    if (start || end) {
+      query.openedAt = {};
+      if (start) query.openedAt.$gte = start;
+      if (end) query.openedAt.$lte = end;
+    }
+
+    return query;
+  }
+
+  _getReferencePayload(summary = {}, deals = []) {
+    const entryDeal = summary.entryDeals?.[0] || null;
+    const lastDeal = deals[deals.length - 1] || null;
 
     return {
-      start: openedAt
-        ? new Date(openedAt.getTime() - (24 * 60 * 60 * 1000))
-        : new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)),
-      end: closedAt
-        ? new Date(closedAt.getTime() + (24 * 60 * 60 * 1000))
-        : new Date(),
+      positionId: String(summary.positionId || entryDeal?.positionId || lastDeal?.positionId || '').trim() || null,
+      entryDealId: String(entryDeal?.id || '').trim() || null,
+      closeDealId: String(summary.lastExitDeal?.id || '').trim() || null,
+      orderId: String(entryDeal?.orderId || lastDeal?.orderId || '').trim() || null,
     };
+  }
+
+  _getActivityTime(summary = {}, deals = []) {
+    return (
+      this._normalizeDate(summary.exitTime)
+      || this._normalizeDate(summary.entryTime)
+      || this._normalizeDate(deals[deals.length - 1]?.time)
+      || null
+    );
+  }
+
+  _isClosedSummary(summary = {}) {
+    const entryVolume = this._coerceNumber(
+      summary.entryVolume,
+      (summary.entryDeals || []).reduce((sum, deal) => sum + (Number(deal.volume) || 0), 0)
+    );
+    const exitVolume = this._coerceNumber(
+      summary.exitVolume,
+      (summary.exitDeals || []).reduce((sum, deal) => sum + (Number(deal.volume) || 0), 0)
+    );
+
+    if (entryVolume <= 0 && exitVolume <= 0) {
+      return Array.isArray(summary.exitDeals) && summary.exitDeals.length > 0;
+    }
+
+    return exitVolume > 0 && (entryVolume <= 0 || exitVolume + VOLUME_TOLERANCE >= entryVolume);
+  }
+
+  _parseConfidenceFromBrokerComment(comment = '') {
+    const parts = String(comment || '').split('|').map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 4) return null;
+    const confidence = Number(parts[3]);
+    return Number.isFinite(confidence) ? confidence : null;
+  }
+
+  _parseSideFromDeal(deal = {}) {
+    const typeName = String(deal.typeName || deal.type || '').toUpperCase();
+    if (typeName.includes('BUY')) return 'BUY';
+    if (typeName.includes('SELL')) return 'SELL';
+    return null;
+  }
+
+  _resolveStrategy(existingTrade = null, brokerComment = '') {
+    const existingStrategy = String(existingTrade?.strategy || '').trim();
+    if (existingStrategy) return existingStrategy;
+    return parseStrategyFromBrokerComment(brokerComment) || UNKNOWN_STRATEGY;
+  }
+
+  async _resolveSyncWindow({ mode = 'incremental', symbol, startDate, endDate } = {}) {
+    const explicitStart = normalizeDateStart(startDate);
+    const explicitEnd = normalizeDateEnd(endDate);
+
+    if (explicitStart || explicitEnd) {
+      return {
+        start: explicitStart || FULL_HISTORY_START,
+        end: explicitEnd || new Date(),
+      };
+    }
+
+    if (mode === 'full') {
+      return { start: FULL_HISTORY_START, end: new Date() };
+    }
+
+    const latestTrade = await Trade.findLatestBrokerTrade({ symbol });
+    const latestTimestamp = [latestTrade?.closedAt, latestTrade?.openedAt, latestTrade?.brokerSyncedAt]
+      .map((value) => this._normalizeDate(value))
+      .filter(Boolean)
+      .reduce((latest, current) => (
+        !latest || current.getTime() > latest.getTime() ? current : latest
+      ), null);
+
+    if (!latestTimestamp) {
+      return { start: FULL_HISTORY_START, end: new Date() };
+    }
+
+    return {
+      start: new Date(Math.max(FULL_HISTORY_START.getTime(), latestTimestamp.getTime() - INCREMENTAL_LOOKBACK_MS)),
+      end: new Date(),
+    };
+  }
+
+  _buildBrokerTradeRecord(summary, deals = [], existingTrade = null, source = 'history_sync') {
+    const orderedDeals = summary?.deals?.length ? summary.deals : deals;
+    const entryDeal = summary?.entryDeals?.[0] || null;
+
+    if (!existingTrade && !entryDeal) {
+      return null;
+    }
+
+    const brokerComment = entryDeal?.comment
+      || existingTrade?.mt5Comment
+      || orderedDeals.find((deal) => deal.comment)?.comment
+      || '';
+    const symbol = existingTrade?.symbol || entryDeal?.symbol || orderedDeals[0]?.symbol || null;
+    const type = existingTrade?.type || this._parseSideFromDeal(entryDeal);
+    const lotSize = this._coerceNumber(summary?.entryVolume, 0)
+      || this._coerceNumber(existingTrade?.lotSize, 0)
+      || this._coerceNumber(entryDeal?.volume, 0);
+    const openedAt = this._normalizeDate(summary?.entryTime)
+      || this._normalizeDate(existingTrade?.openedAt)
+      || this._normalizeDate(entryDeal?.time);
+
+    if (!symbol || !type || lotSize <= 0 || !openedAt) {
+      return null;
+    }
+
+    const refs = this._getReferencePayload(summary, orderedDeals);
+    const strategy = this._resolveStrategy(existingTrade, brokerComment);
+    const confidence = existingTrade?.confidence ?? this._parseConfidenceFromBrokerComment(brokerComment);
+    const reason = String(existingTrade?.reason || '').trim();
+    const status = this._isClosedSummary(summary) ? 'CLOSED' : 'OPEN';
+
+    const record = {
+      symbol,
+      type,
+      entryPrice: this._coerceNumber(summary?.entryPrice, existingTrade?.entryPrice ?? null),
+      sl: existingTrade?.sl ?? null,
+      tp: existingTrade?.tp ?? null,
+      lotSize,
+      strategy,
+      confidence,
+      reason,
+      indicatorsSnapshot: existingTrade?.indicatorsSnapshot || {},
+      commission: this._coerceNumber(summary?.commission, existingTrade?.commission ?? 0),
+      swap: this._coerceNumber(summary?.swap, existingTrade?.swap ?? 0),
+      fee: this._coerceNumber(summary?.fee, existingTrade?.fee ?? 0),
+      mt5PositionId: refs.positionId || existingTrade?.mt5PositionId || null,
+      mt5OrderId: refs.orderId || existingTrade?.mt5OrderId || null,
+      mt5EntryDealId: refs.entryDealId || existingTrade?.mt5EntryDealId || null,
+      mt5CloseDealId: status === 'CLOSED' ? (refs.closeDealId || existingTrade?.mt5CloseDealId || null) : null,
+      mt5Comment: brokerComment || existingTrade?.mt5Comment || null,
+      positionDbId: existingTrade?.positionDbId || null,
+      status,
+      openedAt,
+      brokerSyncedAt: new Date(),
+      brokerSyncSource: source,
+    };
+
+    if (status === 'CLOSED') {
+      const closedSnapshot = buildClosedTradeSnapshot({
+        symbol,
+        type,
+        entryPrice: record.entryPrice,
+        currentPrice: summary?.exitPrice,
+        lotSize,
+      }, summary, {
+        exitPrice: this._coerceNumber(summary?.exitPrice, existingTrade?.exitPrice ?? null),
+        reason: existingTrade?.exitReason || 'EXTERNAL',
+        closedAt: this._normalizeDate(existingTrade?.closedAt) || new Date(),
+      });
+
+      record.entryPrice = closedSnapshot.entryPrice;
+      record.exitPrice = closedSnapshot.exitPrice;
+      record.closedAt = closedSnapshot.closedAt;
+      record.exitReason = closedSnapshot.exitReason;
+      record.profitLoss = closedSnapshot.profitLoss;
+      record.profitPips = closedSnapshot.profitPips;
+      record.commission = closedSnapshot.commission;
+      record.swap = closedSnapshot.swap;
+      record.fee = closedSnapshot.fee;
+    } else {
+      record.exitPrice = null;
+      record.closedAt = null;
+      record.exitReason = null;
+      record.profitLoss = existingTrade?.status === 'OPEN' ? existingTrade.profitLoss ?? null : null;
+      record.profitPips = existingTrade?.status === 'OPEN' ? existingTrade.profitPips ?? null : null;
+    }
+
+    record.comment = buildTradeComment({
+      strategy: record.strategy,
+      signal: record.type,
+      confidence: record.confidence,
+      reason: record.reason,
+    }, record.mt5Comment || '');
+
+    return record;
+  }
+
+  _mergeTradeRecord(existingTrade, brokerTrade) {
+    const existingStrategy = String(existingTrade?.strategy || '').trim();
+    const brokerStrategy = String(brokerTrade?.strategy || '').trim();
+    const keepClosedState = existingTrade?.status === 'CLOSED' && brokerTrade?.status !== 'CLOSED';
+
+    const merged = {
+      symbol: brokerTrade.symbol || existingTrade.symbol,
+      type: brokerTrade.type || existingTrade.type,
+      entryPrice: brokerTrade.entryPrice ?? existingTrade.entryPrice ?? null,
+      sl: existingTrade.sl ?? brokerTrade.sl ?? null,
+      tp: existingTrade.tp ?? brokerTrade.tp ?? null,
+      lotSize: brokerTrade.lotSize ?? existingTrade.lotSize ?? 0,
+      strategy: existingStrategy && existingStrategy !== UNKNOWN_STRATEGY
+        ? existingStrategy
+        : (brokerStrategy || UNKNOWN_STRATEGY),
+      confidence: existingTrade.confidence ?? brokerTrade.confidence ?? null,
+      reason: String(existingTrade.reason || brokerTrade.reason || '').trim(),
+      indicatorsSnapshot: existingTrade.indicatorsSnapshot
+        && Object.keys(existingTrade.indicatorsSnapshot).length > 0
+        ? existingTrade.indicatorsSnapshot
+        : (brokerTrade.indicatorsSnapshot || {}),
+      commission: brokerTrade.commission ?? existingTrade.commission ?? 0,
+      swap: brokerTrade.swap ?? existingTrade.swap ?? 0,
+      fee: brokerTrade.fee ?? existingTrade.fee ?? 0,
+      mt5PositionId: brokerTrade.mt5PositionId || existingTrade.mt5PositionId || null,
+      mt5OrderId: brokerTrade.mt5OrderId || existingTrade.mt5OrderId || null,
+      mt5EntryDealId: brokerTrade.mt5EntryDealId || existingTrade.mt5EntryDealId || null,
+      mt5CloseDealId: brokerTrade.mt5CloseDealId || existingTrade.mt5CloseDealId || null,
+      mt5Comment: brokerTrade.mt5Comment || existingTrade.mt5Comment || null,
+      positionDbId: existingTrade.positionDbId || brokerTrade.positionDbId || null,
+      status: keepClosedState ? 'CLOSED' : (brokerTrade.status || existingTrade.status || 'OPEN'),
+      openedAt: brokerTrade.openedAt || existingTrade.openedAt || null,
+      brokerSyncedAt: brokerTrade.brokerSyncedAt || new Date(),
+      brokerSyncSource: brokerTrade.brokerSyncSource || existingTrade.brokerSyncSource || 'history_sync',
+    };
+
+    if (merged.status === 'CLOSED') {
+      merged.exitPrice = keepClosedState
+        ? (existingTrade.exitPrice ?? null)
+        : (brokerTrade.exitPrice ?? existingTrade.exitPrice ?? null);
+      merged.closedAt = keepClosedState
+        ? (existingTrade.closedAt || null)
+        : (brokerTrade.closedAt || existingTrade.closedAt || null);
+      merged.exitReason = keepClosedState
+        ? (existingTrade.exitReason || null)
+        : (brokerTrade.exitReason || existingTrade.exitReason || 'EXTERNAL');
+      merged.profitLoss = keepClosedState
+        ? (existingTrade.profitLoss ?? null)
+        : (brokerTrade.profitLoss ?? existingTrade.profitLoss ?? null);
+      merged.profitPips = keepClosedState
+        ? (existingTrade.profitPips ?? null)
+        : (brokerTrade.profitPips ?? existingTrade.profitPips ?? null);
+      if (keepClosedState) {
+        merged.commission = existingTrade.commission ?? merged.commission;
+        merged.swap = existingTrade.swap ?? merged.swap;
+        merged.fee = existingTrade.fee ?? merged.fee;
+      }
+    } else {
+      merged.exitPrice = null;
+      merged.closedAt = null;
+      merged.exitReason = null;
+      merged.profitLoss = existingTrade.status === 'OPEN' ? existingTrade.profitLoss ?? null : null;
+      merged.profitPips = existingTrade.status === 'OPEN' ? existingTrade.profitPips ?? null : null;
+      merged.mt5CloseDealId = null;
+    }
+
+    merged.comment = buildTradeComment({
+      strategy: merged.strategy,
+      signal: merged.type,
+      confidence: merged.confidence,
+      reason: merged.reason,
+    }, merged.mt5Comment || '');
+
+    return merged;
   }
 
   _numberChanged(current, next, tolerance = 1e-8) {
@@ -44,6 +344,86 @@ class TradeHistoryService {
     if (!currentDate && !nextDate) return false;
     if (!currentDate || !nextDate) return true;
     return currentDate.getTime() !== nextDate.getTime();
+  }
+
+  _jsonChanged(current, next) {
+    return JSON.stringify(current ?? null) !== JSON.stringify(next ?? null);
+  }
+
+  _hasMeaningfulChanges(trade, update) {
+    return (
+      this._stringChanged(trade.symbol, update.symbol)
+      || this._stringChanged(trade.type, update.type)
+      || this._stringChanged(trade.strategy, update.strategy)
+      || this._stringChanged(trade.reason, update.reason)
+      || this._stringChanged(trade.status, update.status)
+      || this._stringChanged(trade.exitReason, update.exitReason)
+      || this._stringChanged(trade.mt5PositionId, update.mt5PositionId)
+      || this._stringChanged(trade.mt5OrderId, update.mt5OrderId)
+      || this._stringChanged(trade.mt5EntryDealId, update.mt5EntryDealId)
+      || this._stringChanged(trade.mt5CloseDealId, update.mt5CloseDealId)
+      || this._stringChanged(trade.mt5Comment, update.mt5Comment)
+      || this._stringChanged(trade.comment, update.comment)
+      || this._numberChanged(trade.entryPrice, update.entryPrice)
+      || this._numberChanged(trade.exitPrice, update.exitPrice)
+      || this._numberChanged(trade.lotSize, update.lotSize)
+      || this._numberChanged(trade.confidence, update.confidence)
+      || this._numberChanged(trade.profitLoss, update.profitLoss)
+      || this._numberChanged(trade.profitPips, update.profitPips)
+      || this._numberChanged(trade.commission, update.commission)
+      || this._numberChanged(trade.swap, update.swap)
+      || this._numberChanged(trade.fee, update.fee)
+      || this._dateChanged(trade.openedAt, update.openedAt)
+      || this._dateChanged(trade.closedAt, update.closedAt)
+      || this._jsonChanged(trade.indicatorsSnapshot, update.indicatorsSnapshot)
+    );
+  }
+
+  _buildSyncResultPayload(action, trade, refs, reason = null) {
+    return {
+      action,
+      tradeId: trade?._id || null,
+      symbol: trade?.symbol || null,
+      status: trade?.status || null,
+      mt5PositionId: refs.positionId,
+      mt5OrderId: refs.orderId,
+      mt5EntryDealId: refs.entryDealId,
+      mt5CloseDealId: refs.closeDealId,
+      reason,
+    };
+  }
+
+  async _syncBrokerTradeGroup({ summary, deals }, mode) {
+    const refs = this._getReferencePayload(summary, deals);
+    const existingTrade = await Trade.findByBrokerRefs(refs);
+    const brokerTrade = this._buildBrokerTradeRecord(
+      summary,
+      deals,
+      existingTrade,
+      existingTrade ? 'history_sync' : 'history_import'
+    );
+
+    if (!brokerTrade) {
+      return this._buildSyncResultPayload(
+        'skipped',
+        existingTrade,
+        refs,
+        existingTrade ? 'Broker history was incomplete for this trade' : 'Missing broker entry deal for new import'
+      );
+    }
+
+    if (!existingTrade) {
+      const insertedTrade = await Trade.create(brokerTrade);
+      return this._buildSyncResultPayload('imported', insertedTrade, refs);
+    }
+
+    const mergedTrade = this._mergeTradeRecord(existingTrade, brokerTrade);
+    if (!this._hasMeaningfulChanges(existingTrade, mergedTrade)) {
+      return this._buildSyncResultPayload('skipped', existingTrade, refs, 'Already up to date');
+    }
+
+    const updatedTrade = await Trade.updateById(existingTrade._id, mergedTrade);
+    return this._buildSyncResultPayload('updated', updatedTrade, refs);
   }
 
   async _fetchSummaryByPositionId(positionId, start, end) {
@@ -93,59 +473,39 @@ class TradeHistoryService {
     return null;
   }
 
-  _buildTradeUpdate(trade, resolved) {
-    const { positionId, summary, source } = resolved;
-    const fallbackClosedAt = this._normalizeDate(trade.closedAt) || new Date();
-    const closedSnapshot = buildClosedTradeSnapshot(trade, summary, {
-      exitPrice: trade.exitPrice,
-      reason: trade.exitReason || 'EXTERNAL',
-      closedAt: fallbackClosedAt,
-    });
+  _getReconciliationWindow(trade = {}) {
+    const openedAt = this._normalizeDate(trade.openedAt);
+    const closedAt = this._normalizeDate(trade.closedAt);
 
     return {
-      entryPrice: closedSnapshot.entryPrice,
-      exitPrice: closedSnapshot.exitPrice,
-      exitReason: closedSnapshot.exitReason,
-      profitLoss: closedSnapshot.profitLoss,
-      profitPips: closedSnapshot.profitPips,
-      commission: closedSnapshot.commission,
-      swap: closedSnapshot.swap,
-      fee: closedSnapshot.fee,
-      openedAt: summary.entryTime ? new Date(summary.entryTime) : (this._normalizeDate(trade.openedAt) || trade.openedAt),
-      closedAt: summary.exitTime ? new Date(summary.exitTime) : closedSnapshot.closedAt,
-      mt5PositionId: positionId || trade.mt5PositionId || null,
-      mt5EntryDealId: summary.entryDeals?.[0]?.id || trade.mt5EntryDealId || null,
-      mt5CloseDealId: summary.lastExitDeal?.id || trade.mt5CloseDealId || null,
-      mt5Comment: summary.entryDeals?.[0]?.comment || trade.mt5Comment || null,
-      comment: buildTradeComment({
-        strategy: trade.strategy || parseStrategyFromBrokerComment(summary.entryDeals?.[0]?.comment),
-        signal: trade.type,
-        confidence: trade.confidence,
-        reason: trade.reason,
-      }, summary.entryDeals?.[0]?.comment || trade.mt5Comment || ''),
-      brokerSyncedAt: new Date(),
-      brokerSyncSource: source,
+      start: openedAt
+        ? new Date(openedAt.getTime() - (24 * 60 * 60 * 1000))
+        : new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)),
+      end: closedAt
+        ? new Date(closedAt.getTime() + (24 * 60 * 60 * 1000))
+        : new Date(),
     };
   }
 
-  _hasMeaningfulChanges(trade, update) {
-    return (
-      this._numberChanged(trade.entryPrice, update.entryPrice)
-      || this._numberChanged(trade.exitPrice, update.exitPrice)
-      || this._numberChanged(trade.profitLoss, update.profitLoss)
-      || this._numberChanged(trade.profitPips, update.profitPips)
-      || this._numberChanged(trade.commission, update.commission)
-      || this._numberChanged(trade.swap, update.swap)
-      || this._numberChanged(trade.fee, update.fee)
-      || this._stringChanged(trade.exitReason, update.exitReason)
-      || this._stringChanged(trade.mt5PositionId, update.mt5PositionId)
-      || this._stringChanged(trade.mt5EntryDealId, update.mt5EntryDealId)
-      || this._stringChanged(trade.mt5CloseDealId, update.mt5CloseDealId)
-      || this._stringChanged(trade.mt5Comment, update.mt5Comment)
-      || this._stringChanged(trade.comment, update.comment)
-      || this._dateChanged(trade.openedAt, update.openedAt)
-      || this._dateChanged(trade.closedAt, update.closedAt)
-    );
+  _buildTradeUpdate(trade, resolved) {
+    const { positionId, summary, source } = resolved;
+    const mergedTrade = this._mergeTradeRecord(trade, this._buildBrokerTradeRecord(summary, summary.deals, trade, source));
+
+    mergedTrade.status = 'CLOSED';
+    mergedTrade.mt5PositionId = positionId || trade.mt5PositionId || null;
+    mergedTrade.mt5EntryDealId = summary.entryDeals?.[0]?.id || trade.mt5EntryDealId || null;
+    mergedTrade.mt5CloseDealId = summary.lastExitDeal?.id || trade.mt5CloseDealId || null;
+    mergedTrade.mt5Comment = summary.entryDeals?.[0]?.comment || trade.mt5Comment || null;
+    mergedTrade.brokerSyncedAt = new Date();
+    mergedTrade.brokerSyncSource = source;
+    mergedTrade.comment = buildTradeComment({
+      strategy: mergedTrade.strategy,
+      signal: mergedTrade.type,
+      confidence: mergedTrade.confidence,
+      reason: mergedTrade.reason,
+    }, mergedTrade.mt5Comment || '');
+
+    return mergedTrade;
   }
 
   async reconcileTrade(trade) {
@@ -163,7 +523,7 @@ class TradeHistoryService {
     const changed = this._hasMeaningfulChanges(trade, update);
 
     if (changed) {
-      await tradesDb.update({ _id: trade._id }, { $set: update });
+      await Trade.updateById(trade._id, update);
     }
 
     return {
@@ -180,9 +540,9 @@ class TradeHistoryService {
     };
   }
 
-  async reconcileClosedTrades({ limit = 100, symbol } = {}) {
-    const query = { status: 'CLOSED' };
-    if (symbol) query.symbol = symbol;
+  async syncTradesFromBroker({ mode = 'incremental', limit = 500, symbol, startDate, endDate } = {}) {
+    const normalizedMode = mode === 'full' ? 'full' : 'incremental';
+    const window = await this._resolveSyncWindow({ mode: normalizedMode, symbol, startDate, endDate });
 
     const wasConnected = mt5Service.isConnected();
     if (!wasConnected) {
@@ -190,16 +550,37 @@ class TradeHistoryService {
     }
 
     try {
-      const trades = await tradesDb.find(query).sort({ openedAt: -1 }).limit(limit);
+      const rawDeals = await mt5Service.getDeals(window.start, window.end);
+      const groupedTradeHistory = Array.from(this._groupDealsByTrade(rawDeals).values())
+        .map((deals) => ({
+          deals,
+          summary: mt5Service.summarizePositionDeals(deals),
+        }))
+        .filter(({ summary, deals }) => {
+          const groupSymbol = summary.entryDeals?.[0]?.symbol || deals[0]?.symbol || null;
+          return !symbol || groupSymbol === symbol;
+        })
+        .sort((left, right) => {
+          const leftTime = this._getActivityTime(left.summary, left.deals)?.getTime() || 0;
+          const rightTime = this._getActivityTime(right.summary, right.deals)?.getTime() || 0;
+          return rightTime - leftTime;
+        });
+
+      const limitedGroups = limit > 0 ? groupedTradeHistory.slice(0, limit) : groupedTradeHistory;
       const results = [];
 
-      for (const trade of trades) {
-        results.push(await this.reconcileTrade(trade));
+      for (const tradeGroup of limitedGroups) {
+        results.push(await this._syncBrokerTradeGroup(tradeGroup, normalizedMode));
       }
 
       return {
-        checked: trades.length,
-        updated: results.filter((result) => result.updated).length,
+        mode: normalizedMode,
+        checked: limitedGroups.length,
+        imported: results.filter((result) => result.action === 'imported').length,
+        updated: results.filter((result) => result.action === 'updated').length,
+        skipped: results.filter((result) => result.action === 'skipped').length,
+        windowStart: window.start,
+        windowEnd: window.end,
         results,
       };
     } finally {
@@ -207,6 +588,13 @@ class TradeHistoryService {
         await mt5Service.disconnect().catch(() => {});
       }
     }
+  }
+
+  async reconcileClosedTrades(options = {}) {
+    return await this.syncTradesFromBroker({
+      ...options,
+      mode: options.mode || 'full',
+    });
   }
 }
 

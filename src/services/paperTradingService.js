@@ -9,9 +9,12 @@ const strategyEngine = require('./strategyEngine');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
+const trailingStopService = require('./trailingStopService');
 const TradeLog = require('../models/TradeLog');
 const ExecutionAudit = require('../models/ExecutionAudit');
+const RiskProfile = require('../models/RiskProfile');
 const { paperPositionsDb } = require('../config/db');
+const breakevenService = require('./breakevenService');
 const { getInstrument } = require('../config/instruments');
 const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
@@ -193,15 +196,16 @@ class PaperTradingService {
 
     // Get enabled strategies/symbols
     const strategies = await Strategy.findAll();
-    const enabledSymbols = [];
-    for (const s of strategies) {
-      if (s.enabled && s.symbols) {
-        enabledSymbols.push(...s.symbols);
+    const activeAssignments = strategies.reduce((total, strategy) => {
+      if (!strategy.enabled || !Array.isArray(strategy.symbols)) {
+        return total;
       }
-    }
 
-    if (enabledSymbols.length === 0) {
-      console.log('[PaperTrading] No enabled symbols to analyze');
+      return total + [...new Set(strategy.symbols)].length;
+    }, 0);
+
+    if (activeAssignments === 0) {
+      console.log('[PaperTrading] No enabled strategy assignments to analyze');
       return;
     }
 
@@ -215,8 +219,7 @@ class PaperTradingService {
       // Signal handler — execute paper trade
       async (signal) => {
         await this._executePaperTrade(signal);
-      },
-      enabledSymbols
+      }
     );
   }
 
@@ -311,6 +314,9 @@ class PaperTradingService {
       const entryCommission = Number(result.entryDeal?.commission) || 0;
       const entrySwap = Number(result.entryDeal?.swap) || 0;
       const entryFee = Number(result.entryDeal?.fee) || 0;
+      const activeProfile = await RiskProfile.getActive();
+      const strategyRecord = signal.strategy ? await Strategy.findByName(signal.strategy) : null;
+      const breakevenConfig = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyRecord);
 
       // Save to paper positions DB
       const position = await paperPositionsDb.insert({
@@ -328,6 +334,7 @@ class PaperTradingService {
         confidence: signal.confidence,
         reason: signal.reason,
         atrAtEntry,
+        breakevenConfig,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
@@ -414,6 +421,7 @@ class PaperTradingService {
     this.monitorInterval = setInterval(async () => {
       try {
         await this._syncPaperPositions();
+        await this._runTrailingStops();
       } catch (err) {
         console.error('[PaperTrading] Monitor error:', err.message);
       }
@@ -460,6 +468,42 @@ class PaperTradingService {
     // Broadcast update
     const updatedPositions = await paperPositionsDb.find({});
     websocketService.broadcast('positions', 'paper_positions_sync', updatedPositions);
+  }
+
+  async _runTrailingStops() {
+    if (!mt5Service.isConnected()) return;
+
+    const positions = await paperPositionsDb.find({});
+    if (positions.length === 0) return;
+
+    const updates = await trailingStopService.processPositions(
+      positions,
+      async (symbol) => mt5Service.getPrice(symbol),
+      async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp)
+    );
+
+    if (updates.length === 0) {
+      return;
+    }
+
+    const positionsByMt5Id = new Map(
+      positions
+        .filter((position) => position.mt5PositionId != null)
+        .map((position) => [String(position.mt5PositionId), position])
+    );
+
+    for (const update of updates) {
+      const localPosition = positionsByMt5Id.get(String(update.positionId));
+      if (!localPosition) continue;
+
+      await paperPositionsDb.update(
+        { _id: localPosition._id },
+        { $set: { currentSl: update.newSl } }
+      );
+    }
+
+    const refreshedPositions = await paperPositionsDb.find({});
+    websocketService.broadcast('positions', 'paper_positions_sync', refreshedPositions);
   }
 
   /**

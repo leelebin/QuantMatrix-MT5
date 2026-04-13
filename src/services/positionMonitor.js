@@ -99,28 +99,34 @@ class PositionMonitor {
     const positions = await positionsDb.find({});
     if (positions.length === 0) return;
 
-    await trailingStopService.processPositions(
+    const updates = await trailingStopService.processPositions(
       positions,
       async (symbol) => mt5Service.getPrice(symbol),
       async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp)
     );
 
-    // Update local DB with new SL values
-    const updatedPositions = await positionsDb.find({});
-    for (const pos of updatedPositions) {
-      if (pos.mt5PositionId) {
-        try {
-          const priceData = await mt5Service.getPrice(pos.symbol);
-          const currentPrice = pos.type === 'BUY' ? priceData.bid : priceData.ask;
-          const result = trailingStopService.calculateTrailingStop(pos, currentPrice);
-          if (result.shouldUpdate) {
-            await positionsDb.update({ _id: pos._id }, { $set: { currentSl: result.newSl } });
-          }
-        } catch (err) {
-          // Price fetch may fail for some symbols - continue
-        }
-      }
+    if (updates.length === 0) {
+      return;
     }
+
+    const positionsByMt5Id = new Map(
+      positions
+        .filter((position) => position.mt5PositionId != null)
+        .map((position) => [String(position.mt5PositionId), position])
+    );
+
+    for (const update of updates) {
+      const localPosition = positionsByMt5Id.get(String(update.positionId));
+      if (!localPosition) continue;
+
+      await positionsDb.update(
+        { _id: localPosition._id },
+        { $set: { currentSl: update.newSl } }
+      );
+    }
+
+    const refreshedPositions = await positionsDb.find({});
+    websocketService.broadcast('positions', 'positions_sync', refreshedPositions);
   }
 
   /**

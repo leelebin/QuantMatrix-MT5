@@ -1,6 +1,12 @@
+jest.mock('../src/models/Strategy', () => ({
+  findAll: jest.fn().mockResolvedValue([]),
+}));
+
 const TrendFollowingStrategy = require('../src/strategies/TrendFollowingStrategy');
 const MultiTimeframeStrategy = require('../src/strategies/MultiTimeframeStrategy');
+const MeanReversionStrategy = require('../src/strategies/MeanReversionStrategy');
 const strategyEngine = require('../src/services/strategyEngine');
+const Strategy = require('../src/models/Strategy');
 const { STRATEGY_TYPES } = require('../src/config/instruments');
 
 function makeCandles(values, prefix = '2026-04-12T') {
@@ -18,6 +24,7 @@ describe('lower timeframe entry logic', () => {
     strategyEngine.signals = [];
     strategyEngine.lastEmittedSignals.clear();
     jest.restoreAllMocks();
+    Strategy.findAll.mockResolvedValue([]);
   });
 
   test('TrendFollowing waits for a 15m reclaim before triggering a BUY', () => {
@@ -226,5 +233,104 @@ describe('lower timeframe entry logic', () => {
     await strategyEngine.analyzeAll(getCandlesFn, onSignalFn, ['EURUSD']);
 
     expect(onSignalFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('strategyEngine analyzes multiple assigned strategies on one symbol with shared candle fetches', async () => {
+    Strategy.findAll.mockResolvedValue([
+      {
+        name: STRATEGY_TYPES.TREND_FOLLOWING,
+        enabled: true,
+        symbols: ['EURUSD'],
+        parameters: {},
+      },
+      {
+        name: STRATEGY_TYPES.MEAN_REVERSION,
+        enabled: true,
+        symbols: ['EURUSD'],
+        parameters: {},
+      },
+    ]);
+
+    const trendSpy = jest.spyOn(
+      strategyEngine.strategies[STRATEGY_TYPES.TREND_FOLLOWING],
+      'analyze'
+    ).mockReturnValue({
+      signal: 'BUY',
+      confidence: 0.8,
+      sl: 1.095,
+      tp: 1.11,
+      reason: 'Trend BUY',
+      indicatorsSnapshot: { atr: 0.002 },
+      setupTimeframe: '1h',
+      entryTimeframe: '15m',
+      triggerReason: '15m reclaim confirmed',
+      setupActive: true,
+      setupDirection: 'BUY',
+      status: 'TRIGGERED',
+      setupCandleTime: '2026-04-12T03:00:00.000Z',
+      entryCandleTime: '2026-04-12T04:00:00.000Z',
+    });
+    const meanSpy = jest.spyOn(
+      strategyEngine.strategies[STRATEGY_TYPES.MEAN_REVERSION],
+      'analyze'
+    ).mockReturnValue({
+      signal: 'SELL',
+      confidence: 0.7,
+      sl: 1.12,
+      tp: 1.1,
+      reason: 'Mean reversion SELL',
+      indicatorsSnapshot: { rsi: 68 },
+      status: 'TRIGGERED',
+    });
+
+    const candles = makeCandles(Array.from({ length: 60 }, (_, i) => 1.05 + (i * 0.001)), '2026-04-12T');
+    const entryCandles = makeCandles(Array.from({ length: 60 }, (_, i) => 1.05 + (i * 0.0002)), '2026-04-12T10:');
+    const getCandlesFn = jest.fn(async (_symbol, timeframe) => {
+      if (timeframe === '15m') return entryCandles;
+      return candles;
+    });
+    const onSignalFn = jest.fn();
+
+    await strategyEngine.analyzeAll(getCandlesFn, onSignalFn);
+
+    expect(trendSpy).toHaveBeenCalled();
+    expect(meanSpy).toHaveBeenCalled();
+    expect(getCandlesFn).toHaveBeenCalledTimes(2);
+    expect(getCandlesFn).toHaveBeenCalledWith('EURUSD', '1h', 251);
+    expect(getCandlesFn).toHaveBeenCalledWith('EURUSD', '15m', 251);
+    expect(onSignalFn).toHaveBeenCalledTimes(2);
+
+    const recentSignals = strategyEngine.getRecentSignals('EURUSD', 5);
+    expect(recentSignals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ strategy: STRATEGY_TYPES.TREND_FOLLOWING, signal: 'BUY' }),
+      expect.objectContaining({ strategy: STRATEGY_TYPES.MEAN_REVERSION, signal: 'SELL' }),
+    ]));
+
+    trendSpy.mockRestore();
+    meanSpy.mockRestore();
+  });
+
+  test('strategyEngine skips symbols that have no strategy assignments once DB assignments exist', async () => {
+    Strategy.findAll.mockResolvedValue([
+      {
+        name: STRATEGY_TYPES.TREND_FOLLOWING,
+        enabled: true,
+        symbols: ['GBPUSD'],
+        parameters: {},
+      },
+    ]);
+
+    const trendSpy = jest.spyOn(
+      strategyEngine.strategies[STRATEGY_TYPES.TREND_FOLLOWING],
+      'analyze'
+    );
+    const getCandlesFn = jest.fn();
+
+    await strategyEngine.analyzeAll(getCandlesFn, jest.fn(), ['EURUSD']);
+
+    expect(getCandlesFn).not.toHaveBeenCalled();
+    expect(trendSpy).not.toHaveBeenCalled();
+
+    trendSpy.mockRestore();
   });
 });

@@ -5,8 +5,12 @@
  */
 
 const indicatorService = require('./indicatorService');
-const { instruments, getInstrument } = require('../config/instruments');
+const breakevenService = require('./breakevenService');
+const { getInstrument } = require('../config/instruments');
 const { backtestsDb } = require('../config/db');
+const {
+  resolveStrategyParameters,
+} = require('../config/strategyParameters');
 const TrendFollowingStrategy = require('../strategies/TrendFollowingStrategy');
 const MeanReversionStrategy = require('../strategies/MeanReversionStrategy');
 const MultiTimeframeStrategy = require('../strategies/MultiTimeframeStrategy');
@@ -22,21 +26,83 @@ const STRATEGY_MAP = {
 };
 
 class BacktestEngine {
-  /**
-   * Run a backtest
-   * @param {object} params
-   * @param {string} params.symbol - Trading symbol
-   * @param {string} params.strategyType - Strategy name
-   * @param {string} params.timeframe - Candle timeframe
-   * @param {Array} params.candles - Historical OHLC data
-   * @param {Array} [params.higherTfCandles] - Higher TF candles for multi-timeframe
-   * @param {Array} [params.lowerTfCandles] - Lower TF candles for entry timing
-   * @param {number} [params.initialBalance=10000] - Starting balance
-   * @param {number} [params.spreadPips=0] - Simulated spread in pips (0 = use instrument default)
-   * @param {number} [params.slippagePips=0.5] - Simulated slippage in pips
-   * @returns {object} Backtest result
-   */
-  async run(params) {
+  _createStrategy(strategyType) {
+    const StrategyClass = STRATEGY_MAP[strategyType];
+    if (!StrategyClass) throw new Error(`Unknown strategy: ${strategyType}`);
+    return new StrategyClass();
+  }
+
+  _buildTradingInstrument(instrument, resolvedParams) {
+    return {
+      ...instrument,
+      riskParams: {
+        ...instrument.riskParams,
+        riskPercent: Number(resolvedParams.riskPercent ?? instrument.riskParams.riskPercent),
+        slMultiplier: Number(resolvedParams.slMultiplier ?? instrument.riskParams.slMultiplier),
+        tpMultiplier: Number(resolvedParams.tpMultiplier ?? instrument.riskParams.tpMultiplier),
+      },
+    };
+  }
+
+  _buildIndicators(candles, resolvedParams) {
+    return indicatorService.calculateAll(candles, resolvedParams);
+  }
+
+  _toTimeMs(value) {
+    return value instanceof Date ? value.getTime() : new Date(value).getTime();
+  }
+
+  _sliceIndicatorWindow(fullIndicators, totalCandles, windowStart, windowEnd) {
+    const sliced = {};
+    for (const [key, values] of Object.entries(fullIndicators || {})) {
+      if (!Array.isArray(values)) {
+        sliced[key] = values;
+        continue;
+      }
+
+      const offset = totalCandles - values.length;
+      const sliceStart = Math.max(0, windowStart - offset);
+      const sliceEnd = Math.max(0, windowEnd - offset);
+      sliced[key] = sliceStart < sliceEnd ? values.slice(sliceStart, sliceEnd) : [];
+    }
+    return sliced;
+  }
+
+  _buildHigherTimeframeTrendSeries(higherTfCandles, resolvedParams) {
+    if (!higherTfCandles || higherTfCandles.length === 0) {
+      return null;
+    }
+
+    const trendPeriod = Number(resolvedParams.ema_trend) || 200;
+    const closes = higherTfCandles.map((candle) => candle.close);
+    const ema = indicatorService.ema(closes, trendPeriod);
+
+    return {
+      closes,
+      ema,
+      emaOffset: closes.length - ema.length,
+    };
+  }
+
+  _applyHigherTimeframeTrend(strategy, higherTfCandles, trendSeries, cursor) {
+    if (!higherTfCandles || !trendSeries || !strategy.setHigherTimeframeTrend || cursor < 0) {
+      return;
+    }
+
+    const emaIndex = cursor - trendSeries.emaOffset;
+    if (emaIndex < 0 || emaIndex >= trendSeries.ema.length) {
+      return;
+    }
+
+    const latestEma = trendSeries.ema[emaIndex];
+    const latestPrice = trendSeries.closes[cursor];
+    strategy.setHigherTimeframeTrend(
+      latestPrice > latestEma ? 'BULLISH' : 'BEARISH',
+      { ema200: latestEma, price: latestPrice }
+    );
+  }
+
+  async _runSimulation(params) {
     const {
       symbol,
       strategyType,
@@ -49,117 +115,129 @@ class BacktestEngine {
       slippagePips = 0.5,
       tradeStartTime = null,
       tradeEndTime = null,
+      strategyParams = null,
+      storedStrategyParameters = null,
+      breakevenConfig = null,
     } = params;
 
     const instrument = getInstrument(symbol);
     if (!instrument) throw new Error(`Unknown symbol: ${symbol}`);
 
-    const StrategyClass = STRATEGY_MAP[strategyType];
-    if (!StrategyClass) throw new Error(`Unknown strategy: ${strategyType}`);
-
-    const strategy = new StrategyClass();
+    const resolvedParams = resolveStrategyParameters({
+      strategyType,
+      instrument,
+      storedParameters: storedStrategyParameters,
+      overrides: strategyParams,
+    });
+    const effectiveBreakeven = breakevenConfig
+      ? breakevenService.normalizeBreakevenConfig(breakevenConfig, {
+          partial: false,
+          defaults: breakevenService.DEFAULT_BREAKEVEN_CONFIG,
+          baseConfig: breakevenService.DEFAULT_BREAKEVEN_CONFIG,
+        })
+      : breakevenService.getDefaultBreakevenConfig();
+    const tradingInstrument = this._buildTradingInstrument(instrument, resolvedParams);
+    const strategy = this._createStrategy(strategyType);
     const spread = (spreadPips || instrument.spread) * instrument.pipSize;
     const slippage = slippagePips * instrument.pipSize;
 
-    // Simulation state
     let balance = initialBalance;
     let equity = initialBalance;
     let peakBalance = initialBalance;
     const trades = [];
     const equityCurve = [{ time: tradeStartTime || candles[0]?.time || '', equity: initialBalance }];
     let openPosition = null;
-    const warmupPeriod = 250; // Need enough data for indicators
+    const warmupPeriod = 250;
     const tradeStartMs = tradeStartTime ? new Date(tradeStartTime).getTime() : null;
+    const candleTimes = candles.map((candle) => this._toTimeMs(candle.time));
+    const fullIndicators = this._buildIndicators(candles, resolvedParams);
+    const lowerTfTimes = lowerTfCandles ? lowerTfCandles.map((candle) => this._toTimeMs(candle.time)) : null;
+    const fullLowerIndicators = lowerTfCandles && tradingInstrument.entryTimeframe
+      ? this._buildIndicators(lowerTfCandles, resolvedParams)
+      : null;
+    const higherTfTimes = higherTfCandles ? higherTfCandles.map((candle) => this._toTimeMs(candle.time)) : null;
+    const higherTrendSeries = this._buildHigherTimeframeTrendSeries(higherTfCandles, resolvedParams);
+    let lowerCursor = -1;
+    let higherCursor = -1;
 
     if (!candles || candles.length < warmupPeriod + 2) {
       throw new Error(`Need at least ${warmupPeriod + 2} candles including warmup, got ${candles ? candles.length : 0}`);
     }
 
-    // Process candles sequentially
     for (let i = warmupPeriod; i < candles.length; i++) {
       const currentCandle = candles[i];
+      const currentTimeMs = candleTimes[i];
       const nextCandle = candles[i + 1] || null;
-      const historicalCandles = candles.slice(Math.max(0, i - 250), i + 1);
-      let pendingEntry = null;
-
-      // Calculate indicators
-      const ind = indicatorService.calculateAll(historicalCandles);
+      const historyStart = Math.max(0, i - 250);
+      const historyEnd = i + 1;
+      const historicalCandles = candles.slice(historyStart, historyEnd);
+      const ind = this._sliceIndicatorWindow(fullIndicators, candles.length, historyStart, historyEnd);
       let lowerHistoricalCandles = null;
       let lowerInd = null;
-      if (lowerTfCandles && instrument.entryTimeframe) {
-        lowerHistoricalCandles = lowerTfCandles
-          .filter((c) => new Date(c.time) <= new Date(currentCandle.time))
-          .slice(-251);
-        if (lowerHistoricalCandles.length > 1) {
-          lowerInd = indicatorService.calculateAll(lowerHistoricalCandles);
+      let pendingEntry = null;
+
+      if (lowerTfCandles && tradingInstrument.entryTimeframe) {
+        while (lowerCursor + 1 < lowerTfTimes.length && lowerTfTimes[lowerCursor + 1] <= currentTimeMs) {
+          lowerCursor += 1;
+        }
+
+        if (lowerCursor >= 0) {
+          const lowerStart = Math.max(0, lowerCursor - 250);
+          const lowerEnd = lowerCursor + 1;
+          lowerHistoricalCandles = lowerTfCandles.slice(lowerStart, lowerEnd);
+          lowerInd = this._sliceIndicatorWindow(fullLowerIndicators, lowerTfCandles.length, lowerStart, lowerEnd);
+        }
+
+        if (lowerHistoricalCandles && lowerHistoricalCandles.length > 1) {
+          lowerInd = lowerInd || {};
         }
       }
 
-      // Handle higher TF for multi-timeframe strategy
-      if (strategyType === 'MultiTimeframe' && higherTfCandles) {
-        const htfCloses = higherTfCandles
-          .filter((c) => new Date(c.time) <= new Date(currentCandle.time))
-          .map((c) => c.close);
-        const htfEma200 = indicatorService.ema(htfCloses, 200);
-        if (htfEma200.length > 0) {
-          const latestEma = htfEma200[htfEma200.length - 1];
-          const latestPrice = htfCloses[htfCloses.length - 1];
-          strategy.setHigherTimeframeTrend(
-            latestPrice > latestEma ? 'BULLISH' : 'BEARISH',
-            { ema200: latestEma, price: latestPrice }
-          );
+      if (higherTfCandles && strategy.setHigherTimeframeTrend) {
+        while (higherCursor + 1 < higherTfTimes.length && higherTfTimes[higherCursor + 1] <= currentTimeMs) {
+          higherCursor += 1;
         }
+        this._applyHigherTimeframeTrend(strategy, higherTfCandles, higherTrendSeries, higherCursor);
       }
 
-      // ─── Check existing position for SL/TP hit ───
       if (openPosition) {
         const hit = this._checkSlTp(openPosition, currentCandle);
         if (hit) {
-          const trade = this._closeTrade(openPosition, hit.exitPrice, hit.reason, currentCandle.time, instrument);
+          const trade = this._closeTrade(openPosition, hit.exitPrice, hit.reason, currentCandle.time, tradingInstrument);
           balance += trade.profitLoss;
           trades.push(trade);
           openPosition = null;
 
           if (balance > peakBalance) peakBalance = balance;
           equityCurve.push({ time: currentCandle.time, equity: balance });
-
-          // Daily loss check (simplified)
           continue;
         }
 
-        // Simulate trailing stop
-        const trailingResult = this._simulateTrailingStop(openPosition, currentCandle, instrument);
+        const trailingResult = this._simulateTrailingStop(openPosition, currentCandle, tradingInstrument);
         if (trailingResult.updated) {
           openPosition.currentSl = trailingResult.newSl;
         }
       }
 
-      // ─── Generate new signal if no position ───
-      if (!openPosition && nextCandle && (tradeStartMs === null || new Date(currentCandle.time).getTime() >= tradeStartMs)) {
-        const result = strategy.analyze(historicalCandles, ind, instrument, {
+      if (!openPosition && nextCandle && (tradeStartMs === null || currentTimeMs >= tradeStartMs)) {
+        const result = strategy.analyze(historicalCandles, ind, tradingInstrument, {
           higherTfCandles,
           entryCandles: lowerHistoricalCandles,
           entryIndicators: lowerInd,
+          strategyParams: resolvedParams,
         });
 
         if (result.signal !== 'NONE') {
-          // Simulate entry with spread and slippage
-          let entryPrice;
-          if (result.signal === 'BUY') {
-            entryPrice = nextCandle.open + spread / 2 + slippage;
-          } else {
-            entryPrice = nextCandle.open - spread / 2 - slippage;
-          }
-
-          // Calculate lot size (risk-based)
+          const entryPrice = result.signal === 'BUY'
+            ? nextCandle.open + spread / 2 + slippage
+            : nextCandle.open - spread / 2 - slippage;
           const slDistance = Math.abs(entryPrice - result.sl);
-          const slPips = slDistance / instrument.pipSize;
-          const riskAmount = balance * instrument.riskParams.riskPercent;
-          let lotSize = riskAmount / (slPips * instrument.pipValue);
-          lotSize = Math.max(instrument.minLot, Math.floor(lotSize / instrument.lotStep) * instrument.lotStep);
+          const slPips = slDistance / tradingInstrument.pipSize;
+          const riskAmount = balance * tradingInstrument.riskParams.riskPercent;
+          let lotSize = riskAmount / (slPips * tradingInstrument.pipValue);
+          lotSize = Math.max(tradingInstrument.minLot, Math.floor(lotSize / tradingInstrument.lotStep) * tradingInstrument.lotStep);
           lotSize = Math.min(lotSize, 5.0);
 
-          // Get current ATR for trailing stop
           const currentAtr = ind.atr && ind.atr.length > 0 ? ind.atr[ind.atr.length - 1] : 0;
 
           pendingEntry = {
@@ -172,20 +250,20 @@ class BacktestEngine {
             currentSl: result.sl,
             lotSize,
             atrAtEntry: currentAtr,
+            breakevenConfig: effectiveBreakeven,
             indicatorsSnapshot: result.indicatorsSnapshot,
             reason: result.reason,
           };
         }
       }
 
-      // Update equity curve periodically
-      if ((i % 10 === 0 || i === candles.length - 1) && (tradeStartMs === null || new Date(currentCandle.time).getTime() >= tradeStartMs)) {
+      if ((i % 10 === 0 || i === candles.length - 1) && (tradeStartMs === null || currentTimeMs >= tradeStartMs)) {
         let currentEquity = balance;
         if (openPosition) {
           const priceDiff = openPosition.type === 'BUY'
             ? currentCandle.close - openPosition.entryPrice
             : openPosition.entryPrice - currentCandle.close;
-          currentEquity += priceDiff * openPosition.lotSize * instrument.contractSize;
+          currentEquity += priceDiff * openPosition.lotSize * tradingInstrument.contractSize;
         }
         equity = currentEquity;
         equityCurve.push({ time: currentCandle.time, equity: currentEquity });
@@ -196,20 +274,20 @@ class BacktestEngine {
       }
     }
 
-    // Close any remaining position at last candle
     if (openPosition) {
       const lastCandle = candles[candles.length - 1];
-      const exitPrice = openPosition.type === 'BUY' ? lastCandle.close - spread / 2 : lastCandle.close + spread / 2;
-      const trade = this._closeTrade(openPosition, exitPrice, 'END_OF_DATA', lastCandle.time, instrument);
+      const exitPrice = openPosition.type === 'BUY'
+        ? lastCandle.close - spread / 2
+        : lastCandle.close + spread / 2;
+      const trade = this._closeTrade(openPosition, exitPrice, 'END_OF_DATA', lastCandle.time, tradingInstrument);
       balance += trade.profitLoss;
       trades.push(trade);
     }
 
-    // Generate summary
     const summary = this._generateSummary(trades, initialBalance, balance, peakBalance);
     const monthlyBreakdown = this._generateMonthlyBreakdown(trades);
 
-    const result = {
+    return {
       symbol,
       strategy: strategyType,
       timeframe,
@@ -217,21 +295,41 @@ class BacktestEngine {
         start: tradeStartTime || candles[warmupPeriod]?.time || '',
         end: tradeEndTime || candles[candles.length - 1]?.time || '',
       },
-      parameters: this._getStrategyParams(strategyType, instrument),
+      parameters: resolvedParams,
+      parameterSource: {
+        hasStoredParameters: Boolean(storedStrategyParameters && Object.keys(storedStrategyParameters).length > 0),
+        hasRuntimeOverrides: Boolean(strategyParams && Object.keys(strategyParams).length > 0),
+      },
+      breakevenConfigUsed: effectiveBreakeven,
       summary,
       monthlyBreakdown,
       trades,
       equityCurve,
+      finalBalance: balance,
+      finalEquity: equity,
     };
+  }
 
-    // Save to database
+  /**
+   * Run a backtest
+   */
+  async run(params) {
+    const result = await this._runSimulation(params);
     const saved = await backtestsDb.insert({
       ...result,
+      batchJobId: params.batchJobId || null,
+      isBatchChild: Boolean(params.batchJobId),
       createdAt: new Date(),
     });
     result.backtestId = saved._id;
-
     return result;
+  }
+
+  /**
+   * Run a backtest without persisting the result.
+   */
+  async simulate(params) {
+    return this._runSimulation(params);
   }
 
   /**
@@ -239,7 +337,6 @@ class BacktestEngine {
    */
   _checkSlTp(position, candle) {
     if (position.type === 'BUY') {
-      // Check SL first (worst case)
       if (candle.low <= position.currentSl) {
         return { exitPrice: position.currentSl, reason: 'SL_HIT' };
       }
@@ -261,37 +358,19 @@ class BacktestEngine {
    * Simulate trailing stop within backtest
    */
   _simulateTrailingStop(position, candle, instrument) {
-    const atr = position.atrAtEntry;
-    if (!atr || atr <= 0) return { updated: false };
-
     const currentPrice = position.type === 'BUY' ? candle.high : candle.low;
-    const profitDistance = position.type === 'BUY'
-      ? currentPrice - position.entryPrice
-      : position.entryPrice - currentPrice;
+    const result = breakevenService.calculateBreakevenStop(
+      position,
+      currentPrice,
+      instrument,
+      position.breakevenConfig || null
+    );
 
-    let newSl = position.currentSl;
-
-    if (position.type === 'BUY') {
-      if (profitDistance >= 1.5 * atr) {
-        newSl = currentPrice - atr;
-      } else if (profitDistance >= 1.0 * atr) {
-        newSl = position.entryPrice + (instrument.spread * instrument.pipSize);
-      }
-      if (newSl > position.currentSl) {
-        return { updated: true, newSl };
-      }
-    } else {
-      if (profitDistance >= 1.5 * atr) {
-        newSl = currentPrice + atr;
-      } else if (profitDistance >= 1.0 * atr) {
-        newSl = position.entryPrice - (instrument.spread * instrument.pipSize);
-      }
-      if (newSl < position.currentSl) {
-        return { updated: true, newSl };
-      }
+    if (!result.shouldUpdate) {
+      return { updated: false, phase: result.phase };
     }
 
-    return { updated: false };
+    return { updated: true, newSl: result.newSl, phase: result.phase };
   }
 
   /**
@@ -326,7 +405,7 @@ class BacktestEngine {
   /**
    * Generate summary statistics
    */
-  _generateSummary(trades, initialBalance, finalBalance, peakBalance) {
+  _generateSummary(trades, initialBalance, finalBalance) {
     if (trades.length === 0) {
       return {
         totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0,
@@ -339,45 +418,49 @@ class BacktestEngine {
 
     const winners = trades.filter((t) => t.profitPips > 0);
     const losers = trades.filter((t) => t.profitPips <= 0);
-    const totalProfitPips = winners.reduce((s, t) => s + t.profitPips, 0);
-    const totalLossPips = losers.reduce((s, t) => s + t.profitPips, 0);
-    const totalProfitMoney = winners.reduce((s, t) => s + t.profitLoss, 0);
-    const totalLossMoney = losers.reduce((s, t) => s + Math.abs(t.profitLoss), 0);
+    const totalProfitPips = winners.reduce((sum, trade) => sum + trade.profitPips, 0);
+    const totalLossPips = losers.reduce((sum, trade) => sum + trade.profitPips, 0);
+    const totalProfitMoney = winners.reduce((sum, trade) => sum + trade.profitLoss, 0);
+    const totalLossMoney = losers.reduce((sum, trade) => sum + Math.abs(trade.profitLoss), 0);
 
-    // Consecutive wins/losses
-    let maxConsWins = 0, maxConsLosses = 0, consWins = 0, consLosses = 0;
-    for (const t of trades) {
-      if (t.profitPips > 0) { consWins++; consLosses = 0; }
-      else { consLosses++; consWins = 0; }
+    let maxConsWins = 0;
+    let maxConsLosses = 0;
+    let consWins = 0;
+    let consLosses = 0;
+    for (const trade of trades) {
+      if (trade.profitPips > 0) {
+        consWins++;
+        consLosses = 0;
+      } else {
+        consLosses++;
+        consWins = 0;
+      }
       maxConsWins = Math.max(maxConsWins, consWins);
       maxConsLosses = Math.max(maxConsLosses, consLosses);
     }
 
-    // Max drawdown
     let peak = initialBalance;
     let maxDD = 0;
     let runningBalance = initialBalance;
-    for (const t of trades) {
-      runningBalance += t.profitLoss;
+    for (const trade of trades) {
+      runningBalance += trade.profitLoss;
       if (runningBalance > peak) peak = runningBalance;
       const dd = (peak - runningBalance) / peak;
       if (dd > maxDD) maxDD = dd;
     }
 
-    // Sharpe ratio (annualized, using daily returns approximation)
-    const returns = trades.map((t) => t.profitLoss / initialBalance);
-    const avgReturn = returns.reduce((s, r) => s + r, 0) / returns.length;
+    const returns = trades.map((trade) => trade.profitLoss / initialBalance);
+    const avgReturn = returns.reduce((sum, value) => sum + value, 0) / returns.length;
     const stdReturn = Math.sqrt(
-      returns.reduce((s, r) => s + Math.pow(r - avgReturn, 2), 0) / returns.length
+      returns.reduce((sum, value) => sum + Math.pow(value - avgReturn, 2), 0) / returns.length
     );
     const sharpe = stdReturn > 0 ? (avgReturn / stdReturn) * Math.sqrt(252) : 0;
 
-    // Average holding period
     let totalHours = 0;
     let holdingCount = 0;
-    for (const t of trades) {
-      if (t.entryTime && t.exitTime) {
-        const diff = new Date(t.exitTime) - new Date(t.entryTime);
+    for (const trade of trades) {
+      if (trade.entryTime && trade.exitTime) {
+        const diff = new Date(trade.exitTime) - new Date(trade.entryTime);
         totalHours += diff / (1000 * 60 * 60);
         holdingCount++;
       }
@@ -410,81 +493,48 @@ class BacktestEngine {
   _generateMonthlyBreakdown(trades) {
     const months = {};
 
-    for (const t of trades) {
-      const month = t.exitTime ? t.exitTime.substring(0, 7) : t.entryTime.substring(0, 7);
+    for (const trade of trades) {
+      const month = trade.exitTime ? trade.exitTime.substring(0, 7) : trade.entryTime.substring(0, 7);
       if (!months[month]) {
-        months[month] = { month, trades: 0, wins: 0, netPips: 0, netMoney: 0, maxDD: 0 };
+        months[month] = { month, trades: 0, wins: 0, netPips: 0, netMoney: 0 };
       }
       months[month].trades++;
-      if (t.profitPips > 0) months[month].wins++;
-      months[month].netPips += t.profitPips;
-      months[month].netMoney += t.profitLoss;
+      if (trade.profitPips > 0) months[month].wins++;
+      months[month].netPips += trade.profitPips;
+      months[month].netMoney += trade.profitLoss;
     }
 
-    return Object.values(months).map((m) => ({
-      month: m.month,
-      trades: m.trades,
-      winRate: m.trades > 0 ? parseFloat((m.wins / m.trades).toFixed(2)) : 0,
-      netPips: parseFloat(m.netPips.toFixed(1)),
-      netMoney: parseFloat(m.netMoney.toFixed(2)),
+    return Object.values(months).map((month) => ({
+      month: month.month,
+      trades: month.trades,
+      winRate: month.trades > 0 ? parseFloat((month.wins / month.trades).toFixed(2)) : 0,
+      netPips: parseFloat(month.netPips.toFixed(1)),
+      netMoney: parseFloat(month.netMoney.toFixed(2)),
     })).sort((a, b) => a.month.localeCompare(b.month));
   }
 
-  /**
-   * Get strategy parameters for the report
-   */
-  _getStrategyParams(strategyType, instrument) {
-    const base = {
-      riskPercent: instrument.riskParams.riskPercent,
-      slMultiplier: instrument.riskParams.slMultiplier,
-      tpMultiplier: instrument.riskParams.tpMultiplier,
-    };
-
-    switch (strategyType) {
-      case 'TrendFollowing':
-        return { ...base, ema_fast: 20, ema_slow: 50, rsi_period: 14, atr_period: 14, volatility_threshold: 0.7 };
-      case 'MeanReversion':
-        return { ...base, bb_period: 20, bb_stddev: 2, rsi_period: 14, rsi_oversold: 30, rsi_overbought: 70 };
-      case 'MultiTimeframe':
-        return { ...base, ema_trend: 200, macd_fast: 12, macd_slow: 26, macd_signal: 9, stoch_period: 14, stoch_signal: 3 };
-      case 'Momentum':
-        return { ...base, ema_period: 50, rsi_period: 14, macd_fast: 12, macd_slow: 26, macd_signal: 9, bullish_candle_threshold: 2 };
-      case 'Breakout':
-        return { ...base, lookback_period: 20, atr_period: 14, body_multiplier: 1.5, rsi_period: 14 };
-      default:
-        return base;
-    }
-  }
-
-  /**
-   * Get all backtest results from DB
-   */
-  async getResults(limit = 50) {
-    const results = await backtestsDb.find({}).sort({ createdAt: -1 }).limit(limit);
-    // Return summaries without full trade list for listing
-    return results.map((r) => ({
-      _id: r._id,
-      symbol: r.symbol,
-      strategy: r.strategy,
-      timeframe: r.timeframe,
-      period: r.period,
-      summary: r.summary,
-      createdAt: r.createdAt,
+  async getResults(limit = 50, options = {}) {
+    const query = options.includeBatchChildren ? {} : { isBatchChild: { $ne: true } };
+    const results = await backtestsDb.find(query).sort({ createdAt: -1 }).limit(limit);
+    return results.map((result) => ({
+      _id: result._id,
+      symbol: result.symbol,
+      strategy: result.strategy,
+      timeframe: result.timeframe,
+      period: result.period,
+      parameters: result.parameters,
+      parameterSource: result.parameterSource,
+      summary: result.summary,
+      createdAt: result.createdAt,
     }));
   }
 
-  /**
-   * Get a single backtest result with full details
-   */
   async getResult(id) {
-    return await backtestsDb.findOne({ _id: id });
+    return backtestsDb.findOne({ _id: id });
   }
 
-  /**
-   * Delete a backtest result
-   */
   async deleteResult(id) {
-    return await backtestsDb.remove({ _id: id });
+    return backtestsDb.remove({ _id: id });
   }
 }
 

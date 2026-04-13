@@ -84,6 +84,22 @@ tr:hover{background:var(--bg3)}
 .modal{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:600px;max-width:90vw;max-height:80vh;overflow-y:auto}
 .modal h3{margin-bottom:16px}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.modal-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.modal-meta{font-size:12px;color:var(--text2);line-height:1.6}
+
+/* Batch result groups */
+.batch-symbol-group{background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;overflow:hidden}
+.batch-symbol-group summary{list-style:none;cursor:pointer;padding:16px}
+.batch-symbol-group summary::-webkit-details-marker{display:none}
+.batch-symbol-group[open] summary{border-bottom:1px solid var(--border)}
+.batch-symbol-summary{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.batch-symbol-title{font-size:18px;font-weight:700;color:var(--text)}
+.batch-symbol-meta{font-size:12px;color:var(--text2);margin-top:6px}
+.batch-chip-list{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.batch-chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);color:var(--blue);font-size:12px;font-weight:600}
+.batch-group-table{padding:0 16px 16px}
+.batch-table-note{font-size:11px;color:var(--text2);margin-top:6px}
+.batch-results-pagination{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap}
 
 /* Equity curve canvas */
 .equity-canvas{width:100%;height:200px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
@@ -205,6 +221,8 @@ tr:hover{background:var(--bg3)}
         <tr><td style="color:var(--text2)">Risk Profile</td><td id="dRiskProfile">--</td></tr>
         <tr><td style="color:var(--text2)">Trading Loop</td><td id="dTradingLoop">--</td></tr>
         <tr><td style="color:var(--text2)">Position Monitor</td><td id="dMonitor">--</td></tr>
+        <tr><td style="color:var(--text2)">Active Assignments</td><td id="dActiveAssignments">--</td></tr>
+        <tr><td style="color:var(--text2)">Active Symbols</td><td id="dActiveSymbols">--</td></tr>
         <tr><td style="color:var(--text2)">Daily Loss</td><td id="dDailyLoss">--</td></tr>
         <tr><td style="color:var(--text2)">Max Drawdown</td><td id="dDrawdown">--</td></tr>
         <tr><td style="color:var(--text2)">WS Clients</td><td id="dWsClients">0</td></tr>
@@ -242,14 +260,58 @@ tr:hover{background:var(--bg3)}
     <div class="card stat-card"><div class="stat-label">Total Profit</div><div class="stat-value" id="tsTotalProfit">--</div></div>
     <div class="card stat-card"><div class="stat-label">Avg Profit</div><div class="stat-value" id="tsAvgProfit">--</div></div>
   </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">Trade Filters</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="resetTradeFilters()">Reset</button>
+        <button class="btn-primary btn-sm" onclick="applyTradeFilters()">Apply</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Symbol</label>
+        <select id="tradeFilterSymbol"></select>
+      </div>
+      <div class="form-group">
+        <label>Strategy</label>
+        <select id="tradeFilterStrategy">
+          <option value="">All Strategies</option>
+          <option value="TrendFollowing">Trend Following</option>
+          <option value="MeanReversion">Mean Reversion</option>
+          <option value="Momentum">Momentum</option>
+          <option value="Breakout">Breakout</option>
+          <option value="MultiTimeframe">Multi-Timeframe</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="tradeFilterStatus">
+          <option value="">All Statuses</option>
+          <option value="CLOSED">Closed</option>
+          <option value="OPEN">Open</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" id="tradeFilterStartDate">
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input type="date" id="tradeFilterEndDate">
+      </div>
+    </div>
+  </div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Trade History</span>
       <div style="display:flex;gap:8px">
-        <button class="btn-outline btn-sm" onclick="reconcileTrades()">Sync With MT5</button>
-        <button class="btn-outline btn-sm" onclick="loadTrades()">Refresh</button>
+        <button class="btn-outline btn-sm" onclick="downloadTradesCsv()">Export CSV</button>
+        <button class="btn-outline btn-sm" onclick="reconcileTrades()" id="tradeSyncBtn">Sync With MT5</button>
+        <button class="btn-outline btn-sm" onclick="refreshTradesView({ mode: 'incremental' })" id="tradeRefreshBtn">Refresh</button>
       </div>
     </div>
+    <div id="tradeActionStatus" style="font-size:12px;color:var(--text2);margin-bottom:12px">Trade history is filtered by the date range above. Refresh syncs recent MT5 changes; Sync With MT5 runs a full broker history scan.</div>
     <div id="tradesTable">
       <div class="empty">No trades yet</div>
     </div>
@@ -267,6 +329,18 @@ tr:hover{background:var(--bg3)}
 
 <!-- Strategies Page -->
 <div class="page" id="page-strategies">
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">Symbol Assignments</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="resetStrategyAssignments()">Reset</button>
+        <button class="btn-primary btn-sm" onclick="saveStrategyAssignments()">Save Assignments</button>
+      </div>
+    </div>
+    <div id="strategyAssignments">
+      <div class="empty">Loading assignments...</div>
+    </div>
+  </div>
   <div class="card">
     <div class="card-header">
       <span class="card-title">Trading Strategies</span>
@@ -280,17 +354,137 @@ tr:hover{background:var(--bg3)}
 
 <!-- Backtest Page -->
 <div class="page" id="page-backtest">
-  <div class="grid grid-2">
-    <div class="card">
-      <div class="card-header"><span class="card-title">Run Backtest</span></div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Symbol</label>
-          <select id="btSymbol"></select>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">Backtest Mode</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary btn-sm" id="btModeSingleBtn" onclick="switchBacktestMode('single')">Single</button>
+        <button class="btn-outline btn-sm" id="btModeBatchBtn" onclick="switchBacktestMode('batch')">Batch</button>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text2)">
+      `Single` 保留单策略单品种回测，`Batch` 会对全部已配置品种和全部策略做全量独立回测，并生成完整汇总与调参报告。
+    </div>
+  </div>
+
+  <div id="btSingleWorkspace">
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Run Backtest</span></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Symbol</label>
+            <select id="btSymbol"></select>
+          </div>
+          <div class="form-group">
+            <label>Strategy</label>
+            <select id="btStrategy" onchange="loadBacktestParams()">
+              <option value="TrendFollowing">Trend Following</option>
+              <option value="MeanReversion">Mean Reversion</option>
+              <option value="Momentum">Momentum</option>
+              <option value="Breakout">Breakout</option>
+              <option value="MultiTimeframe">Multi-Timeframe</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Timeframe</label>
+            <select id="btTimeframe">
+              <option value="">Use Symbol Default</option>
+              <option value="15m">15m</option>
+              <option value="1h">1h</option>
+              <option value="4h">4h</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="btStartDate">
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="btEndDate">
+          </div>
         </div>
         <div class="form-group">
+          <label>Initial Balance (USD)</label>
+          <input type="number" id="btBalance" value="10000">
+        </div>
+        <div class="card-header" style="margin-top:12px"><span class="card-title">Strategy Parameters</span></div>
+        <div id="btParams"><div class="empty">Loading parameter inputs...</div></div>
+        <button class="btn-primary" onclick="runBacktest()" id="btRunBtn">Run Backtest</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Result</span></div>
+        <div id="btResult"><div class="empty">Run a backtest to see results</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <span class="card-title">Equity Curve</span>
+      </div>
+      <canvas class="equity-canvas" id="equityCanvas"></canvas>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><span class="card-title">Backtest History</span></div>
+      <div id="btHistory"><div class="empty">No previous backtests</div></div>
+    </div>
+  </div>
+
+  <div id="btBatchWorkspace" style="display:none">
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Run Batch Backtest</span></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="btBatchStartDate">
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="btBatchEndDate">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Initial Balance (USD)</label>
+            <input type="number" id="btBatchBalance" value="10000">
+          </div>
+          <div class="form-group">
+            <label>Timeframe Mode</label>
+            <select id="btBatchTimeframeMode">
+              <option value="strategy_default">Use Strategy Default</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+          <button class="btn-primary" onclick="runBatchBacktest()" id="btBatchRunBtn">Run Batch Backtest</button>
+          <button class="btn-outline" onclick="loadBatchJobHistory()">Refresh History</button>
+        </div>
+        <div id="btBatchProgress" style="display:none;margin-top:16px">
+          <div class="progress-bar"><div class="progress-fill" id="btBatchProgressFill" style="width:0%"></div></div>
+          <div id="btBatchProgressText" style="font-size:12px;color:var(--text2);margin-top:8px">0/0 (0%)</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Job Overview</span></div>
+        <div id="btBatchOverview"><div class="empty">Run a batch job to see overview data</div></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <span class="card-title">Result Filters</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn-outline btn-sm" onclick="resetBatchResultFilters()">Reset</button>
+          <button class="btn-primary btn-sm" onclick="loadBatchJobResults(activeBatchJobId, 1)">Apply</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
           <label>Strategy</label>
-          <select id="btStrategy">
+          <select id="btBatchFilterStrategy">
+            <option value="">All Strategies</option>
             <option value="TrendFollowing">Trend Following</option>
             <option value="MeanReversion">Mean Reversion</option>
             <option value="Momentum">Momentum</option>
@@ -298,37 +492,79 @@ tr:hover{background:var(--bg3)}
             <option value="MultiTimeframe">Multi-Timeframe</option>
           </select>
         </div>
-      </div>
-      <div class="form-row">
         <div class="form-group">
-          <label>Start Date</label>
-          <input type="date" id="btStartDate">
+          <label>Symbol</label>
+          <select id="btBatchFilterSymbol">
+            <option value="">All Symbols</option>
+          </select>
         </div>
         <div class="form-group">
-          <label>End Date</label>
-          <input type="date" id="btEndDate">
+          <label>Status</label>
+          <select id="btBatchFilterStatus">
+            <option value="">All Statuses</option>
+            <option value="completed">Completed</option>
+            <option value="no_trades">No Trades</option>
+            <option value="insufficient_data">Insufficient Data</option>
+            <option value="error">Error</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Trades &gt;=</label>
+          <input type="number" id="btBatchFilterMinTrades" min="0" value="0">
         </div>
       </div>
-      <div class="form-group">
-        <label>Initial Balance (USD)</label>
-        <input type="number" id="btBalance" value="10000">
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><span class="card-title">All Results</span></div>
+      <div id="btBatchResults"><div class="empty">No batch results yet</div></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:16px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">By Strategy</span></div>
+        <div id="btBatchStrategyAgg"><div class="empty">No strategy summary yet</div></div>
       </div>
-      <button class="btn-primary" onclick="runBacktest()" id="btRunBtn">Run Backtest</button>
+      <div class="card">
+        <div class="card-header"><span class="card-title">By Symbol</span></div>
+        <div id="btBatchSymbolAgg"><div class="empty">No symbol summary yet</div></div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-header"><span class="card-title">Result</span></div>
-      <div id="btResult"><div class="empty">Run a backtest to see results</div></div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <span class="card-title">Tuning Report</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-outline btn-sm" onclick="copyBatchReport('text')">Copy Text</button>
+          <button class="btn-outline btn-sm" onclick="copyBatchReport('markdown')">Copy Markdown</button>
+          <button class="btn-outline btn-sm" onclick="downloadBatchReport('txt')">Download TXT</button>
+          <button class="btn-outline btn-sm" onclick="downloadBatchReport('md')">Download MD</button>
+        </div>
+      </div>
+      <div id="btBatchReport"><div class="empty">No report yet</div></div>
     </div>
-  </div>
-  <div class="card" style="margin-top:16px">
-    <div class="card-header">
-      <span class="card-title">Equity Curve</span>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><span class="card-title">Batch History</span></div>
+      <div id="btBatchHistory"><div class="empty">No batch jobs yet</div></div>
     </div>
-    <canvas class="equity-canvas" id="equityCanvas"></canvas>
-  </div>
-  <div class="card" style="margin-top:16px">
-    <div class="card-header"><span class="card-title">Backtest History</span></div>
-    <div id="btHistory"><div class="empty">No previous backtests</div></div>
+</div>
+</div>
+
+<div class="modal-overlay" id="btBatchChildModal" onclick="handleBatchChildModalBackdrop(event)">
+  <div class="modal" style="width:960px;max-width:95vw">
+    <div class="modal-header">
+      <div>
+        <h3 id="btBatchChildModalTitle">Child Backtest Detail</h3>
+        <div class="modal-meta" id="btBatchChildModalMeta">Select a completed child backtest to inspect its full result.</div>
+      </div>
+      <button class="btn-outline btn-sm" onclick="closeBatchChildModal()">Close</button>
+    </div>
+    <div id="btBatchChildModalBody" style="margin-top:16px"><div class="empty">Waiting for child backtest detail</div></div>
+    <canvas class="equity-canvas" id="btBatchChildModalCanvas" style="margin-top:16px"></canvas>
+    <div class="modal-actions">
+      <button class="btn-outline btn-sm" onclick="closeBatchChildModal()">Close</button>
+    </div>
   </div>
 </div>
 
@@ -351,6 +587,25 @@ tr:hover{background:var(--bg3)}
             <option value="Breakout">Breakout</option>
             <option value="MultiTimeframe">Multi-Timeframe</option>
           </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Timeframe</label>
+          <select id="optTimeframe">
+            <option value="">Use Symbol Default</option>
+            <option value="15m">15m</option>
+            <option value="1h">1h</option>
+            <option value="4h">4h</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Start Date</label>
+          <input type="date" id="optStartDate">
+        </div>
+        <div class="form-group">
+          <label>End Date</label>
+          <input type="date" id="optEndDate">
         </div>
       </div>
       <div class="form-group">
@@ -440,6 +695,46 @@ tr:hover{background:var(--bg3)}
             </label>
           </div>
         </div>
+        <div class="card-header" style="padding:0;margin:16px 0 12px"><span class="card-title">Breakeven Management</span></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Enable Breakeven</label>
+            <label class="toggle" style="margin-top:8px">
+              <input type="checkbox" id="riskBeEnabled">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label>Include Spread Compensation</label>
+            <label class="toggle" style="margin-top:8px">
+              <input type="checkbox" id="riskBeIncludeSpreadCompensation">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>BE Trigger (ATR)</label>
+            <input type="number" id="riskBeTriggerAtrMultiple" min="0.1" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Extra Buffer (pips)</label>
+            <input type="number" id="riskBeExtraBufferPips" min="0" step="0.1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Trail Start (ATR)</label>
+            <input type="number" id="riskBeTrailStartAtrMultiple" min="0.1" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Trail Distance (ATR)</label>
+            <input type="number" id="riskBeTrailDistanceAtrMultiple" min="0.1" step="0.1">
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-top:8px">
+          Trigger and trailing thresholds are measured in ATR multiples. Extra buffer is applied in pips after spread compensation.
+        </div>
         <div class="modal-actions" style="justify-content:flex-start;margin-top:8px">
           <button class="btn-primary btn-sm" onclick="saveRiskProfile()" id="riskSaveBtn">Create Profile</button>
           <button class="btn-outline btn-sm" onclick="resetRiskProfileForm()">Reset</button>
@@ -470,15 +765,30 @@ let wsReconnectTimer = null;
 let wsPingInterval = null;
 let wsSubscriptions = ['positions','trades','signals','account','status','notifications'];
 const wsLogEntries = [];
+let strategyConfigs = [];
+let strategyAssignmentsState = null;
+let strategyAssignmentsDraft = {};
+let availableSymbols = [];
+let lastOptimizerResult = null;
+let backtestMode = 'single';
+let activeBatchJobId = null;
+let activeBatchReport = null;
+let activeBatchResultPage = 1;
+let activeBatchResultItemsById = {};
+let batchJobPollTimer = null;
 let riskSettingsState = { profiles: [], activeProfile: null, activeProfileId: null };
 let editingRiskProfileId = null;
-
-// ─── Symbols list ───
-const SYMBOLS = ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCHF','USDCAD','NZDUSD','EURJPY','GBPJPY','EURGBP','AUDNZD','XAUUSD','XAGUSD','US30','SPX500','NAS100','XTIUSD','XBRUSD'];
+const DEFAULT_BREAKEVEN = {
+  enabled: true,
+  triggerAtrMultiple: 0.8,
+  includeSpreadCompensation: true,
+  extraBufferPips: 0,
+  trailStartAtrMultiple: 1.5,
+  trailDistanceAtrMultiple: 1.0,
+};
 
 // ─── Init ───
 document.addEventListener('DOMContentLoaded', () => {
-  populateSymbolSelects();
   setDefaultDates();
   setupNav();
   if (token) {
@@ -487,18 +797,62 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+function setAvailableSymbols(symbols) {
+  availableSymbols = Array.isArray(symbols) ? symbols.slice() : [];
+  populateSymbolSelects();
+}
+
 function populateSymbolSelects() {
-  ['btSymbol','optSymbol'].forEach(id => {
+  ['btSymbol','optSymbol','btBatchFilterSymbol'].forEach(id => {
     const sel = document.getElementById(id);
-    SYMBOLS.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+    if (!sel) return;
+    const currentValue = sel.value;
+    sel.innerHTML = '';
+    if (id === 'btBatchFilterSymbol') {
+      const allOption = document.createElement('option');
+      allOption.value = '';
+      allOption.textContent = 'All Symbols';
+      sel.appendChild(allOption);
+    }
+    availableSymbols.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s;
+      o.textContent = s;
+      sel.appendChild(o);
+    });
+    if (availableSymbols.includes(currentValue)) {
+      sel.value = currentValue;
+    }
   });
+
+  const tradeFilterSymbol = document.getElementById('tradeFilterSymbol');
+  if (tradeFilterSymbol) {
+    const currentValue = tradeFilterSymbol.value;
+    tradeFilterSymbol.innerHTML = '<option value="">All Symbols</option>';
+    availableSymbols.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s;
+      o.textContent = s;
+      tradeFilterSymbol.appendChild(o);
+    });
+    if (currentValue === '' || availableSymbols.includes(currentValue)) {
+      tradeFilterSymbol.value = currentValue;
+    }
+  }
 }
 
 function setDefaultDates() {
   const now = new Date();
   const y1 = new Date(now.getTime() - 365*24*60*60*1000);
-  document.getElementById('btEndDate').value = now.toISOString().split('T')[0];
-  document.getElementById('btStartDate').value = y1.toISOString().split('T')[0];
+  document.getElementById('btEndDate').value = toInputDateValue(now);
+  document.getElementById('btStartDate').value = toInputDateValue(y1);
+  if (document.getElementById('btBatchEndDate')) document.getElementById('btBatchEndDate').value = toInputDateValue(now);
+  if (document.getElementById('btBatchStartDate')) document.getElementById('btBatchStartDate').value = toInputDateValue(y1);
+  if (document.getElementById('optEndDate')) document.getElementById('optEndDate').value = toInputDateValue(now);
+  if (document.getElementById('optStartDate')) document.getElementById('optStartDate').value = toInputDateValue(y1);
+  const tradeStart = new Date(now.getTime() - 90*24*60*60*1000);
+  if (document.getElementById('tradeFilterStartDate')) document.getElementById('tradeFilterStartDate').value = toInputDateValue(tradeStart);
+  if (document.getElementById('tradeFilterEndDate')) document.getElementById('tradeFilterEndDate').value = toInputDateValue(now);
 }
 
 function setupNav() {
@@ -515,9 +869,17 @@ function setupNav() {
 
 function onPageSwitch(page) {
   if (page === 'positions') loadPositions();
-  else if (page === 'trades') { loadTrades(); loadTradeStats(); loadExecutionAudits(); }
+  else if (page === 'trades') { refreshTradesView({ mode: 'incremental', silent: true }); }
   else if (page === 'strategies') loadStrategies();
-  else if (page === 'backtest') loadBacktestHistory();
+  else if (page === 'backtest') {
+    switchBacktestMode(backtestMode);
+    loadBacktestHistory();
+    loadBacktestParams();
+    loadBatchJobHistory();
+    if (activeBatchJobId) {
+      loadBatchJob(activeBatchJobId);
+    }
+  }
   else if (page === 'optimizer') loadOptRanges();
   else if (page === 'settings') { loadNotifyStatus(); loadAccountInfo(); loadRiskSettings(); }
   else if (page === 'dashboard') loadDashboard();
@@ -612,7 +974,70 @@ async function tryRefreshToken() {
 
 function initApp() {
   connectWebSocket();
-  loadDashboard();
+  fetchStrategyAssignments().then(() => {
+    loadDashboard();
+    return fetchStrategyConfigs();
+  }).then(() => {
+    loadBacktestParams();
+    loadOptRanges();
+  }).catch(() => {});
+}
+
+async function fetchStrategyConfigs(force=false) {
+  if (!force && strategyConfigs.length > 0) return strategyConfigs;
+  const r = await api('/api/strategies');
+  if (r.success && Array.isArray(r.data)) {
+    strategyConfigs = r.data;
+  }
+  return strategyConfigs;
+}
+
+async function fetchStrategyAssignments(force=false) {
+  if (!force && strategyAssignmentsState) return strategyAssignmentsState;
+  const r = await api('/api/strategies/assignments');
+  if (r.success && r.data) {
+    strategyAssignmentsState = r.data;
+    strategyAssignmentsDraft = JSON.parse(JSON.stringify(r.data.assignmentsBySymbol || {}));
+    setAvailableSymbols(r.data.symbols || []);
+  }
+  return strategyAssignmentsState;
+}
+
+function getStrategyConfigByName(name) {
+  return strategyConfigs.find((strategy) => strategy.name === name) || null;
+}
+
+function getStrategyConfigById(id) {
+  return strategyConfigs.find((strategy) => strategy._id === id) || null;
+}
+
+function renderParameterInputs(containerId, parameters, definitions, prefix) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (!definitions || definitions.length === 0) {
+    container.innerHTML = '<div class="empty">No editable parameters for this strategy</div>';
+    return;
+  }
+
+  let html = '';
+  definitions.forEach((definition) => {
+    const value = parameters && parameters[definition.key] != null ? parameters[definition.key] : definition.defaultValue;
+    html += '<div class="form-row" style="margin-bottom:8px">';
+    html += '<div class="form-group"><label>' + definition.label + '</label></div>';
+    html += '<div class="form-group"><input type="number" step="any" value="' + value + '" id="' + prefix + '_' + definition.key + '"></div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function collectParameterInputs(prefix) {
+  const parameters = {};
+  document.querySelectorAll('[id^="' + prefix + '_"]').forEach((input) => {
+    const key = input.id.slice((prefix + '_').length);
+    const value = parseFloat(input.value);
+    if (!Number.isNaN(value)) parameters[key] = value;
+  });
+  return parameters;
 }
 
 // ─── WebSocket with heartbeat, auto-reconnect, re-subscribe, logging ───
@@ -686,7 +1111,7 @@ function handleWsMessage(msg) {
     case 'trade_closed':
       const pl = msg.data.profitLoss;
       wsLog(pl >= 0 ? 'success' : 'error', 'Trade closed: ' + msg.data.symbol + ' P/L: ' + (pl>=0?'+':'') + pl.toFixed(2));
-      loadPositions(); loadTrades(); loadTradeStats(); loadDashboard();
+      loadPositions(); refreshTradesView({ mode: null, silent: true }); loadDashboard();
       break;
     case 'positions_sync':
       if (document.getElementById('page-positions').classList.contains('active')) renderPositions(msg.data);
@@ -706,6 +1131,13 @@ function handleWsMessage(msg) {
       wsLog('info', 'Execution audit: ' + (msg.data.stage || 'execution') + ' - ' + msg.data.message);
       if (document.getElementById('page-trades').classList.contains('active')) loadExecutionAudits();
       break;
+    case 'optimizer_progress':
+      if (msg.data) {
+        document.getElementById('optProgress').style.display = 'block';
+        document.getElementById('optProgressFill').style.width = msg.data.percent + '%';
+        document.getElementById('optProgressText').textContent = msg.data.current + '/' + msg.data.total + ' (' + msg.data.percent + '%)';
+      }
+      break;
     case 'optimizer_complete':
       wsLog('success', 'Optimizer complete: ' + msg.data.validResults + ' valid results');
       renderOptResult(msg.data);
@@ -716,6 +1148,27 @@ function handleWsMessage(msg) {
       wsLog('error', 'Optimizer error: ' + msg.data.error);
       document.getElementById('optProgress').style.display = 'none';
       document.getElementById('optRunBtn').disabled = false;
+      break;
+    case 'batch_backtest_progress':
+      if (msg.data) {
+        activeBatchJobId = msg.data.jobId || activeBatchJobId;
+        renderBatchProgress(msg.data.progress || {});
+        if (msg.data.latestResult) {
+          wsLog('info', 'Batch backtest: ' + msg.data.latestResult.strategy + ' @ ' + msg.data.latestResult.symbol + ' -> ' + msg.data.latestResult.status);
+        }
+      }
+      break;
+    case 'batch_backtest_complete':
+      wsLog('success', 'Batch backtest complete: ' + msg.data.jobId);
+      document.getElementById('btBatchRunBtn').disabled = false;
+      loadBatchJob(msg.data.jobId);
+      loadBatchJobHistory();
+      break;
+    case 'batch_backtest_error':
+      wsLog('error', 'Batch backtest error: ' + msg.data.error);
+      document.getElementById('btBatchRunBtn').disabled = false;
+      document.getElementById('btBatchProgress').style.display = 'none';
+      if (msg.data.jobId) activeBatchJobId = msg.data.jobId;
       break;
     default:
       if (msg.topic === 'signals') wsLog('info', 'Signal: ' + JSON.stringify(msg.data).substring(0, 80));
@@ -759,6 +1212,8 @@ async function loadDashboard() {
       : '--';
     document.getElementById('dTradingLoop').textContent = d.tradingLoopActive ? 'Active' : 'Stopped';
     document.getElementById('dMonitor').textContent = d.monitor.running ? 'Running' : 'Stopped';
+    document.getElementById('dActiveAssignments').textContent = d.activeAssignments != null ? d.activeAssignments : '--';
+    document.getElementById('dActiveSymbols').textContent = d.activeSymbols != null ? d.activeSymbols : '--';
     document.getElementById('tradingToggle').textContent = d.tradingEnabled ? 'Stop Trading' : 'Start Trading';
     document.getElementById('tradingToggle').className = d.tradingEnabled ? 'btn-danger btn-sm' : 'btn-success btn-sm';
 
@@ -830,12 +1285,123 @@ async function closePosition(id) {
 }
 
 // ─── Trades ───
+function getTradeFilters() {
+  return {
+    symbol: document.getElementById('tradeFilterSymbol')?.value || '',
+    strategy: document.getElementById('tradeFilterStrategy')?.value || '',
+    status: document.getElementById('tradeFilterStatus')?.value || '',
+    startDate: document.getElementById('tradeFilterStartDate')?.value || '',
+    endDate: document.getElementById('tradeFilterEndDate')?.value || '',
+  };
+}
+
+function buildTradeQueryString(filters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value != null && value !== '') params.set(key, value);
+  });
+  return params.toString();
+}
+
+async function applyTradeFilters() {
+  await refreshTradesView({ mode: null, silent: true });
+}
+
+function resetTradeFilters() {
+  document.getElementById('tradeFilterSymbol').value = '';
+  document.getElementById('tradeFilterStrategy').value = '';
+  document.getElementById('tradeFilterStatus').value = '';
+  setDefaultDates();
+  refreshTradesView({ mode: null, silent: true });
+}
+
+function setTradeActionStatus(message, color = 'var(--text2)') {
+  const el = document.getElementById('tradeActionStatus');
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = color;
+}
+
+function setTradeButtonsBusy(mode = null) {
+  const refreshBtn = document.getElementById('tradeRefreshBtn');
+  const syncBtn = document.getElementById('tradeSyncBtn');
+  if (!refreshBtn || !syncBtn) return;
+
+  const busy = Boolean(mode);
+  refreshBtn.disabled = busy;
+  syncBtn.disabled = busy;
+  refreshBtn.textContent = mode === 'incremental' ? 'Refreshing...' : 'Refresh';
+  syncBtn.textContent = mode === 'full' ? 'Syncing...' : 'Sync With MT5';
+}
+
+async function refreshTradesView({ mode = null, silent = false } = {}) {
+  const syncMode = mode === 'full' ? 'full' : (mode === 'incremental' ? 'incremental' : null);
+  const statusMessage = syncMode === 'full'
+    ? 'Running a full MT5 history sync...'
+    : (syncMode === 'incremental'
+      ? 'Syncing recent MT5 trade changes...'
+      : 'Refreshing trades, stats, and execution audit...');
+
+  setTradeButtonsBusy(syncMode || 'incremental');
+  setTradeActionStatus(statusMessage, 'var(--text2)');
+
+  let syncResult = null;
+  if (syncMode) {
+    try {
+      const filters = getTradeFilters();
+      syncResult = await api('/api/trades/reconcile', 'POST', {
+        mode: syncMode,
+        limit: syncMode === 'full' ? 0 : 500,
+        symbol: filters.symbol || undefined,
+      });
+      if (!syncResult.success) {
+        throw new Error(syncResult.message || 'Failed to sync trade history with MT5');
+      }
+      wsLog('success', syncResult.message || 'Trade history synchronized with MT5');
+    } catch (e) {
+      wsLog('error', 'Trade sync failed: ' + e.message);
+      setTradeActionStatus('Trade sync failed: ' + e.message, 'var(--red)');
+      setTradeButtonsBusy(null);
+      if (!silent) alert(e.message);
+      return false;
+    }
+  }
+
+  const [tradesOk, statsOk, auditsOk] = await Promise.all([
+    loadTrades(),
+    loadTradeStats(),
+    loadExecutionAudits(),
+  ]);
+
+  if (tradesOk && statsOk && auditsOk) {
+    if (!silent) {
+      const successMessage = syncResult?.message
+        || (syncMode === 'incremental'
+          ? 'Trade history refreshed from MT5.'
+          : (syncMode === 'full'
+            ? 'Trade history fully synchronized with MT5.'
+            : 'Trade history refreshed.'));
+      setTradeActionStatus(successMessage, 'var(--green)');
+    }
+  } else {
+    const partialMessage = syncResult?.message
+      ? syncResult.message + ' Some panels could not be refreshed afterward.'
+      : 'Some trade data could not be loaded. Check the panels below for details.';
+    setTradeActionStatus(partialMessage, 'var(--red)');
+  }
+
+  setTradeButtonsBusy(null);
+  return tradesOk && statsOk && auditsOk;
+}
+
 async function loadTrades() {
   try {
-    const r = await api('/api/trades?limit=50');
-    if (!r.success) return;
+    const filters = getTradeFilters();
+    const query = buildTradeQueryString({ ...filters, limit: 200 });
+    const r = await api('/api/trades?' + query);
+    if (!r.success) throw new Error(r.message || 'Failed to load trade history');
     const el = document.getElementById('tradesTable');
-    if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No trades yet</div>'; return; }
+    if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No trades yet</div>'; return true; }
     let html = '<table><tr><th>MT5 Open</th><th>MT5 Close</th><th>Symbol</th><th>Type</th><th>Strategy</th><th>Comment</th><th>Broker Entry</th><th>Broker Exit</th><th>Lot</th><th>Broker Costs</th><th>P/L ($)</th><th>Pips</th><th>Reason</th><th>Broker Ref</th></tr>';
     r.data.forEach(t => {
       const pl = t.profitLoss || 0;
@@ -852,19 +1418,62 @@ async function loadTrades() {
     });
     html += '</table>';
     el.innerHTML = html;
-  } catch (e) {}
+    return true;
+  } catch (e) {
+    document.getElementById('tradesTable').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>';
+    return false;
+  }
 }
 
 async function reconcileTrades() {
   try {
-    wsLog('info', 'Reconciling trade history with MT5...');
-    const r = await api('/api/trades/reconcile', 'POST', { limit: 100 });
-    if (!r.success) throw new Error(r.message || 'Failed to reconcile trade history');
-    wsLog('success', r.message || 'Trade history reconciled with MT5');
-    await loadTrades();
-    await loadTradeStats();
+    wsLog('info', 'Running full MT5 trade history sync...');
+    await refreshTradesView({ mode: 'full' });
   } catch (e) {
-    wsLog('error', 'Trade reconciliation failed: ' + e.message);
+    wsLog('error', 'Full trade synchronization failed: ' + e.message);
+  }
+}
+
+async function downloadTradesCsv() {
+  try {
+    const filters = getTradeFilters();
+    const query = buildTradeQueryString(filters);
+    const res = await fetch(API + '/api/trades/export.csv' + (query ? '?' + query : ''), {
+      headers: {
+        Authorization: 'Bearer ' + token,
+      },
+    });
+
+    if (res.status === 401) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) return downloadTradesCsv();
+      doLogout();
+      throw new Error('Session expired');
+    }
+
+    if (!res.ok) {
+      let message = 'Failed to export CSV';
+      try {
+        const data = await res.json();
+        message = data.message || message;
+      } catch (e) {}
+      throw new Error(message);
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+    a.href = url;
+    a.download = match ? match[1] : 'quantmatrix-trades.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    wsLog('success', 'Trade CSV exported');
+  } catch (e) {
+    wsLog('error', 'Trade CSV export failed: ' + e.message);
     alert(e.message);
   }
 }
@@ -872,11 +1481,11 @@ async function reconcileTrades() {
 async function loadExecutionAudits() {
   try {
     const r = await api('/api/trades/execution-audits?limit=30');
-    if (!r.success) return;
+    if (!r.success) throw new Error(r.message || 'Failed to load execution audit history');
     const el = document.getElementById('executionAuditTable');
     if (!r.data || r.data.length === 0) {
       el.innerHTML = '<div class="empty">No execution events yet</div>';
-      return;
+      return true;
     }
 
     let html = '<table><tr><th>Time</th><th>Scope</th><th>Stage</th><th>Symbol</th><th>Status</th><th>Code</th><th>Message</th></tr>';
@@ -891,13 +1500,19 @@ async function loadExecutionAudits() {
     });
     html += '</table>';
     el.innerHTML = html;
-  } catch (e) {}
+    return true;
+  } catch (e) {
+    document.getElementById('executionAuditTable').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>';
+    return false;
+  }
 }
 
 async function loadTradeStats() {
   try {
-    const r = await api('/api/trades/stats');
-    if (!r.success) return;
+    const filters = getTradeFilters();
+    const query = buildTradeQueryString(filters);
+    const r = await api('/api/trades/stats' + (query ? '?' + query : ''));
+    if (!r.success) throw new Error(r.message || 'Failed to load trade statistics');
     const s = r.data;
     document.getElementById('tsTotalTrades').textContent = s.totalTrades;
     document.getElementById('tsWinRate').textContent = (s.winRate*100).toFixed(1) + '%';
@@ -905,37 +1520,232 @@ async function loadTradeStats() {
     document.getElementById('tsTotalProfit').textContent = '$' + num(s.totalProfit);
     document.getElementById('tsTotalProfit').className = 'stat-value ' + (s.totalProfit >= 0 ? 'positive' : 'negative');
     document.getElementById('tsAvgProfit').textContent = '$' + num(s.averageProfit);
-  } catch (e) {}
+    document.getElementById('tsAvgProfit').className = 'stat-value ' + (s.averageProfit >= 0 ? 'positive' : 'negative');
+    return true;
+  } catch (e) {
+    document.getElementById('tsTotalTrades').textContent = '--';
+    document.getElementById('tsWinRate').textContent = '--';
+    document.getElementById('tsTotalProfit').textContent = '--';
+    document.getElementById('tsAvgProfit').textContent = '--';
+    document.getElementById('tsWinRate').className = 'stat-value';
+    document.getElementById('tsTotalProfit').className = 'stat-value';
+    document.getElementById('tsAvgProfit').className = 'stat-value';
+    return false;
+  }
 }
 
 // ─── Strategies ───
 async function loadStrategies() {
   try {
-    const r = await api('/api/strategies');
-    if (!r.success) return;
-    const el = document.getElementById('strategiesList');
-    if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No strategies found</div>'; return; }
-    let html = '';
-    r.data.forEach(s => {
-      html += '<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;background:var(--bg3)">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-      html += '<div><strong>' + (s.displayName||s.name) + '</strong>';
-      html += ' <span class="tag ' + (s.enabled?'tag-active':'') + '">' + (s.enabled?'Enabled':'Disabled') + '</span></div>';
-      html += '<label class="toggle"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleStrategy(\'' + s._id + '\')"><span class="slider"></span></label>';
-      html += '</div>';
-      html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + (s.description||'') + '</div>';
-      html += '<div style="font-size:12px;color:var(--text2)">Symbols: ' + (s.symbols ? s.symbols.join(', ') : 'None') + '</div>';
-      html += '</div>';
-    });
-    el.innerHTML = html;
+    const [data, assignments] = await Promise.all([
+      fetchStrategyConfigs(true),
+      fetchStrategyAssignments(true),
+    ]);
+    renderStrategyAssignments(assignments);
+    renderStrategyCards(data);
   } catch (e) {}
 }
 
 async function toggleStrategy(id) {
-  try { await api('/api/strategies/' + id + '/toggle', 'PUT'); } catch (e) { alert(e.message); loadStrategies(); }
+  try {
+    await api('/api/strategies/' + id + '/toggle', 'PUT');
+    await loadStrategies();
+  } catch (e) {
+    alert(e.message);
+    loadStrategies();
+  }
+}
+
+function renderStrategyCards(data) {
+  const el = document.getElementById('strategiesList');
+  if (!data || data.length === 0) {
+    el.innerHTML = '<div class="empty">No strategies found</div>';
+    return;
+  }
+
+  let html = '';
+  data.forEach(s => {
+    const effectiveBreakeven = getNormalizedBreakeven(s.effectiveBreakeven);
+    const overrideActive = Boolean(s.tradeManagement && s.tradeManagement.breakevenOverride);
+    html += '<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;background:var(--bg3)">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div><strong>' + (s.displayName||s.name) + '</strong>';
+    html += ' <span class="tag ' + (s.enabled?'tag-active':'') + '">' + (s.enabled?'Enabled':'Disabled') + '</span></div>';
+    html += '<label class="toggle"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleStrategy(\'' + s._id + '\')"><span class="slider"></span></label>';
+    html += '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + (s.description||'') + '</div>';
+    html += '<div style="font-size:12px;color:var(--text2)">Symbols: ' + (s.symbols && s.symbols.length ? s.symbols.join(', ') : 'None') + '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-top:8px">Effective BE: ' + escapeHtml(formatBreakevenSummary(effectiveBreakeven)) + '</div>';
+    html += '<details style="margin-top:12px"' + (overrideActive ? ' open' : '') + '>';
+    html += '<summary style="cursor:pointer;font-weight:600">Breakeven Override</summary>';
+    html += '<div style="margin-top:12px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
+    html += '<div style="font-size:12px;color:var(--text2)">'
+      + (overrideActive ? 'This strategy overrides the active profile defaults.' : 'This strategy currently inherits the active risk profile defaults.')
+      + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:10px">';
+    html += '<span style="font-size:12px;color:var(--text2)">Use profile defaults</span>';
+    html += '<label class="toggle">';
+    html += '<input type="checkbox" id="strategyBeUseDefaults_' + s._id + '" ' + (overrideActive ? '' : 'checked ') + ' onchange="toggleStrategyBreakevenInputs(\'' + s._id + '\')">';
+    html += '<span class="slider"></span></label>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div id="strategyBeFields_' + s._id + '" style="display:' + (overrideActive ? '' : 'none') + '">';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>Enable Breakeven</label><label class="toggle" style="margin-top:8px"><input type="checkbox" id="strategyBeEnabled_' + s._id + '" ' + (effectiveBreakeven.enabled ? 'checked ' : '') + '><span class="slider"></span></label></div>';
+    html += '<div class="form-group"><label>Include Spread Compensation</label><label class="toggle" style="margin-top:8px"><input type="checkbox" id="strategyBeIncludeSpreadCompensation_' + s._id + '" ' + (effectiveBreakeven.includeSpreadCompensation ? 'checked ' : '') + '><span class="slider"></span></label></div>';
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>BE Trigger (ATR)</label><input type="number" min="0.1" step="0.1" id="strategyBeTriggerAtrMultiple_' + s._id + '" value="' + effectiveBreakeven.triggerAtrMultiple + '"></div>';
+    html += '<div class="form-group"><label>Extra Buffer (pips)</label><input type="number" min="0" step="0.1" id="strategyBeExtraBufferPips_' + s._id + '" value="' + effectiveBreakeven.extraBufferPips + '"></div>';
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>Trail Start (ATR)</label><input type="number" min="0.1" step="0.1" id="strategyBeTrailStartAtrMultiple_' + s._id + '" value="' + effectiveBreakeven.trailStartAtrMultiple + '"></div>';
+    html += '<div class="form-group"><label>Trail Distance (ATR)</label><input type="number" min="0.1" step="0.1" id="strategyBeTrailDistanceAtrMultiple_' + s._id + '" value="' + effectiveBreakeven.trailDistanceAtrMultiple + '"></div>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">';
+    html += '<button class="btn-primary btn-sm" onclick="saveStrategyBreakevenOverride(\'' + s._id + '\')">Save BE Override</button>';
+    html += '<button class="btn-outline btn-sm" onclick="resetStrategyBreakevenOverride(\'' + s._id + '\')">Reset</button>';
+    html += '</div>';
+    html += '</div>';
+    html += '</details>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function renderStrategyAssignments(assignments) {
+  const el = document.getElementById('strategyAssignments');
+  if (!assignments || !Array.isArray(assignments.symbols) || !Array.isArray(assignments.strategies)) {
+    el.innerHTML = '<div class="empty">No assignment data available</div>';
+    return;
+  }
+
+  if (assignments.symbols.length === 0 || assignments.strategies.length === 0) {
+    el.innerHTML = '<div class="empty">No symbols or strategies available</div>';
+    return;
+  }
+
+  let html = '<div style="overflow-x:auto">';
+  html += '<table><tr><th>Symbol</th>';
+  assignments.strategies.forEach((strategy) => {
+    html += '<th>' + (strategy.displayName || strategy.name);
+    html += strategy.enabled ? ' <span style="color:var(--green)">●</span>' : ' <span style="color:var(--red)">●</span>';
+    html += '</th>';
+  });
+  html += '</tr>';
+
+  assignments.symbols.forEach((symbol) => {
+    html += '<tr><td><strong>' + symbol + '</strong></td>';
+    assignments.strategies.forEach((strategy) => {
+      const checked = Array.isArray(strategyAssignmentsDraft[symbol]) && strategyAssignmentsDraft[symbol].includes(strategy.name);
+      html += '<td><input type="checkbox" ' + (checked ? 'checked ' : '') + 'style="width:auto" onchange="toggleStrategyAssignment(\'' + symbol + '\', \'' + strategy.name + '\', this.checked)"></td>';
+    });
+    html += '</tr>';
+  });
+
+  html += '</table></div>';
+  el.innerHTML = html;
+}
+
+function toggleStrategyAssignment(symbol, strategyName, checked) {
+  const current = new Set(Array.isArray(strategyAssignmentsDraft[symbol]) ? strategyAssignmentsDraft[symbol] : []);
+  if (checked) current.add(strategyName);
+  else current.delete(strategyName);
+  strategyAssignmentsDraft[symbol] = Array.from(current);
+}
+
+async function resetStrategyAssignments() {
+  try {
+    const assignments = await fetchStrategyAssignments(true);
+    renderStrategyAssignments(assignments);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function saveStrategyAssignments() {
+  try {
+    const r = await api('/api/strategies/assignments', 'PUT', {
+      assignmentsBySymbol: strategyAssignmentsDraft,
+    });
+    if (!r.success) throw new Error(r.message || 'Failed to save assignments');
+
+    strategyAssignmentsState = r.data;
+    strategyAssignmentsDraft = JSON.parse(JSON.stringify(r.data.assignmentsBySymbol || {}));
+    setAvailableSymbols(r.data.symbols || []);
+    await fetchStrategyConfigs(true);
+    renderStrategyAssignments(strategyAssignmentsState);
+    renderStrategyCards(strategyConfigs);
+    wsLog('success', 'Saved strategy assignments');
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 // ─── Backtest ───
+function toggleStrategyBreakevenInputs(strategyId) {
+  const useDefaults = document.getElementById('strategyBeUseDefaults_' + strategyId);
+  const fields = document.getElementById('strategyBeFields_' + strategyId);
+  if (!useDefaults || !fields) return;
+  fields.style.display = useDefaults.checked ? 'none' : '';
+}
+
+function resetStrategyBreakevenOverride(strategyId) {
+  const strategy = getStrategyConfigById(strategyId);
+  if (!strategy) return;
+
+  const useDefaults = document.getElementById('strategyBeUseDefaults_' + strategyId);
+  if (useDefaults) {
+    useDefaults.checked = !Boolean(strategy.tradeManagement && strategy.tradeManagement.breakevenOverride);
+  }
+
+  setBreakevenFormValues('strategyBe', strategyId, getNormalizedBreakeven(strategy.effectiveBreakeven));
+  toggleStrategyBreakevenInputs(strategyId);
+}
+
+async function saveStrategyBreakevenOverride(strategyId) {
+  const strategy = getStrategyConfigById(strategyId);
+  if (!strategy) return;
+
+  const useDefaults = document.getElementById('strategyBeUseDefaults_' + strategyId);
+  const tradeManagement = {
+    breakevenOverride: useDefaults && useDefaults.checked
+      ? null
+      : collectBreakevenFormValues('strategyBe', strategyId),
+  };
+
+  try {
+    const r = await api('/api/strategies/' + strategyId, 'PUT', { tradeManagement });
+    if (!r.success) throw new Error(r.message || 'Failed to save breakeven override');
+    await loadStrategies();
+    wsLog('success', 'Saved breakeven override for ' + (strategy.displayName || strategy.name));
+  } catch (e) {
+    alert(e.message);
+    resetStrategyBreakevenOverride(strategyId);
+  }
+}
+
+async function loadBacktestParams() {
+  try {
+    await fetchStrategyConfigs();
+    const strategy = getStrategyConfigByName(document.getElementById('btStrategy').value);
+    if (!strategy) {
+      document.getElementById('btParams').innerHTML = '<div class="empty">No strategy configuration found</div>';
+      return;
+    }
+    renderParameterInputs(
+      'btParams',
+      strategy.resolvedParameters || strategy.parameters || {},
+      strategy.parameterDefinitions || [],
+      'btparam'
+    );
+  } catch (e) {
+    document.getElementById('btParams').innerHTML = '<div class="empty">Load error</div>';
+  }
+}
+
 async function runBacktest() {
   const btn = document.getElementById('btRunBtn');
   btn.disabled = true; btn.textContent = 'Running...';
@@ -943,9 +1753,11 @@ async function runBacktest() {
     const r = await api('/api/backtest/run', 'POST', {
       symbol: document.getElementById('btSymbol').value,
       strategyType: document.getElementById('btStrategy').value,
+      timeframe: document.getElementById('btTimeframe').value || undefined,
       startDate: document.getElementById('btStartDate').value,
       endDate: document.getElementById('btEndDate').value,
       initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
+      strategyParams: collectParameterInputs('btparam'),
     });
     if (r.success) {
       renderBacktestResult(r.data);
@@ -955,7 +1767,15 @@ async function runBacktest() {
   finally { btn.disabled = false; btn.textContent = 'Run Backtest'; }
 }
 
-function renderBacktestResult(data) {
+function switchBacktestMode(mode) {
+  backtestMode = mode === 'batch' ? 'batch' : 'single';
+  document.getElementById('btSingleWorkspace').style.display = backtestMode === 'single' ? '' : 'none';
+  document.getElementById('btBatchWorkspace').style.display = backtestMode === 'batch' ? '' : 'none';
+  document.getElementById('btModeSingleBtn').className = backtestMode === 'single' ? 'btn-primary btn-sm' : 'btn-outline btn-sm';
+  document.getElementById('btModeBatchBtn').className = backtestMode === 'batch' ? 'btn-primary btn-sm' : 'btn-outline btn-sm';
+}
+
+function renderBacktestResult(data, resultElementId='btResult', canvasId='equityCanvas') {
   const s = data.summary;
   let html = '<table>';
   html += '<tr><td style="color:var(--text2)">Total Trades</td><td>' + s.totalTrades + '</td></tr>';
@@ -970,17 +1790,36 @@ function renderBacktestResult(data) {
   html += '<tr><td style="color:var(--text2)">Max Consec. Wins</td><td>' + (s.maxConsecutiveWins||'--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Max Consec. Losses</td><td>' + (s.maxConsecutiveLosses||'--') + '</td></tr>';
   html += '</table>';
-  document.getElementById('btResult').innerHTML = html;
+  if (data.parameters) {
+    html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Applied Parameters</h4>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Stored strategy params: '
+      + (data.parameterSource && data.parameterSource.hasStoredParameters ? 'Yes' : 'No')
+      + ' | Runtime overrides: '
+      + (data.parameterSource && data.parameterSource.hasRuntimeOverrides ? 'Yes' : 'No')
+      + '</div>';
+    html += '<table>';
+    Object.entries(data.parameters).forEach(([k, v]) => {
+      html += '<tr><td style="color:var(--text2)">' + k + '</td><td>' + v + '</td></tr>';
+    });
+    html += '</table>';
+  }
+  if (data.breakevenConfigUsed) {
+    html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Breakeven Config</h4>';
+    html += '<div style="font-size:12px;color:var(--text2)">' + escapeHtml(formatBreakevenSummary(data.breakevenConfigUsed)) + '</div>';
+  }
+  document.getElementById(resultElementId).innerHTML = html;
 
   // Draw equity curve
-  if (data.equityCurve) drawEquityCurve(data.equityCurve);
+  if (data.equityCurve) drawEquityCurve(data.equityCurve, canvasId);
 }
 
-function drawEquityCurve(curve) {
-  const canvas = document.getElementById('equityCanvas');
+function drawEquityCurve(curve, canvasId='equityCanvas') {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
@@ -1064,15 +1903,487 @@ async function loadBacktestHistory() {
 }
 
 // ─── Optimizer ───
+function renderBatchProgress(progress) {
+  const box = document.getElementById('btBatchProgress');
+  const fill = document.getElementById('btBatchProgressFill');
+  const text = document.getElementById('btBatchProgressText');
+  if (!box || !fill || !text) return;
+  box.style.display = '';
+  fill.style.width = (progress.percent || 0) + '%';
+  text.textContent = (progress.current || 0) + '/' + (progress.total || 0) + ' (' + (progress.percent || 0) + '%)'
+    + ((progress.currentStrategy && progress.currentSymbol) ? (' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol) : '');
+}
+
+function resetBatchResultFilters() {
+  document.getElementById('btBatchFilterStrategy').value = '';
+  document.getElementById('btBatchFilterSymbol').value = '';
+  document.getElementById('btBatchFilterStatus').value = '';
+  document.getElementById('btBatchFilterMinTrades').value = '0';
+  activeBatchResultPage = 1;
+  if (activeBatchJobId) loadBatchJobResults(activeBatchJobId, 1);
+}
+
+async function runBatchBacktest() {
+  const btn = document.getElementById('btBatchRunBtn');
+  btn.disabled = true;
+  activeBatchReport = null;
+  activeBatchResultItemsById = {};
+  closeBatchChildModal();
+  document.getElementById('btBatchOverview').innerHTML = '<div class="empty">Batch job is starting...</div>';
+  document.getElementById('btBatchResults').innerHTML = '<div class="empty">Waiting for results...</div>';
+  document.getElementById('btBatchStrategyAgg').innerHTML = '<div class="empty">Waiting for strategy summary...</div>';
+  document.getElementById('btBatchSymbolAgg').innerHTML = '<div class="empty">Waiting for symbol summary...</div>';
+  document.getElementById('btBatchReport').innerHTML = '<div class="empty">Waiting for report...</div>';
+
+  try {
+    const response = await api('/api/backtest/batch/run', 'POST', {
+      startDate: document.getElementById('btBatchStartDate').value,
+      endDate: document.getElementById('btBatchEndDate').value,
+      initialBalance: parseInt(document.getElementById('btBatchBalance').value, 10) || 10000,
+      timeframeMode: document.getElementById('btBatchTimeframeMode').value,
+    });
+
+    if (!response.success) {
+      document.getElementById('btBatchOverview').innerHTML = '<div class="empty" style="color:var(--red)">' + (response.message || 'Failed to start batch backtest') + '</div>';
+      btn.disabled = false;
+      return;
+    }
+
+    switchBacktestMode('batch');
+    activeBatchJobId = response.data.jobId;
+    renderBatchProgress(response.data.progress || {});
+    await loadBatchJob(activeBatchJobId);
+    await loadBatchJobHistory();
+    scheduleBatchJobPoll(activeBatchJobId);
+  } catch (e) {
+    document.getElementById('btBatchOverview').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>';
+    btn.disabled = false;
+  }
+}
+
+function scheduleBatchJobPoll(jobId) {
+  if (batchJobPollTimer) clearInterval(batchJobPollTimer);
+  if (!jobId) return;
+
+  batchJobPollTimer = setInterval(async () => {
+    try {
+      const response = await api('/api/backtest/batch/jobs/' + jobId);
+      if (!response.success) return;
+      const job = response.data;
+      renderBatchOverview(job);
+      if (job.progress) renderBatchProgress(job.progress);
+      renderBatchAggregateTable('btBatchStrategyAgg', job.aggregate && job.aggregate.byStrategy ? job.aggregate.byStrategy : [], 'strategy');
+      renderBatchAggregateTable('btBatchSymbolAgg', job.aggregate && job.aggregate.bySymbol ? job.aggregate.bySymbol : [], 'symbol');
+      await loadBatchJobResults(jobId, activeBatchResultPage);
+      if (job.status === 'completed' || job.status === 'error') {
+        clearInterval(batchJobPollTimer);
+        batchJobPollTimer = null;
+        document.getElementById('btBatchRunBtn').disabled = false;
+        await loadBatchJob(jobId);
+        await loadBatchJobHistory();
+      }
+    } catch (e) {}
+  }, 3000);
+}
+
+async function loadBatchJob(jobId) {
+  if (!jobId) return;
+  activeBatchJobId = jobId;
+
+  try {
+    const response = await api('/api/backtest/batch/jobs/' + jobId);
+    if (!response.success) throw new Error(response.message || 'Failed to load batch job');
+    const job = response.data;
+
+    renderBatchOverview(job);
+    if (job.progress) renderBatchProgress(job.progress);
+    renderBatchAggregateTable('btBatchStrategyAgg', job.aggregate && job.aggregate.byStrategy ? job.aggregate.byStrategy : [], 'strategy');
+    renderBatchAggregateTable('btBatchSymbolAgg', job.aggregate && job.aggregate.bySymbol ? job.aggregate.bySymbol : [], 'symbol');
+
+    await Promise.all([
+      loadBatchJobResults(jobId, activeBatchResultPage),
+      loadBatchJobReport(jobId),
+    ]);
+
+    if (job.status === 'running' || job.status === 'queued') {
+      scheduleBatchJobPoll(jobId);
+    } else {
+      if (batchJobPollTimer) {
+        clearInterval(batchJobPollTimer);
+        batchJobPollTimer = null;
+      }
+      document.getElementById('btBatchRunBtn').disabled = false;
+    }
+  } catch (e) {
+    document.getElementById('btBatchOverview').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>';
+  }
+}
+
+async function loadBatchJobHistory() {
+  try {
+    const response = await api('/api/backtest/batch/jobs?limit=10');
+    if (!response.success) return;
+    const el = document.getElementById('btBatchHistory');
+    if (!response.data || response.data.length === 0) {
+      el.innerHTML = '<div class="empty">No batch jobs yet</div>';
+      return;
+    }
+
+    let html = '<table><tr><th>Date</th><th>Status</th><th>Scope</th><th>Runs</th><th>Profitables</th><th>Action</th></tr>';
+    response.data.forEach((job) => {
+      const totalRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.totalRuns : (job.progress ? job.progress.total : '--');
+      const profitableRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.profitableRuns : '--';
+      html += '<tr><td>' + fmtTime(job.createdAt) + '</td>';
+      html += '<td>' + batchStatusBadge(job.status) + '</td>';
+      html += '<td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols x ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td>';
+      html += '<td>' + totalRuns + '</td>';
+      html += '<td>' + profitableRuns + '</td>';
+      html += '<td><button class="btn-outline btn-sm" onclick="switchBacktestMode(\'batch\'); loadBatchJob(\'' + job.jobId + '\')">Open</button></td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {}
+}
+
+function renderBatchOverview(job) {
+  const el = document.getElementById('btBatchOverview');
+  const aggregate = job.aggregate && job.aggregate.totals ? job.aggregate.totals : null;
+  let html = '<table>';
+  html += '<tr><td style="color:var(--text2)">Job ID</td><td>' + job.jobId + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Status</td><td>' + batchStatusBadge(job.status) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Run Model</td><td>' + (job.runModel || '--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Period</td><td>' + fmtTime(job.period && job.period.start) + ' -> ' + fmtTime(job.period && job.period.end) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Initial Balance</td><td>$' + num(job.initialBalance) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Scope</td><td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols x ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td></tr>';
+  if (job.progress) {
+    html += '<tr><td style="color:var(--text2)">Progress</td><td>' + job.progress.current + '/' + job.progress.total + ' (' + job.progress.percent + '%)</td></tr>';
+  }
+  if (aggregate) {
+    html += '<tr><td style="color:var(--text2)">Scored Runs</td><td>' + aggregate.scoredRuns + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Profitable Runs</td><td>' + aggregate.profitableRuns + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">No Trades</td><td>' + aggregate.noTradeRuns + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Insufficient Data</td><td>' + aggregate.insufficientDataRuns + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Errors</td><td>' + aggregate.errorRuns + '</td></tr>';
+  }
+  if (job.error) {
+    html += '<tr><td style="color:var(--text2)">Error</td><td style="color:var(--red)">' + job.error + '</td></tr>';
+  }
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+async function loadBatchJobResults(jobId, page=1) {
+  if (!jobId) return;
+  activeBatchResultPage = page;
+  try {
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: '25',
+      strategy: document.getElementById('btBatchFilterStrategy').value || '',
+      symbol: document.getElementById('btBatchFilterSymbol').value || '',
+      status: document.getElementById('btBatchFilterStatus').value || '',
+      minTrades: document.getElementById('btBatchFilterMinTrades').value || '0',
+      sortBy: 'symbol',
+      sortDir: 'asc',
+    });
+    const response = await api('/api/backtest/batch/jobs/' + jobId + '/results?' + query.toString());
+    if (!response.success) throw new Error(response.message || 'Failed to load batch results');
+    renderBatchResultsTable(response.data || [], response.pagination || { page: 1, totalPages: 1, total: 0 });
+  } catch (e) {
+    document.getElementById('btBatchResults').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>';
+  }
+}
+
+function rememberBatchResultItems(items) {
+  activeBatchResultItemsById = {};
+  (items || []).forEach((item) => {
+    if (item && item.backtestId) {
+      activeBatchResultItemsById[item.backtestId] = item;
+    }
+  });
+}
+
+function groupBatchResultsBySymbol(items) {
+  const groups = new Map();
+  (items || []).forEach((item) => {
+    const symbol = item && item.symbol ? item.symbol : 'Unknown';
+    if (!groups.has(symbol)) groups.set(symbol, []);
+    groups.get(symbol).push(item);
+  });
+
+  return Array.from(groups.entries())
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    .map(([symbol, groupItems]) => {
+      const strategies = Array.from(
+        new Set(
+          groupItems
+            .map((item) => item && item.strategy ? item.strategy : '')
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+
+      return {
+        symbol,
+        items: [...groupItems].sort((a, b) => String(a.strategy || '').localeCompare(String(b.strategy || ''))),
+        strategies,
+      };
+    });
+}
+
+function getBatchResultUnavailableReason(item) {
+  if (!item) return 'No child backtest available';
+  if (item.error) return item.error;
+  switch (item.status) {
+    case 'no_trades':
+      return 'No child backtest: this run produced no trades';
+    case 'insufficient_data':
+      return 'No child backtest: insufficient historical data';
+    case 'error':
+      return 'No child backtest: run failed';
+    default:
+      return 'No child backtest available';
+  }
+}
+
+function renderBatchResultAction(item) {
+  if (item && item.backtestId) {
+    return '<button class="btn-outline btn-sm" onclick="loadBatchChildBacktest(\'' + activeBatchJobId + '\', \'' + item.backtestId + '\')">View</button>';
+  }
+
+  return '<button class="btn-outline btn-sm" disabled>View</button>'
+    + '<div class="batch-table-note">' + escapeHtml(getBatchResultUnavailableReason(item)) + '</div>';
+}
+
+function renderBatchResultsTable(items, pagination) {
+  const el = document.getElementById('btBatchResults');
+  rememberBatchResultItems(items);
+  if (!items || items.length === 0) {
+    el.innerHTML = '<div class="empty">No symbol or strategy combinations match the current filters</div>';
+    return;
+  }
+
+  const groups = groupBatchResultsBySymbol(items);
+  let html = '';
+  groups.forEach((group, index) => {
+    html += '<details class="batch-symbol-group"' + (index === 0 ? ' open' : '') + '>';
+    html += '<summary><div class="batch-symbol-summary">';
+    html += '<div>';
+    html += '<div class="batch-symbol-title">' + escapeHtml(group.symbol) + '</div>';
+    html += '<div class="batch-symbol-meta">' + group.items.length + ' matched result' + (group.items.length === 1 ? '' : 's') + ' in the current view</div>';
+    html += '<div class="batch-chip-list">';
+    group.strategies.forEach((strategy) => {
+      html += '<span class="batch-chip">' + escapeHtml(strategy) + '</span>';
+    });
+    html += '</div></div>';
+    html += '<div class="batch-symbol-meta" style="text-align:right">Click to expand strategy results</div>';
+    html += '</div></summary>';
+    html += '<div class="batch-group-table"><table><tr><th>Strategy</th><th>Status</th><th>TF</th><th>Trades</th><th>PF</th><th>Return</th><th>DD</th><th>View</th></tr>';
+    group.items.forEach((item) => {
+      const s = item.summary || {};
+      html += '<tr><td>' + escapeHtml(item.strategy || '--') + '</td>';
+      html += '<td>' + batchStatusBadge(item.status) + '</td>';
+      html += '<td>' + escapeHtml(item.timeframe || '--') + '</td>';
+      html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
+      html += '<td>' + (s.profitFactor != null ? num(s.profitFactor) : '--') + '</td>';
+      html += '<td style="color:' + ((s.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? num(s.returnPercent) + '%' : '--') + '</td>';
+      html += '<td>' + (s.maxDrawdownPercent != null ? num(s.maxDrawdownPercent) + '%' : '--') + '</td>';
+      html += '<td>' + renderBatchResultAction(item) + '</td></tr>';
+    });
+    html += '</table></div></details>';
+  });
+
+  html += '<div class="batch-results-pagination">';
+  html += '<div style="font-size:12px;color:var(--text2)">Page ' + pagination.page + ' / ' + pagination.totalPages + ' | Total ' + pagination.total + ' results</div>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<button class="btn-outline btn-sm" ' + (pagination.page <= 1 ? 'disabled' : '') + ' onclick="loadBatchJobResults(activeBatchJobId, ' + (pagination.page - 1) + ')">Prev</button>';
+  html += '<button class="btn-outline btn-sm" ' + (pagination.page >= pagination.totalPages ? 'disabled' : '') + ' onclick="loadBatchJobResults(activeBatchJobId, ' + (pagination.page + 1) + ')">Next</button>';
+  html += '</div></div>';
+  el.innerHTML = html;
+}
+
+function renderBatchAggregateTable(elementId, groups, keyName) {
+  const el = document.getElementById(elementId);
+  if (!groups || groups.length === 0) {
+    el.innerHTML = '<div class="empty">No aggregate data yet</div>';
+    return;
+  }
+
+  let html = '<table><tr><th>' + (keyName === 'strategy' ? 'Strategy' : 'Symbol') + '</th><th>Profitable</th><th>Avg PF</th><th>Avg Return</th><th>Avg DD</th><th>Avg Trades</th></tr>';
+  groups.forEach((group) => {
+    html += '<tr><td>' + group[keyName] + '</td>';
+    html += '<td>' + group.profitableRuns + '/' + group.totalRuns + '</td>';
+    html += '<td>' + group.averageProfitFactor + '</td>';
+    html += '<td style="color:' + (group.averageReturnPercent >= 0 ? 'var(--green)' : 'var(--red)') + '">' + group.averageReturnPercent + '%</td>';
+    html += '<td>' + group.averageMaxDrawdownPercent + '%</td>';
+    html += '<td>' + group.averageTrades + '</td></tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+async function loadBatchJobReport(jobId) {
+  if (!jobId) return;
+  try {
+    const response = await api('/api/backtest/batch/jobs/' + jobId + '/report');
+    if (!response.success) throw new Error(response.message || 'Failed to load batch report');
+    activeBatchReport = response.data;
+    renderBatchReport(response.data);
+  } catch (e) {
+    document.getElementById('btBatchReport').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>';
+  }
+}
+
+function renderBatchReport(report) {
+  const el = document.getElementById('btBatchReport');
+  if (!report || !report.reportText) {
+    el.innerHTML = '<div class="empty">No report generated yet</div>';
+    return;
+  }
+
+  el.innerHTML = '<pre style="white-space:pre-wrap;line-height:1.6;font-size:12px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;overflow:auto">' + escapeHtml(report.reportText) + '</pre>';
+}
+
+async function copyBatchReport(format) {
+  if (!activeBatchReport) return;
+  const content = format === 'markdown' ? activeBatchReport.reportMarkdown : activeBatchReport.reportText;
+  if (!content) return;
+
+  try {
+    await navigator.clipboard.writeText(content);
+    wsLog('success', 'Copied batch report as ' + format);
+  } catch (e) {
+    alert('Copy failed: ' + e.message);
+  }
+}
+
+function downloadBatchReport(format) {
+  if (!activeBatchReport) return;
+  const isMarkdown = format === 'md';
+  const content = isMarkdown ? activeBatchReport.reportMarkdown : activeBatchReport.reportText;
+  if (!content) return;
+
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'batch-backtest-report.' + format;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function clearCanvas(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
+}
+
+function renderBatchChildModalMeta(context, detail) {
+  const metaEl = document.getElementById('btBatchChildModalMeta');
+  const source = (detail && detail.parameterSource) || (context && context.parameterSource) || null;
+  const parts = [];
+
+  if (context && context.status) parts.push('Status: ' + context.status);
+  if (detail && (detail.timeframe || (context && context.timeframe))) {
+    parts.push('Timeframe: ' + escapeHtml(detail.timeframe || context.timeframe || '--'));
+  } else if (context && context.timeframe) {
+    parts.push('Timeframe: ' + escapeHtml(context.timeframe));
+  }
+  if (context && context.higherTimeframe) parts.push('Higher TF: ' + escapeHtml(context.higherTimeframe));
+  if (context && context.entryTimeframe) parts.push('Entry TF: ' + escapeHtml(context.entryTimeframe));
+  if (detail && (detail.tradeStartTime || detail.tradeEndTime)) {
+    parts.push('Period: ' + fmtTime(detail.tradeStartTime) + ' -> ' + fmtTime(detail.tradeEndTime));
+  }
+  if (source) {
+    parts.push(
+      'Stored params: ' + (source.hasStoredParameters ? 'Yes' : 'No')
+      + ' | Runtime overrides: ' + (source.hasRuntimeOverrides ? 'Yes' : 'No')
+    );
+  }
+
+  metaEl.innerHTML = parts.length > 0 ? parts.join('<br>') : 'Loading child backtest detail...';
+}
+
+function openBatchChildModal(context) {
+  const overlay = document.getElementById('btBatchChildModal');
+  const titleEl = document.getElementById('btBatchChildModalTitle');
+  const bodyEl = document.getElementById('btBatchChildModalBody');
+  const symbol = context && context.symbol ? context.symbol : 'Child Backtest';
+  const strategy = context && context.strategy ? context.strategy : 'Detail';
+
+  titleEl.textContent = context ? (symbol + ' - ' + strategy) : 'Child Backtest Detail';
+  bodyEl.innerHTML = '<div class="empty">Loading child backtest...</div>';
+  renderBatchChildModalMeta(context, null);
+  clearCanvas('btBatchChildModalCanvas');
+  overlay.classList.add('show');
+}
+
+function closeBatchChildModal() {
+  const overlay = document.getElementById('btBatchChildModal');
+  if (!overlay) return;
+  overlay.classList.remove('show');
+}
+
+function handleBatchChildModalBackdrop(event) {
+  if (event && event.target && event.target.id === 'btBatchChildModal') {
+    closeBatchChildModal();
+  }
+}
+
+async function loadBatchChildBacktest(jobId, backtestId) {
+  const context = activeBatchResultItemsById[backtestId] || null;
+  openBatchChildModal(context);
+  try {
+    const response = await api('/api/backtest/batch/jobs/' + jobId + '/child/' + backtestId);
+    if (!response.success) throw new Error(response.message || 'Failed to load child backtest');
+    const detail = response.data || {};
+    const titleEl = document.getElementById('btBatchChildModalTitle');
+    titleEl.textContent = (detail.symbol || (context && context.symbol) || 'Child Backtest')
+      + ' - '
+      + (detail.strategy || (context && context.strategy) || 'Detail');
+    renderBatchChildModalMeta(context, detail);
+    renderBacktestResult(detail, 'btBatchChildModalBody', 'btBatchChildModalCanvas');
+  } catch (e) {
+    renderBatchChildModalMeta(context, null);
+    document.getElementById('btBatchChildModalBody').innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+    clearCanvas('btBatchChildModalCanvas');
+  }
+}
+
+function batchStatusBadge(status) {
+  const normalized = status || 'unknown';
+  let color = 'var(--text2)';
+  if (normalized === 'completed') color = 'var(--green)';
+  else if (normalized === 'running' || normalized === 'queued') color = 'var(--blue)';
+  else if (normalized === 'no_trades') color = 'var(--yellow)';
+  else if (normalized === 'insufficient_data' || normalized === 'error') color = 'var(--red)';
+  return badge(normalized, color);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 async function loadOptRanges() {
   const strategy = document.getElementById('optStrategy').value;
   try {
+    await fetchStrategyConfigs();
+    const strategyConfig = getStrategyConfigByName(strategy);
+    const definitions = {};
+    (strategyConfig && strategyConfig.parameterDefinitions ? strategyConfig.parameterDefinitions : []).forEach((definition) => {
+      definitions[definition.key] = definition;
+    });
     const r = await api('/api/optimizer/ranges/' + strategy);
     if (!r.success) { document.getElementById('optRanges').innerHTML = '<div class="empty">No ranges for this strategy</div>'; return; }
     let html = '';
     Object.entries(r.data).forEach(([param, range]) => {
+      const definition = definitions[param];
       html += '<div class="form-row" style="margin-bottom:8px">';
-      html += '<div class="form-group"><label>' + param + '</label></div>';
+      html += '<div class="form-group"><label>' + (definition ? definition.label : param) + '</label></div>';
       html += '<div class="form-group"><label>Min</label><input type="number" step="any" value="' + range.min + '" id="opt_' + param + '_min"></div>';
       html += '<div class="form-group"><label>Max</label><input type="number" step="any" value="' + range.max + '" id="opt_' + param + '_max"></div>';
       html += '<div class="form-group"><label>Step</label><input type="number" step="any" value="' + range.step + '" id="opt_' + param + '_step"></div>';
@@ -1086,6 +2397,7 @@ async function runOptimizer() {
   const btn = document.getElementById('optRunBtn');
   btn.disabled = true;
   document.getElementById('optProgress').style.display = 'block';
+  lastOptimizerResult = null;
 
   // Gather param ranges from inputs
   const strategy = document.getElementById('optStrategy').value;
@@ -1099,12 +2411,21 @@ async function runOptimizer() {
   });
 
   try {
-    await api('/api/optimizer/run', 'POST', {
+    const startResponse = await api('/api/optimizer/run', 'POST', {
       symbol: document.getElementById('optSymbol').value,
       strategyType: strategy,
+      timeframe: document.getElementById('optTimeframe').value || undefined,
+      startDate: document.getElementById('optStartDate').value,
+      endDate: document.getElementById('optEndDate').value,
       paramRanges: Object.keys(paramRanges).length > 0 ? paramRanges : undefined,
       optimizeFor: document.getElementById('optMetric').value,
     });
+    if (!startResponse.success) {
+      document.getElementById('optResult').innerHTML = '<div class="empty" style="color:var(--red)">' + (startResponse.message || 'Optimizer failed to start') + '</div>';
+      document.getElementById('optProgress').style.display = 'none';
+      btn.disabled = false;
+      return;
+    }
 
     // Poll progress
     const pollId = setInterval(async () => {
@@ -1120,6 +2441,7 @@ async function runOptimizer() {
           // Fetch result
           const rr = await api('/api/optimizer/result');
           if (rr.success) renderOptResult(rr.data);
+          else document.getElementById('optResult').innerHTML = '<div class="empty" style="color:var(--red)">' + (rr.message || 'No optimizer result available') + '</div>';
           document.getElementById('optProgress').style.display = 'none';
           btn.disabled = false;
         }
@@ -1135,9 +2457,17 @@ async function runOptimizer() {
 function renderOptResult(data) {
   const el = document.getElementById('optResult');
   if (!data || !data.bestResult) { el.innerHTML = '<div class="empty">No valid results</div>'; return; }
+  lastOptimizerResult = data;
 
   let html = '<div style="margin-bottom:16px">';
   html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">Combinations: ' + data.totalCombinations + ' | Valid: ' + data.validResults + ' | Optimized for: ' + data.optimizeFor + '</div>';
+  html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Best params source: stored strategy params '
+    + (data.bestResult.parameterSource && data.bestResult.parameterSource.hasStoredParameters ? 'Yes' : 'No')
+    + ' | runtime overrides Yes</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn-primary btn-sm" onclick="applyBestOptimizerParams()">Apply Best Params</button>';
+  html += '<button class="btn-outline btn-sm" onclick="rerunBestOptimizerBacktest()">Run Backtest With Best Params</button>';
+  html += '</div>';
   html += '</div>';
 
   html += '<h4 style="margin-bottom:8px;color:var(--cyan)">Best Parameters</h4>';
@@ -1175,7 +2505,366 @@ function renderOptResult(data) {
   el.innerHTML = html;
 }
 
+async function applyBestOptimizerParams() {
+  if (!lastOptimizerResult || !lastOptimizerResult.bestResult) return;
+  try {
+    await fetchStrategyConfigs(true);
+    const strategy = getStrategyConfigByName(lastOptimizerResult.strategy);
+    if (!strategy) throw new Error('Strategy config not found');
+    const r = await api('/api/strategies/' + strategy._id, 'PUT', {
+      parameters: lastOptimizerResult.bestResult.parameters,
+    });
+    if (!r.success) throw new Error(r.message || 'Failed to apply parameters');
+    await fetchStrategyConfigs(true);
+    if (document.getElementById('btStrategy').value === lastOptimizerResult.strategy) {
+      loadBacktestParams();
+    }
+    wsLog('success', 'Applied best optimizer parameters to ' + lastOptimizerResult.strategy);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function rerunBestOptimizerBacktest() {
+  if (!lastOptimizerResult || !lastOptimizerResult.bestResult) return;
+  document.querySelector('[data-page="backtest"]').click();
+  document.getElementById('btSymbol').value = document.getElementById('optSymbol').value;
+  document.getElementById('btStrategy').value = lastOptimizerResult.strategy;
+  document.getElementById('btTimeframe').value = document.getElementById('optTimeframe').value;
+  document.getElementById('btStartDate').value = document.getElementById('optStartDate').value;
+  document.getElementById('btEndDate').value = document.getElementById('optEndDate').value;
+  await fetchStrategyConfigs(true);
+  const strategy = getStrategyConfigByName(lastOptimizerResult.strategy);
+  renderParameterInputs(
+    'btParams',
+    lastOptimizerResult.bestResult.parameters,
+    strategy ? strategy.parameterDefinitions || [] : [],
+    'btparam'
+  );
+  runBacktest();
+}
+
 // ─── Settings ───
+function getNormalizedBreakeven(config) {
+  const source = config || {};
+  return {
+    enabled: source.enabled !== undefined ? Boolean(source.enabled) : DEFAULT_BREAKEVEN.enabled,
+    triggerAtrMultiple: source.triggerAtrMultiple != null ? Number(source.triggerAtrMultiple) : DEFAULT_BREAKEVEN.triggerAtrMultiple,
+    includeSpreadCompensation: source.includeSpreadCompensation !== undefined ? Boolean(source.includeSpreadCompensation) : DEFAULT_BREAKEVEN.includeSpreadCompensation,
+    extraBufferPips: source.extraBufferPips != null ? Number(source.extraBufferPips) : DEFAULT_BREAKEVEN.extraBufferPips,
+    trailStartAtrMultiple: source.trailStartAtrMultiple != null ? Number(source.trailStartAtrMultiple) : DEFAULT_BREAKEVEN.trailStartAtrMultiple,
+    trailDistanceAtrMultiple: source.trailDistanceAtrMultiple != null ? Number(source.trailDistanceAtrMultiple) : DEFAULT_BREAKEVEN.trailDistanceAtrMultiple,
+  };
+}
+
+function getNormalizedRiskProfile(profile) {
+  const source = profile || {};
+  return {
+    _id: source._id || null,
+    name: source.name || '',
+    isActive: Boolean(source.isActive),
+    maxRiskPerTradePct: source.maxRiskPerTradePct != null ? Number(source.maxRiskPerTradePct) : 5,
+    maxDailyLossPct: source.maxDailyLossPct != null ? Number(source.maxDailyLossPct) : 5,
+    maxDrawdownPct: source.maxDrawdownPct != null ? Number(source.maxDrawdownPct) : 10,
+    maxConcurrentPositions: source.maxConcurrentPositions != null ? Number(source.maxConcurrentPositions) : 5,
+    maxPositionsPerSymbol: source.maxPositionsPerSymbol != null ? Number(source.maxPositionsPerSymbol) : 2,
+    allowAggressiveMinLot: Boolean(source.allowAggressiveMinLot),
+    tradeManagement: {
+      breakeven: getNormalizedBreakeven(source.tradeManagement && source.tradeManagement.breakeven),
+    },
+  };
+}
+
+function applyRiskSettingsState(data) {
+  const profiles = Array.isArray(data && data.profiles) ? data.profiles.map(getNormalizedRiskProfile) : [];
+  const activeProfileId = data && data.activeProfileId
+    ? data.activeProfileId
+    : (profiles.find((profile) => profile.isActive) || {})._id || null;
+  const activeProfile = profiles.find((profile) => profile._id === activeProfileId)
+    || (data && data.activeProfile ? getNormalizedRiskProfile(data.activeProfile) : null);
+
+  riskSettingsState = {
+    profiles,
+    activeProfile,
+    activeProfileId,
+  };
+}
+
+function getBreakevenInputId(prefix, field, suffix='') {
+  return prefix + field + (suffix ? '_' + suffix : '');
+}
+
+function setBreakevenFormValues(prefix, suffix, config) {
+  const normalized = getNormalizedBreakeven(config);
+  const values = {
+    Enabled: normalized.enabled,
+    IncludeSpreadCompensation: normalized.includeSpreadCompensation,
+    TriggerAtrMultiple: normalized.triggerAtrMultiple,
+    ExtraBufferPips: normalized.extraBufferPips,
+    TrailStartAtrMultiple: normalized.trailStartAtrMultiple,
+    TrailDistanceAtrMultiple: normalized.trailDistanceAtrMultiple,
+  };
+
+  Object.entries(values).forEach(([field, value]) => {
+    const input = document.getElementById(getBreakevenInputId(prefix, field, suffix));
+    if (!input) return;
+    if (input.type === 'checkbox') input.checked = Boolean(value);
+    else input.value = value;
+  });
+}
+
+function collectBreakevenFormValues(prefix, suffix='') {
+  return {
+    enabled: document.getElementById(getBreakevenInputId(prefix, 'Enabled', suffix)).checked,
+    triggerAtrMultiple: Number(document.getElementById(getBreakevenInputId(prefix, 'TriggerAtrMultiple', suffix)).value),
+    includeSpreadCompensation: document.getElementById(getBreakevenInputId(prefix, 'IncludeSpreadCompensation', suffix)).checked,
+    extraBufferPips: Number(document.getElementById(getBreakevenInputId(prefix, 'ExtraBufferPips', suffix)).value),
+    trailStartAtrMultiple: Number(document.getElementById(getBreakevenInputId(prefix, 'TrailStartAtrMultiple', suffix)).value),
+    trailDistanceAtrMultiple: Number(document.getElementById(getBreakevenInputId(prefix, 'TrailDistanceAtrMultiple', suffix)).value),
+  };
+}
+
+function formatBreakevenSummary(config) {
+  const normalized = getNormalizedBreakeven(config);
+  if (!normalized.enabled) {
+    return 'Disabled';
+  }
+
+  return 'Trigger ' + normalized.triggerAtrMultiple + ' ATR | Trail ' + normalized.trailStartAtrMultiple + '/' + normalized.trailDistanceAtrMultiple + ' ATR | Spread ' + (normalized.includeSpreadCompensation ? 'on' : 'off') + ' | Buffer ' + normalized.extraBufferPips + ' pips';
+}
+
+function setRiskProfileMessage(message, tone='green') {
+  const el = document.getElementById('riskProfileResult');
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--' + tone + ')">' + escapeHtml(message) + '</span>';
+}
+
+function populateRiskProfileForm(profile) {
+  const normalized = getNormalizedRiskProfile(profile);
+  document.getElementById('riskName').value = normalized.name || '';
+  document.getElementById('riskMaxRiskPerTrade').value = normalized.maxRiskPerTradePct;
+  document.getElementById('riskMaxDailyLoss').value = normalized.maxDailyLossPct;
+  document.getElementById('riskMaxDrawdown').value = normalized.maxDrawdownPct;
+  document.getElementById('riskMaxPositions').value = normalized.maxConcurrentPositions;
+  document.getElementById('riskMaxPerSymbol').value = normalized.maxPositionsPerSymbol;
+  document.getElementById('riskAllowAggressiveMinLot').checked = normalized.allowAggressiveMinLot;
+  setBreakevenFormValues('riskBe', '', normalized.tradeManagement.breakeven);
+}
+
+function getNewRiskProfileTemplate() {
+  if (riskSettingsState.activeProfile) {
+    return {
+      ...getNormalizedRiskProfile(riskSettingsState.activeProfile),
+      _id: null,
+      name: '',
+      isActive: false,
+    };
+  }
+
+  return getNormalizedRiskProfile(null);
+}
+
+function startNewRiskProfile() {
+  editingRiskProfileId = null;
+  populateRiskProfileForm(getNewRiskProfileTemplate());
+  document.getElementById('riskFormTitle').textContent = 'Create Risk Profile';
+  document.getElementById('riskSaveBtn').textContent = 'Create Profile';
+  setRiskProfileMessage('');
+}
+
+function resetRiskProfileForm() {
+  if (editingRiskProfileId) {
+    const profile = riskSettingsState.profiles.find((item) => item._id === editingRiskProfileId);
+    if (profile) {
+      populateRiskProfileForm(profile);
+      setRiskProfileMessage('');
+      return;
+    }
+  }
+
+  startNewRiskProfile();
+}
+
+function editRiskProfile(id) {
+  const profile = riskSettingsState.profiles.find((item) => item._id === id);
+  if (!profile) return;
+  editingRiskProfileId = id;
+  populateRiskProfileForm(profile);
+  document.getElementById('riskFormTitle').textContent = 'Edit Risk Profile';
+  document.getElementById('riskSaveBtn').textContent = 'Save Changes';
+  setRiskProfileMessage('');
+}
+
+function collectRiskProfileForm() {
+  return {
+    name: document.getElementById('riskName').value.trim(),
+    maxRiskPerTradePct: Number(document.getElementById('riskMaxRiskPerTrade').value),
+    maxDailyLossPct: Number(document.getElementById('riskMaxDailyLoss').value),
+    maxDrawdownPct: Number(document.getElementById('riskMaxDrawdown').value),
+    maxConcurrentPositions: Number(document.getElementById('riskMaxPositions').value),
+    maxPositionsPerSymbol: Number(document.getElementById('riskMaxPerSymbol').value),
+    allowAggressiveMinLot: document.getElementById('riskAllowAggressiveMinLot').checked,
+    tradeManagement: {
+      breakeven: collectBreakevenFormValues('riskBe'),
+    },
+  };
+}
+
+function renderRiskProfileSummary() {
+  const el = document.getElementById('riskProfileSummary');
+  const profile = riskSettingsState.activeProfile;
+  if (!el) return;
+
+  if (!profile) {
+    el.innerHTML = '<div class="empty">No active risk profile</div>';
+    return;
+  }
+
+  const normalized = getNormalizedRiskProfile(profile);
+  let html = '<table>';
+  html += '<tr><td style="color:var(--text2)">Active Profile</td><td><strong>' + escapeHtml(normalized.name) + '</strong></td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Risk / Trade</td><td>' + normalized.maxRiskPerTradePct + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Daily Loss</td><td>' + normalized.maxDailyLossPct + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td>' + normalized.maxDrawdownPct + '%</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Positions</td><td>' + normalized.maxConcurrentPositions + ' total / ' + normalized.maxPositionsPerSymbol + ' per symbol</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Aggressive Min-Lot</td><td>' + (normalized.allowAggressiveMinLot ? 'Enabled' : 'Disabled') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Breakeven</td><td>' + escapeHtml(formatBreakevenSummary(normalized.tradeManagement.breakeven)) + '</td></tr>';
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function renderRiskProfilesList() {
+  const el = document.getElementById('riskProfilesList');
+  const profiles = riskSettingsState.profiles || [];
+  if (!el) return;
+
+  if (profiles.length === 0) {
+    el.innerHTML = '<div class="empty">No saved risk profiles</div>';
+    return;
+  }
+
+  let html = '';
+  profiles.forEach((profile) => {
+    const normalized = getNormalizedRiskProfile(profile);
+    html += '<div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:var(--bg3);margin-bottom:12px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">';
+    html += '<div><strong>' + escapeHtml(normalized.name) + '</strong>';
+    if (normalized.isActive) {
+      html += ' <span class="tag tag-active">Active</span>';
+    }
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    html += '<button class="btn-outline btn-sm" onclick="editRiskProfile(\'' + normalized._id + '\')">Edit</button>';
+    html += '<button class="btn-outline btn-sm" onclick="activateRiskProfile(\'' + normalized._id + '\')" ' + (normalized.isActive ? 'disabled' : '') + '>Activate</button>';
+    html += '<button class="btn-outline btn-sm" onclick="deleteRiskProfile(\'' + normalized._id + '\')" ' + (normalized.isActive ? 'disabled' : '') + '>Delete</button>';
+    html += '</div></div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-top:10px">';
+    html += 'Risk ' + normalized.maxRiskPerTradePct + '% | Daily ' + normalized.maxDailyLossPct + '% | Drawdown ' + normalized.maxDrawdownPct + '%';
+    html += '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-top:6px">';
+    html += 'Positions ' + normalized.maxConcurrentPositions + ' total / ' + normalized.maxPositionsPerSymbol + ' per symbol';
+    html += (normalized.allowAggressiveMinLot ? ' | Aggressive Min-Lot on' : ' | Aggressive Min-Lot off');
+    html += '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-top:6px">BE: ' + escapeHtml(formatBreakevenSummary(normalized.tradeManagement.breakeven)) + '</div>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+async function refreshBreakevenDrivenViews() {
+  await fetchStrategyConfigs(true);
+
+  if (document.getElementById('page-strategies').classList.contains('active')) {
+    await loadStrategies();
+  }
+
+  if (document.getElementById('page-dashboard').classList.contains('active')) {
+    loadDashboard();
+  }
+}
+
+async function loadRiskSettings() {
+  try {
+    const r = await api('/api/risk-settings');
+    if (!r.success) throw new Error(r.message || 'Failed to load risk settings');
+    applyRiskSettingsState(r.data || {});
+    renderRiskProfileSummary();
+    renderRiskProfilesList();
+    if (!editingRiskProfileId) {
+      startNewRiskProfile();
+    } else {
+      resetRiskProfileForm();
+    }
+  } catch (e) {
+    document.getElementById('riskProfileSummary').innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+    document.getElementById('riskProfilesList').innerHTML = '<div class="empty" style="color:var(--red)">Unable to load profiles</div>';
+  }
+}
+
+async function saveRiskProfile() {
+  const payload = collectRiskProfileForm();
+  const isEditing = Boolean(editingRiskProfileId);
+  const url = isEditing ? '/api/risk-settings/profiles/' + editingRiskProfileId : '/api/risk-settings/profiles';
+  const method = isEditing ? 'PUT' : 'POST';
+
+  try {
+    const r = await api(url, method, payload);
+    if (!r.success) throw new Error(r.message || 'Failed to save risk profile');
+    applyRiskSettingsState(r.data || {});
+    renderRiskProfileSummary();
+    renderRiskProfilesList();
+    editingRiskProfileId = null;
+    startNewRiskProfile();
+    setRiskProfileMessage(isEditing ? 'Risk profile updated' : 'Risk profile created');
+    await refreshBreakevenDrivenViews();
+  } catch (e) {
+    setRiskProfileMessage(e.message, 'red');
+  }
+}
+
+async function activateRiskProfile(id) {
+  try {
+    const r = await api('/api/risk-settings/profiles/' + id + '/activate', 'POST');
+    if (!r.success) throw new Error(r.message || 'Failed to activate risk profile');
+    applyRiskSettingsState(r.data || {});
+    renderRiskProfileSummary();
+    renderRiskProfilesList();
+    if (editingRiskProfileId === id) {
+      resetRiskProfileForm();
+    }
+    setRiskProfileMessage('Activated risk profile');
+    await refreshBreakevenDrivenViews();
+  } catch (e) {
+    setRiskProfileMessage(e.message, 'red');
+  }
+}
+
+async function deleteRiskProfile(id) {
+  const profile = riskSettingsState.profiles.find((item) => item._id === id);
+  if (!profile) return;
+  if (!confirm('Delete risk profile "' + profile.name + '"?')) return;
+
+  try {
+    const r = await api('/api/risk-settings/profiles/' + id, 'DELETE');
+    if (!r.success) throw new Error(r.message || 'Failed to delete risk profile');
+    applyRiskSettingsState(r.data || {});
+    renderRiskProfileSummary();
+    renderRiskProfilesList();
+    if (editingRiskProfileId === id) {
+      editingRiskProfileId = null;
+      startNewRiskProfile();
+    }
+    setRiskProfileMessage('Deleted risk profile');
+    await refreshBreakevenDrivenViews();
+  } catch (e) {
+    setRiskProfileMessage(e.message, 'red');
+  }
+}
+
 async function loadNotifyStatus() {
   try {
     const r = await api('/api/notifications/status');
@@ -1222,6 +2911,14 @@ async function loadAccountInfo() {
 
 // ─── Helpers ───
 function num(v) { return v != null ? parseFloat(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '--'; }
+function toInputDateValue(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
 function fmtPrice(v) { return v != null && v !== '' ? parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 5 }) : '--'; }
 function fmtSignedNum(v) { if (v == null) return '--'; const n = parseFloat(v); return (n >= 0 ? '+' : '') + n.toFixed(2); }
 function fmtSignedMoney(v) { if (v == null) return '--'; return fmtSignedNum(v) + ' USD'; }
@@ -1241,6 +2938,10 @@ function auditStatusColor(status) {
   return 'var(--green)';
 }
 function fmtTime(t) { if (!t) return '--'; const d = new Date(t); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeBatchChildModal();
+});
 
 // Auto-refresh dashboard every 30s
 setInterval(() => {

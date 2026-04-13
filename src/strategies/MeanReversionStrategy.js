@@ -23,8 +23,9 @@ class MeanReversionStrategy extends BaseStrategy {
     super('MeanReversion', 'Bollinger Band mean reversion for Forex crosses');
   }
 
-  analyze(candles, indicators, instrument) {
+  analyze(candles, indicators, instrument, context = {}) {
     const { bollingerBands, rsi, atr } = indicators;
+    const strategyParams = this.getStrategyParameters(context);
 
     if (!bollingerBands || !rsi || !atr || bollingerBands.length < 2) {
       return this.noSignal();
@@ -53,7 +54,8 @@ class MeanReversionStrategy extends BaseStrategy {
     // ─── BUY Signal (oversold bounce) ───
     const touchedLower = prevCandle.low <= prevBB.lower || prevCandle.close <= prevBB.lower;
     const closedInsideLower = currentCandle.close > currentBB.lower;
-    const isOversold = currentRsi < 35;
+    const oversoldThreshold = Number(strategyParams.rsi_oversold) || 35;
+    const isOversold = currentRsi < oversoldThreshold;
 
     if (touchedLower && closedInsideLower && isOversold) {
       const sl = currentBB.lower - 0.5 * currentAtr;
@@ -63,7 +65,7 @@ class MeanReversionStrategy extends BaseStrategy {
         confidence: this._calcConfidence(currentRsi, currentCandle, currentBB, 'BUY'),
         sl: parseFloat(sl.toFixed(instrument.pipSize < 0.001 ? 5 : 3)),
         tp: parseFloat(tp.toFixed(instrument.pipSize < 0.001 ? 5 : 3)),
-        reason: `Price bounced from lower BB | RSI=${currentRsi.toFixed(1)} (oversold)`,
+        reason: `Price bounced from lower BB | RSI=${currentRsi.toFixed(1)} < ${oversoldThreshold}`,
         indicatorsSnapshot: snapshot,
       };
     }
@@ -71,7 +73,8 @@ class MeanReversionStrategy extends BaseStrategy {
     // ─── SELL Signal (overbought reversal) ───
     const touchedUpper = prevCandle.high >= prevBB.upper || prevCandle.close >= prevBB.upper;
     const closedInsideUpper = currentCandle.close < currentBB.upper;
-    const isOverbought = currentRsi > 65;
+    const overboughtThreshold = Number(strategyParams.rsi_overbought) || 65;
+    const isOverbought = currentRsi > overboughtThreshold;
 
     if (touchedUpper && closedInsideUpper && isOverbought) {
       const sl = currentBB.upper + 0.5 * currentAtr;
@@ -81,7 +84,7 @@ class MeanReversionStrategy extends BaseStrategy {
         confidence: this._calcConfidence(currentRsi, currentCandle, currentBB, 'SELL'),
         sl: parseFloat(sl.toFixed(instrument.pipSize < 0.001 ? 5 : 3)),
         tp: parseFloat(tp.toFixed(instrument.pipSize < 0.001 ? 5 : 3)),
-        reason: `Price bounced from upper BB | RSI=${currentRsi.toFixed(1)} (overbought)`,
+        reason: `Price bounced from upper BB | RSI=${currentRsi.toFixed(1)} > ${overboughtThreshold}`,
         indicatorsSnapshot: snapshot,
       };
     }

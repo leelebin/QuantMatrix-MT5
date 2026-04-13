@@ -73,6 +73,8 @@ set "NODE_VER=v20.18.0"
 set "NODE_DIR=node-%NODE_VER%-win-%ARCH%"
 set "NODE_ZIP=%NODE_DIR%.zip"
 set "NODE_URL=https://nodejs.org/dist/%NODE_VER%/%NODE_ZIP%"
+set "NODE_SHASUMS=SHASUMS256.txt"
+set "NODE_SHASUMS_URL=https://nodejs.org/dist/%NODE_VER%/%NODE_SHASUMS%"
 
 echo [INFO] Downloading Node.js %NODE_VER% (%ARCH%)...
 echo [INFO] URL: %NODE_URL%
@@ -88,11 +90,33 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+echo [INFO] Downloading official checksum file...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $ProgressPreference = 'SilentlyContinue'; try { Invoke-WebRequest -Uri '%NODE_SHASUMS_URL%' -OutFile '%PROJECT_DIR%%NODE_SHASUMS%' -UseBasicParsing; Write-Host '[OK] Checksum file downloaded.' } catch { Write-Host '[ERROR] Checksum download failed:' $_.Exception.Message; exit 1 }"
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to download official SHASUMS256.txt.
+    del "%PROJECT_DIR%%NODE_ZIP%" 2>nul
+    del "%PROJECT_DIR%%NODE_SHASUMS%" 2>nul
+    pause
+    exit /b 1
+)
+
+echo [INFO] Finding expected SHA256 for %NODE_ZIP%...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $zipName = '%NODE_ZIP%'; $zipPath = '%PROJECT_DIR%%NODE_ZIP%'; $checksumPath = '%PROJECT_DIR%%NODE_SHASUMS%'; $entry = Get-Content -Path $checksumPath | Where-Object { $_ -match ('\s' + [regex]::Escape($zipName) + '$') } | Select-Object -First 1; if (-not $entry) { Write-Host '[ERROR] Expected SHA256 entry not found for %NODE_ZIP%.'; exit 2 }; $expected = ($entry -split '\s+')[0].Trim(); Write-Host ('[OK] Expected SHA256 found: ' + $expected); $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.Trim(); if ($actual -ine $expected) { Write-Host ('[ERROR] SHA256 mismatch. Expected ' + $expected + ' but got ' + $actual + '.'); exit 3 }; Write-Host ('[OK] SHA256 verified: ' + $actual);"
+if %errorlevel% neq 0 (
+    echo [ERROR] Node.js archive failed SHA256 verification. Aborting startup.
+    del "%PROJECT_DIR%%NODE_ZIP%" 2>nul
+    del "%PROJECT_DIR%%NODE_SHASUMS%" 2>nul
+    pause
+    exit /b 1
+)
+
 :: Extract using PowerShell
-echo [INFO] Extracting Node.js...
+echo [INFO] Extracting verified Node.js archive...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Expand-Archive -Path '%PROJECT_DIR%%NODE_ZIP%' -DestinationPath '%PROJECT_DIR%' -Force; Write-Host '[OK] Extraction complete.' } catch { Write-Host '[ERROR] Extraction failed:' $_.Exception.Message; exit 1 }"
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to extract Node.js.
+    del "%PROJECT_DIR%%NODE_ZIP%" 2>nul
+    del "%PROJECT_DIR%%NODE_SHASUMS%" 2>nul
     pause
     exit /b 1
 )
@@ -103,6 +127,7 @@ ren "%PROJECT_DIR%%NODE_DIR%" "node-portable"
 
 :: Clean up zip file
 del "%PROJECT_DIR%%NODE_ZIP%" 2>nul
+del "%PROJECT_DIR%%NODE_SHASUMS%" 2>nul
 
 echo [OK] Node.js portable installed successfully.
 echo.
@@ -152,13 +177,22 @@ echo.
 
 if "%NEED_INSTALL%"=="0" goto :deps_ready
 
+if not exist "%PROJECT_DIR%package-lock.json" (
+    echo [ERROR] package-lock.json not found.
+    echo [ERROR] Secure automatic dependency installation requires a lockfile.
+    pause
+    exit /b 1
+)
+
 echo [INFO] Checking and installing dependencies...
+echo [INFO] Installing from lockfile with npm ci...
+echo [INFO] Lifecycle scripts are enabled.
 echo [INFO] Please wait, this may take a minute...
 echo.
 
 :: Run npm from TEMP dir with --prefix to avoid Chinese-character path breaking npm.cmd
 pushd %TEMP%
-call "%NPM_CMD%" install --production --prefix "%PROJECT_DIR%"
+call "%NPM_CMD%" ci --omit=dev --prefix "%PROJECT_DIR%"
 if %errorlevel% equ 0 (
     popd
     goto :install_ok
@@ -170,13 +204,13 @@ call "%NPM_CMD%" cache clean --force 2>nul
 popd
 if exist "%PROJECT_DIR%node_modules" rd /s /q "%PROJECT_DIR%node_modules"
 pushd %TEMP%
-call "%NPM_CMD%" install --production --prefix "%PROJECT_DIR%"
+call "%NPM_CMD%" ci --omit=dev --prefix "%PROJECT_DIR%"
 set "INSTALL_OK=%errorlevel%"
 popd
 if %INSTALL_OK% equ 0 goto :install_ok
 
 echo.
-echo [ERROR] Failed to install dependencies.
+echo [ERROR] Failed to install dependencies from package-lock.json.
 echo [ERROR] Please check your internet connection and try again.
 pause
 exit /b 1

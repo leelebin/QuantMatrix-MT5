@@ -1,0 +1,10 @@
+[Notify] Telegram notification service enabled
+Server running on port 5000
+Dashboard: http://localhost:5000
+[WS] WebSocket server initialized on /ws
+Database Connected: NeDB (local file storage)
+Data directory: C:\Users\lebin\OneDrive\桌面\claudetrader4\QuantMatrix-MT5-main\data
+[WS] Client #1 connected from ::1 (total: 1)
+[WS] Client #1 disconnected | code: 1000 | reason: done | duration: 0s
+[WS] Client #2 connected from ::1 (total: 1)
+[WS] Client #2 disconnected | code: 1000 | reason: done | duration: 4s

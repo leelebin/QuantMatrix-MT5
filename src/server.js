@@ -61,6 +61,17 @@ app.use(express.json());
 // Enable CORS
 app.use(cors());
 
+// Prevent the single-page dashboard HTML from getting stuck in browser cache.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && (req.path === '/' || req.path === '/index.html')) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+  }
+  next();
+});
+
 // Serve frontend static files
 const publicPath = path.resolve(process.cwd(), 'public');
 if (!fs.existsSync(publicPath)) {

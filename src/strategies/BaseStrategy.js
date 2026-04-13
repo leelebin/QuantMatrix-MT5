@@ -53,6 +53,13 @@ class BaseStrategy {
   }
 
   /**
+   * Helper: get resolved strategy parameters from context
+   */
+  getStrategyParameters(context = {}) {
+    return context.strategyParams || {};
+  }
+
+  /**
    * Helper: build a no-signal response
    */
   noSignal(extra = {}) {
@@ -63,6 +70,10 @@ class BaseStrategy {
       tp: 0,
       reason: '',
       indicatorsSnapshot: {},
+      marketQualityScore: 0,
+      marketQualityThreshold: 0,
+      marketQualityDetails: {},
+      filterReason: '',
       setupTimeframe: null,
       entryTimeframe: null,
       triggerReason: '',

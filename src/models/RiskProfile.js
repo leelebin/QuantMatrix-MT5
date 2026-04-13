@@ -1,4 +1,5 @@
 const { riskProfilesDb } = require('../config/db');
+const breakevenService = require('../services/breakevenService');
 
 const DEFAULT_PROFILE_NAME = 'Bootstrap Risk';
 
@@ -43,11 +44,12 @@ function getSeedProfile() {
     maxConcurrentPositions: parsePositiveInt(process.env.MAX_CONCURRENT_POSITIONS) || 5,
     maxPositionsPerSymbol: parsePositiveInt(process.env.MAX_POSITIONS_PER_SYMBOL) || 2,
     allowAggressiveMinLot: false,
+    tradeManagement: breakevenService.getDefaultTradeManagement(),
     isActive: true,
   };
 }
 
-function normalizeProfilePayload(data = {}, { partial = false } = {}) {
+function normalizeProfilePayload(data = {}, { partial = false, existingProfile = null } = {}) {
   const errors = [];
   const cleaned = {};
 
@@ -94,6 +96,22 @@ function normalizeProfilePayload(data = {}, { partial = false } = {}) {
 
   if (!partial || data.allowAggressiveMinLot !== undefined) {
     cleaned.allowAggressiveMinLot = Boolean(data.allowAggressiveMinLot);
+  }
+
+  try {
+    const tradeManagement = breakevenService.normalizeProfileTradeManagement(data.tradeManagement, {
+      partial,
+      existingTradeManagement: existingProfile?.tradeManagement || null,
+    });
+    if (tradeManagement !== undefined) {
+      cleaned.tradeManagement = tradeManagement;
+    }
+  } catch (err) {
+    if (err?.details) {
+      errors.push(...err.details);
+    } else {
+      throw err;
+    }
   }
 
   if (!partial && cleaned.isActive === undefined) {
@@ -183,7 +201,7 @@ const RiskProfile = {
     const existing = await this.findById(id);
     if (!existing) return null;
 
-    const cleaned = normalizeProfilePayload(data, { partial: true });
+    const cleaned = normalizeProfilePayload(data, { partial: true, existingProfile: existing });
     if (cleaned.nameKey && cleaned.nameKey !== existing.nameKey) {
       const nameMatch = await this.findByNameKey(cleaned.nameKey);
       if (nameMatch && nameMatch._id !== id) {
@@ -231,6 +249,7 @@ const RiskProfile = {
   },
 
   toRuntimeSettings(profile) {
+    const breakeven = breakevenService.getProfileBreakeven(profile);
     return {
       profile,
       maxRiskPerTrade: (Number(profile?.maxRiskPerTradePct) || 0) / 100,
@@ -239,6 +258,10 @@ const RiskProfile = {
       maxConcurrentPositions: parsePositiveInt(profile?.maxConcurrentPositions) || 5,
       maxPositionsPerSymbol: parsePositiveInt(profile?.maxPositionsPerSymbol) || 2,
       allowAggressiveMinLot: Boolean(profile?.allowAggressiveMinLot),
+      tradeManagement: {
+        breakeven,
+      },
+      breakeven,
     };
   },
 };

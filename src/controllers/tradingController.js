@@ -11,6 +11,26 @@ const { getAllSymbols, getInstrument } = require('../config/instruments');
 
 let tradingLoopInterval = null;
 
+function getActiveAssignmentStats(strategies) {
+  const activeSymbols = new Set();
+  let activeAssignments = 0;
+
+  for (const strategy of strategies) {
+    if (!strategy.enabled || !Array.isArray(strategy.symbols)) {
+      continue;
+    }
+
+    const uniqueSymbols = [...new Set(strategy.symbols)];
+    activeAssignments += uniqueSymbols.length;
+    uniqueSymbols.forEach((symbol) => activeSymbols.add(symbol));
+  }
+
+  return {
+    activeAssignments,
+    activeSymbols: activeSymbols.size,
+  };
+}
+
 function getPricePrecision(instrument) {
   const pipSize = String(instrument?.pipSize || '0.01');
   if (pipSize.includes('e-')) {
@@ -122,27 +142,23 @@ exports.startTrading = async (req, res) => {
       tradingLoopInterval = setInterval(async () => {
         try {
           const strategies = await Strategy.findAll();
-          const enabledSymbols = [];
-          for (const strategy of strategies) {
-            if (strategy.enabled && strategy.symbols) {
-              enabledSymbols.push(...strategy.symbols);
-            }
-          }
-
-          if (enabledSymbols.length === 0) return;
+          const assignmentStats = getActiveAssignmentStats(strategies);
+          if (assignmentStats.activeAssignments === 0) return;
 
           await strategyEngine.analyzeAll(
             async (symbol, timeframe, count) => await mt5Service.getCandles(symbol, timeframe, null, count),
             async (signal) => {
               await tradeExecutor.executeTrade(signal);
-            },
-            enabledSymbols
+            }
           );
         } catch (err) {
           console.error('[Trading Loop] Error:', err.message);
         }
       }, 5 * 60 * 1000);
     }
+
+    const strategies = await Strategy.findAll();
+    const assignmentStats = getActiveAssignmentStats(strategies);
 
     res.json({
       success: true,
@@ -154,7 +170,9 @@ exports.startTrading = async (req, res) => {
           currency: accountInfo.currency,
           mode: mt5Service.getAccountModeName(accountInfo),
         },
-        symbols: getAllSymbols().length,
+        symbols: assignmentStats.activeSymbols || getAllSymbols().length,
+        activeAssignments: assignmentStats.activeAssignments,
+        activeSymbols: assignmentStats.activeSymbols,
         monitorRunning: true,
       },
     });
@@ -193,6 +211,9 @@ exports.getStatus = async (req, res) => {
 
     let riskStatus = null;
     let account = null;
+    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+    const strategies = await Strategy.findAll();
+    const assignmentStats = getActiveAssignmentStats(strategies);
     if (connected) {
       const accountInfo = await mt5Service.getAccountInfo();
       riskStatus = await riskManager.getRiskStatus(accountInfo);
@@ -211,6 +232,8 @@ exports.getStatus = async (req, res) => {
         account,
         tradingEnabled,
         tradingLoopActive: tradingLoopInterval !== null,
+        activeAssignments: assignmentStats.activeAssignments,
+        activeSymbols: assignmentStats.activeSymbols,
         monitor: monitorStatus,
         risk: riskStatus,
         recentSignals: strategyEngine.getRecentSignals(null, 10),

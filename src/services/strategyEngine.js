@@ -4,7 +4,13 @@
  */
 
 const indicatorService = require('./indicatorService');
+const Strategy = require('../models/Strategy');
 const { instruments, getInstrumentsByStrategy, STRATEGY_TYPES } = require('../config/instruments');
+const { getStrategyExecutionConfig } = require('../config/strategyExecution');
+const {
+  getStrategyParameterDefinitions,
+  resolveStrategyParameters,
+} = require('../config/strategyParameters');
 const TrendFollowingStrategy = require('../strategies/TrendFollowingStrategy');
 const MeanReversionStrategy = require('../strategies/MeanReversionStrategy');
 const MultiTimeframeStrategy = require('../strategies/MultiTimeframeStrategy');
@@ -30,13 +36,90 @@ class StrategyEngine {
     this.strategies[STRATEGY_TYPES.BREAKOUT] = new BreakoutStrategy();
   }
 
-  analyzeSymbol(symbol, candles, higherTfCandles = null, entryCandles = null) {
-    const instrument = instruments[symbol];
-    if (!instrument) {
+  _getExecutionConfig(symbol, strategyType) {
+    return getStrategyExecutionConfig(symbol, strategyType);
+  }
+
+  _buildRuntimeInstrument(symbol, strategyType, strategyParameters = null) {
+    const executionConfig = this._getExecutionConfig(symbol, strategyType);
+    if (!executionConfig) {
+      return null;
+    }
+
+    const resolvedParams = resolveStrategyParameters({
+      strategyType,
+      instrument: executionConfig,
+      storedParameters: strategyParameters,
+    });
+
+    return {
+      instrument: {
+        ...executionConfig,
+        riskParams: {
+          ...executionConfig.riskParams,
+          riskPercent: Number(resolvedParams.riskPercent ?? executionConfig.riskParams.riskPercent),
+          slMultiplier: Number(resolvedParams.slMultiplier ?? executionConfig.riskParams.slMultiplier),
+          tpMultiplier: Number(resolvedParams.tpMultiplier ?? executionConfig.riskParams.tpMultiplier),
+        },
+      },
+      resolvedParams,
+    };
+  }
+
+  _buildAnalysisTasks(strategyRecords, symbolFilter = null) {
+    const filterSet = Array.isArray(symbolFilter) && symbolFilter.length > 0
+      ? new Set(symbolFilter)
+      : null;
+
+    if (!strategyRecords || strategyRecords.length === 0) {
+      const defaultSymbols = filterSet ? [...filterSet] : Object.keys(instruments);
+      return defaultSymbols
+        .filter((symbol) => instruments[symbol])
+        .map((symbol) => ({
+          symbol,
+          strategyType: instruments[symbol].strategyType,
+        }));
+    }
+
+    const seen = new Set();
+    const tasks = [];
+    for (const strategyRecord of strategyRecords) {
+      if (!strategyRecord.enabled || !Array.isArray(strategyRecord.symbols)) {
+        continue;
+      }
+
+      for (const symbol of strategyRecord.symbols) {
+        if (!instruments[symbol]) {
+          continue;
+        }
+        if (filterSet && !filterSet.has(symbol)) {
+          continue;
+        }
+
+        const taskKey = `${symbol}:${strategyRecord.name}`;
+        if (seen.has(taskKey)) {
+          continue;
+        }
+
+        seen.add(taskKey);
+        tasks.push({
+          symbol,
+          strategyType: strategyRecord.name,
+        });
+      }
+    }
+
+    return tasks;
+  }
+
+  analyzeSymbol(symbol, strategyType, candles, higherTfCandles = null, entryCandles = null, strategyParameters = null) {
+    const runtime = this._buildRuntimeInstrument(symbol, strategyType, strategyParameters);
+    if (!runtime) {
       return { signal: 'NONE', symbol, strategy: null, reason: 'Unknown symbol' };
     }
 
-    const strategy = this.strategies[instrument.strategyType];
+    const { instrument: runtimeInstrument, resolvedParams } = runtime;
+    const strategy = this.strategies[strategyType];
     if (!strategy) {
       return { signal: 'NONE', symbol, strategy: null, reason: 'No strategy assigned' };
     }
@@ -50,24 +133,26 @@ class StrategyEngine {
       : [];
 
     if (closedCandles.length < 50) {
-      return { signal: 'NONE', symbol, strategy: instrument.strategyType, reason: 'Need more closed candles' };
+      return { signal: 'NONE', symbol, strategy: strategyType, reason: 'Need more closed candles' };
     }
 
-    if (instrument.entryTimeframe && closedEntryCandles.length < 50) {
+    if (runtimeInstrument.entryTimeframe && closedEntryCandles.length < 50) {
       return {
         signal: 'NONE',
         symbol,
-        strategy: instrument.strategyType,
-        reason: `Need more closed ${instrument.entryTimeframe} candles`,
+        strategy: strategyType,
+        reason: `Need more closed ${runtimeInstrument.entryTimeframe} candles`,
       };
     }
 
-    const ind = indicatorService.calculateAll(closedCandles);
-    const entryInd = closedEntryCandles.length > 0 ? indicatorService.calculateAll(closedEntryCandles) : null;
+    const ind = indicatorService.calculateAll(closedCandles, resolvedParams);
+    const entryInd = closedEntryCandles.length > 0
+      ? indicatorService.calculateAll(closedEntryCandles, resolvedParams)
+      : null;
 
-    if (instrument.strategyType === STRATEGY_TYPES.MULTI_TIMEFRAME && closedHigherTfCandles.length > 0) {
+    if (strategyType === STRATEGY_TYPES.MULTI_TIMEFRAME && closedHigherTfCandles.length > 0) {
       const htfCloses = closedHigherTfCandles.map((c) => c.close);
-      const htfEma200 = indicatorService.ema(htfCloses, 200);
+      const htfEma200 = indicatorService.ema(htfCloses, Number(resolvedParams.ema_trend) || 200);
       const latestHtfEma = htfEma200.length > 0 ? htfEma200[htfEma200.length - 1] : null;
       const latestHtfPrice = closedHigherTfCandles[closedHigherTfCandles.length - 1].close;
 
@@ -75,27 +160,35 @@ class StrategyEngine {
         const trend = latestHtfPrice > latestHtfEma ? 'BULLISH' : 'BEARISH';
         strategy.setHigherTimeframeTrend(trend, { ema200: latestHtfEma, price: latestHtfPrice });
       }
+    } else if (strategyType === STRATEGY_TYPES.MULTI_TIMEFRAME) {
+      strategy.higherTfTrend = null;
     }
 
-    const result = strategy.analyze(closedCandles, ind, instrument, {
+    const result = strategy.analyze(closedCandles, ind, runtimeInstrument, {
       higherTfCandles: closedHigherTfCandles,
       entryCandles: closedEntryCandles,
       entryIndicators: entryInd,
+      strategyParams: resolvedParams,
     });
 
     const analyzedCandle = closedCandles[closedCandles.length - 1];
     const latestEntryCandle = closedEntryCandles[closedEntryCandles.length - 1] || null;
     const signalRecord = {
       symbol,
-      strategy: instrument.strategyType,
+      strategy: strategyType,
       signal: result.signal,
       confidence: result.confidence,
       sl: result.sl,
       tp: result.tp,
       reason: result.reason,
+      filterReason: result.filterReason || '',
+      strategyParams: resolvedParams,
+      marketQualityScore: result.marketQualityScore ?? null,
+      marketQualityThreshold: result.marketQualityThreshold ?? null,
+      marketQualityDetails: result.marketQualityDetails || {},
       indicatorsSnapshot: result.indicatorsSnapshot,
-      setupTimeframe: result.setupTimeframe || instrument.timeframe || null,
-      entryTimeframe: result.entryTimeframe || instrument.entryTimeframe || null,
+      setupTimeframe: result.setupTimeframe || runtimeInstrument.timeframe || null,
+      entryTimeframe: result.entryTimeframe || runtimeInstrument.entryTimeframe || null,
       triggerReason: result.triggerReason || '',
       setupActive: result.setupActive === true,
       setupDirection: result.setupDirection || null,
@@ -106,16 +199,18 @@ class StrategyEngine {
       candleTime: analyzedCandle.time,
     };
 
-    if (result.signal !== 'NONE' || result.setupActive) {
+    if (result.signal !== 'NONE' || result.setupActive || Boolean(result.filterReason)) {
       const signalKey = [
-        instrument.strategyType,
+        strategyType,
         signalRecord.status,
         signalRecord.setupDirection || result.signal,
+        signalRecord.filterReason || '',
         signalRecord.setupCandleTime || analyzedCandle.time,
         signalRecord.entryCandleTime || signalRecord.candleTime,
       ].join(':');
+      const emissionKey = `${symbol}:${strategyType}`;
 
-      if (this.lastEmittedSignals.get(symbol) === signalKey) {
+      if (this.lastEmittedSignals.get(emissionKey) === signalKey) {
         return {
           ...signalRecord,
           signal: 'NONE',
@@ -129,7 +224,7 @@ class StrategyEngine {
         };
       }
 
-      this.lastEmittedSignals.set(symbol, signalKey);
+      this.lastEmittedSignals.set(emissionKey, signalKey);
       this.signals.unshift(signalRecord);
       if (this.signals.length > this.maxSignalHistory) {
         this.signals = this.signals.slice(0, this.maxSignalHistory);
@@ -141,29 +236,51 @@ class StrategyEngine {
 
   async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null) {
     const symbolsToAnalyze = enabledSymbols || Object.keys(instruments);
+    const strategyRecords = await Strategy.findAll();
+    const parametersByStrategy = new Map(
+      strategyRecords.map((strategy) => [strategy.name, strategy.parameters || {}])
+    );
+    const analysisTasks = this._buildAnalysisTasks(strategyRecords, symbolsToAnalyze);
+    const candleCache = new Map();
 
-    for (const symbol of symbolsToAnalyze) {
+    for (const task of analysisTasks) {
       try {
-        const instrument = instruments[symbol];
-        if (!instrument) continue;
+        const { symbol, strategyType } = task;
+        const executionConfig = this._getExecutionConfig(symbol, strategyType);
+        if (!executionConfig) continue;
 
-        const candles = await getCandlesFn(symbol, instrument.timeframe, 251);
+        const fetchCachedCandles = async (timeframe) => {
+          const cacheKey = `${symbol}:${timeframe}:251`;
+          if (!candleCache.has(cacheKey)) {
+            candleCache.set(cacheKey, Promise.resolve(getCandlesFn(symbol, timeframe, 251)));
+          }
+          return candleCache.get(cacheKey);
+        };
+
+        const candles = await fetchCachedCandles(executionConfig.timeframe);
         if (!candles || candles.length < 50) {
           console.log(`[Engine] Insufficient data for ${symbol}: ${candles ? candles.length : 0} candles`);
           continue;
         }
 
         let higherTfCandles = null;
-        if (instrument.higherTimeframe) {
-          higherTfCandles = await getCandlesFn(symbol, instrument.higherTimeframe, 251);
+        if (executionConfig.higherTimeframe) {
+          higherTfCandles = await fetchCachedCandles(executionConfig.higherTimeframe);
         }
 
         let entryCandles = null;
-        if (instrument.entryTimeframe) {
-          entryCandles = await getCandlesFn(symbol, instrument.entryTimeframe, 251);
+        if (executionConfig.entryTimeframe) {
+          entryCandles = await fetchCachedCandles(executionConfig.entryTimeframe);
         }
 
-        const result = this.analyzeSymbol(symbol, candles, higherTfCandles, entryCandles);
+        const result = this.analyzeSymbol(
+          symbol,
+          strategyType,
+          candles,
+          higherTfCandles,
+          entryCandles,
+          parametersByStrategy.get(strategyType) || null
+        );
 
         if (result.signal !== 'NONE' && onSignalFn) {
           await onSignalFn(result);
@@ -188,6 +305,7 @@ class StrategyEngine {
       name: strategy.name,
       description: strategy.description,
       symbols: getInstrumentsByStrategy(type).map((i) => i.symbol),
+      parameterDefinitions: getStrategyParameterDefinitions(type),
     }));
   }
 }

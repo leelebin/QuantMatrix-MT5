@@ -341,12 +341,13 @@ class MT5Service {
    * @param {Date} startTime - Start date
    * @param {number} limit - Number of candles
    */
-  async getCandles(symbol, timeframe, startTime, limit = 500) {
+  async getCandles(symbol, timeframe, startTime, limit = 500, endTime = null) {
     this._ensureConnected();
     return await this._sendCommand('getCandles', {
       symbol,
       timeframe,
       startTime: startTime instanceof Date ? startTime.toISOString() : startTime,
+      endTime: endTime instanceof Date ? endTime.toISOString() : endTime,
       limit,
     });
   }

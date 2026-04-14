@@ -8,6 +8,9 @@ const trailingStopService = require('./trailingStopService');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
+const indicatorService = require('./indicatorService');
+const strategyEngine = require('./strategyEngine');
+const { getInstrument } = require('../config/instruments');
 const { positionsDb, tradesDb } = require('../config/db');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 
@@ -91,7 +94,9 @@ class PositionMonitor {
   }
 
   /**
-   * Run trailing stop logic on all open positions
+   * Run exit-plan lifecycle (BE, trailing, partials, time-exit) on all open
+   * positions. Strategies' evaluateExit() hooks are invoked with fresh
+   * candle + indicator context so they can adapt to current market state.
    */
   async runTrailingStops() {
     if (!mt5Service.isConnected()) return;
@@ -99,10 +104,71 @@ class PositionMonitor {
     const positions = await positionsDb.find({});
     if (positions.length === 0) return;
 
+    // Per-tick cache so multiple positions on the same symbol/timeframe share
+    // one candle fetch + indicator computation.
+    const candleCache = new Map();
+    const indicatorCache = new Map();
+
+    const getLiveContext = async (position) => {
+      const instrument = getInstrument(position.symbol);
+      if (!instrument) return null;
+      const timeframe = instrument.timeframe || '1h';
+      const cacheKey = `${position.symbol}:${timeframe}`;
+      try {
+        if (!candleCache.has(cacheKey)) {
+          const candles = await mt5Service.getCandles(
+            position.symbol,
+            timeframe,
+            new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+            251
+          );
+          candleCache.set(cacheKey, Array.isArray(candles) ? candles : []);
+        }
+        const rawCandles = candleCache.get(cacheKey);
+        const closedCandles = rawCandles && rawCandles.length > 1
+          ? rawCandles.slice(0, -1)
+          : rawCandles || [];
+        if (closedCandles.length < 20) return null;
+        if (!indicatorCache.has(cacheKey)) {
+          indicatorCache.set(cacheKey, indicatorService.calculateAll(closedCandles));
+        }
+        return {
+          candles: closedCandles,
+          indicators: indicatorCache.get(cacheKey),
+        };
+      } catch (err) {
+        console.warn(`[Monitor] Live context fetch failed for ${position.symbol}: ${err.message}`);
+        return null;
+      }
+    };
+
+    const getStrategy = (name) => {
+      if (!name) return null;
+      const strategies = strategyEngine.strategies || {};
+      return strategies[name] || null;
+    };
+
     const updates = await trailingStopService.processPositions(
       positions,
       async (symbol) => mt5Service.getPrice(symbol),
-      async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp)
+      async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp),
+      {
+        getStrategy,
+        getLiveContext,
+        closePositionFn: async (positionId) => mt5Service.closePosition(positionId),
+        partialCloseFn: async (positionId, volume) => {
+          if (typeof mt5Service.partialClosePosition !== 'function') {
+            throw new Error('partialClosePosition not supported by MT5 bridge');
+          }
+          return mt5Service.partialClosePosition(positionId, volume);
+        },
+        updatePositionFn: async (localId, patch) => {
+          const query = localId && typeof localId === 'string' && localId.length >= 16
+            ? { _id: localId }
+            : { mt5PositionId: String(localId) };
+          await positionsDb.update(query, { $set: patch });
+        },
+      }
     );
 
     if (updates.length === 0) {
@@ -118,11 +184,12 @@ class PositionMonitor {
     for (const update of updates) {
       const localPosition = positionsByMt5Id.get(String(update.positionId));
       if (!localPosition) continue;
-
-      await positionsDb.update(
-        { _id: localPosition._id },
-        { $set: { currentSl: update.newSl } }
-      );
+      if (update.newSl !== undefined) {
+        await positionsDb.update(
+          { _id: localPosition._id },
+          { $set: { currentSl: update.newSl } }
+        );
+      }
     }
 
     const refreshedPositions = await positionsDb.find({});

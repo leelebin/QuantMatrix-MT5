@@ -157,6 +157,11 @@ class TradeExecutor {
       const activeProfile = await RiskProfile.getActive();
       const strategyRecord = signal.strategy ? await Strategy.findByName(signal.strategy) : null;
       const breakevenConfig = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyRecord);
+      const exitPlan = breakevenService.resolveEffectiveExitPlan(
+        activeProfile,
+        strategyRecord,
+        signal.exitPlan || null
+      );
 
       // Save position to local DB
       const position = await positionsDb.insert({
@@ -166,6 +171,7 @@ class TradeExecutor {
         currentSl: signal.sl,
         currentTp: signal.tp,
         lotSize: riskCheck.lotSize,
+        originalLotSize: riskCheck.lotSize,
         mt5PositionId,
         mt5EntryDealId,
         mt5Comment,
@@ -175,6 +181,9 @@ class TradeExecutor {
         reason: signal.reason,
         atrAtEntry,
         breakevenConfig,
+        exitPlan,
+        partialsExecutedIndices: [],
+        maxFavourablePrice: executedEntryPrice,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
@@ -192,6 +201,7 @@ class TradeExecutor {
         confidence: signal.confidence,
         reason: signal.reason,
         breakevenConfig,
+        exitPlan,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         commission: entryCommission,
         swap: entrySwap,

@@ -33,6 +33,21 @@ jest.mock('../src/config/db', () => ({
     insert: jest.fn(),
     find: jest.fn(),
   },
+  riskProfilesDb: {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+    count: jest.fn(),
+  },
+  strategiesDb: {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn(),
+  },
 }));
 
 jest.mock('../src/services/mt5Service', () => ({
@@ -66,7 +81,7 @@ jest.mock('../src/services/notificationService', () => ({
   notifyTradeClosed: jest.fn(),
 }));
 
-const { positionsDb, tradesDb, executionAuditDb } = require('../src/config/db');
+const { positionsDb, tradesDb, executionAuditDb, riskProfilesDb, strategiesDb } = require('../src/config/db');
 const mt5Service = require('../src/services/mt5Service');
 const riskManager = require('../src/services/riskManager');
 const websocketService = require('../src/services/websocketService');
@@ -90,6 +105,36 @@ describe('MT5 mock integration flows', () => {
     tradesDb.find.mockResolvedValue([]);
     executionAuditDb.insert.mockImplementation(async (event) => ({ _id: `audit-${Date.now()}`, ...event }));
     executionAuditDb.find.mockResolvedValue([]);
+
+    // Seed an active risk profile so tradeExecutor.resolveEffectiveExitPlan() works
+    const activeProfile = {
+      _id: 'profile-active',
+      name: 'Test Profile',
+      nameKey: 'test profile',
+      maxRiskPerTradePct: 1,
+      maxDailyLossPct: 5,
+      maxDrawdownPct: 10,
+      maxConcurrentPositions: 5,
+      maxPositionsPerSymbol: 2,
+      allowAggressiveMinLot: false,
+      isActive: true,
+      tradeManagement: null,
+    };
+    riskProfilesDb.count.mockResolvedValue(1);
+    riskProfilesDb.find.mockReturnValue({ sort: () => Promise.resolve([activeProfile]) });
+    riskProfilesDb.findOne.mockImplementation(async (query) => {
+      if (query && query.isActive === true) return activeProfile;
+      return activeProfile;
+    });
+    riskProfilesDb.update.mockResolvedValue(1);
+    riskProfilesDb.remove.mockResolvedValue(1);
+    riskProfilesDb.insert.mockImplementation(async (doc) => ({ _id: 'profile-seed', ...doc }));
+
+    strategiesDb.count.mockResolvedValue(0);
+    strategiesDb.find.mockResolvedValue([]);
+    strategiesDb.findOne.mockResolvedValue(null);
+    strategiesDb.insert.mockImplementation(async (doc) => ({ _id: 'strat-1', ...doc }));
+    strategiesDb.update.mockResolvedValue(1);
 
     mt5Service.getAccountInfo.mockResolvedValue({
       balance: 10000,

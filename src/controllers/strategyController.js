@@ -50,6 +50,7 @@ function enrichStrategy(strategy, activeProfile = null) {
       storedParameters: strategy.parameters || null,
     }),
     effectiveBreakeven: breakevenService.resolveEffectiveBreakeven(activeProfile, strategy),
+    effectiveExitPlan: breakevenService.resolveEffectiveExitPlan(activeProfile, strategy, null),
   };
 }
 

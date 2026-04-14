@@ -17,6 +17,78 @@ class MultiTimeframeStrategy extends BaseStrategy {
     this.higherTfTrend = null;
   }
 
+  buildExitPlan(/* instrument, signal, indicators, context */) {
+    // TP = 5x ATR. Wider trail so large metal swings aren't cut short, plus
+    // a 2x ATR partial to lock in structural profit.
+    return {
+      breakeven: {
+        enabled: true,
+        triggerAtrMultiple: 1.0,
+        includeSpreadCompensation: true,
+        extraBufferPips: 0,
+      },
+      trailing: {
+        enabled: true,
+        startAtrMultiple: 2.5,
+        distanceAtrMultiple: 1.5,
+        mode: 'atr',
+      },
+      partials: [
+        { atProfitAtr: 2.0, closeFraction: 0.4, label: 'mtf_tp1' },
+      ],
+      timeExit: null,
+      adaptiveEvaluator: 'MultiTimeframe',
+    };
+  }
+
+  /**
+   * Adaptive exit for multi-timeframe.
+   *   ① Higher-TF trend has flipped against position — force aggressive
+   *      exit, the structural backdrop is gone.
+   *   ② MACD histogram flipped against us — tighten trail.
+   */
+  evaluateExit(position, context = {}) {
+    const { indicators } = context;
+    if (!indicators) return null;
+
+    const direction = position?.type;
+    if (this.higherTfTrend && this.higherTfTrend.trend) {
+      const htfAgainst =
+        (direction === 'BUY' && this.higherTfTrend.trend === 'BEARISH')
+        || (direction === 'SELL' && this.higherTfTrend.trend === 'BULLISH');
+      if (htfAgainst) {
+        return {
+          breakeven: { triggerAtrMultiple: 0.4 },
+          trailing: {
+            enabled: true,
+            startAtrMultiple: 0.6,
+            distanceAtrMultiple: 0.6,
+            mode: 'atr',
+          },
+        };
+      }
+    }
+
+    const currentMacd = this.latest(indicators.macd);
+    if (currentMacd) {
+      const histAgainst = direction === 'BUY'
+        ? currentMacd.histogram <= 0
+        : currentMacd.histogram >= 0;
+      if (histAgainst) {
+        return {
+          trailing: {
+            enabled: true,
+            startAtrMultiple: 1.5,
+            distanceAtrMultiple: 1.0,
+            mode: 'atr',
+          },
+        };
+      }
+    }
+
+    return null;
+  }
+
   setHigherTimeframeTrend(trend, data) {
     this.higherTfTrend = { trend, ...data };
   }
@@ -231,6 +303,7 @@ class MultiTimeframeStrategy extends BaseStrategy {
       tp: parseFloat(setup.tp.toFixed(instrument.pipSize < 0.001 ? 5 : 3)),
       reason: setup.reason,
       indicatorsSnapshot: snapshot,
+      exitPlan: this.buildExitPlan(instrument, setup.direction, null),
       setupTimeframe: instrument.timeframe || '1h',
       entryTimeframe: instrument.entryTimeframe || null,
       triggerReason: extra.triggerReason || '',

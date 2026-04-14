@@ -212,12 +212,16 @@ tr:hover{background:var(--bg3)}
     <div class="card">
       <div class="card-header">
         <span class="card-title">Trading Status</span>
-        <button class="btn-success btn-sm" id="tradingToggle" onclick="toggleTrading()">Start Trading</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary btn-sm" id="paperTradingToggle" onclick="togglePaperTrading()">Start Paper Trading</button>
+          <button class="btn-success btn-sm" id="tradingToggle" onclick="toggleTrading()">Start Trading</button>
+        </div>
       </div>
       <table>
         <tr><td style="color:var(--text2)">MT5 Connection</td><td id="dMt5Status">--</td></tr>
         <tr><td style="color:var(--text2)">Account Mode</td><td id="dAccountMode">--</td></tr>
         <tr><td style="color:var(--text2)">Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
+        <tr><td style="color:var(--text2)">Paper Trading</td><td id="dPaperTrading">--</td></tr>
         <tr><td style="color:var(--text2)">Risk Profile</td><td id="dRiskProfile">--</td></tr>
         <tr><td style="color:var(--text2)">Trading Loop</td><td id="dTradingLoop">--</td></tr>
         <tr><td style="color:var(--text2)">Position Monitor</td><td id="dMonitor">--</td></tr>
@@ -1238,6 +1242,37 @@ async function loadDashboard() {
       document.getElementById('recentSignals').innerHTML = html;
     }
   } catch (e) {}
+  // Paper trading status is served by its own endpoint
+  loadPaperTradingStatus();
+}
+
+async function loadPaperTradingStatus() {
+  const statusEl = document.getElementById('dPaperTrading');
+  const btn = document.getElementById('paperTradingToggle');
+  if (!statusEl || !btn) return;
+  try {
+    const r = await api('/api/paper-trading/status');
+    if (!r.success) {
+      statusEl.textContent = '--';
+      btn.textContent = 'Start Paper Trading';
+      btn.className = 'btn-primary btn-sm';
+      return;
+    }
+    const d = r.data || {};
+    if (d.running) {
+      statusEl.innerHTML = '<span style="color:var(--green)">Running</span>'
+        + (d.runtime ? ' <span style="color:var(--text2)">(' + d.runtime + ')</span>' : '')
+        + ' · <span style="color:var(--text2)">' + (d.openPositions || 0) + ' open</span>';
+      btn.textContent = 'Stop Paper Trading';
+      btn.className = 'btn-danger btn-sm';
+    } else {
+      statusEl.innerHTML = '<span style="color:var(--red)">Stopped</span>';
+      btn.textContent = 'Start Paper Trading';
+      btn.className = 'btn-primary btn-sm';
+    }
+  } catch (e) {
+    statusEl.textContent = '--';
+  }
 }
 
 async function toggleTrading() {
@@ -1250,6 +1285,25 @@ async function toggleTrading() {
     setTimeout(loadDashboard, 500);
   } catch (e) { alert(e.message); }
   finally { btn.disabled = false; }
+}
+
+async function togglePaperTrading() {
+  const btn = document.getElementById('paperTradingToggle');
+  const isRunning = btn.textContent === 'Stop Paper Trading';
+  try {
+    btn.disabled = true;
+    const r = isRunning
+      ? await api('/api/paper-trading/stop', 'POST')
+      : await api('/api/paper-trading/start', 'POST');
+    if (!r.success) {
+      alert(r.message || (isRunning ? 'Failed to stop paper trading' : 'Failed to start paper trading'));
+    }
+    setTimeout(loadPaperTradingStatus, 500);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ─── Positions ───

@@ -335,6 +335,22 @@ class MT5Service {
   }
 
   /**
+   * Partially close a position by volume.
+   * @param {string} positionId - MT5 position ID
+   * @param {number} volume - Volume (lots) to close. Must be less than the
+   *                         position's current volume and >= minLot.
+   */
+  async partialClosePosition(positionId, volume) {
+    this._ensureConnected();
+    const result = await this._sendCommand('partialClosePosition', {
+      positionId,
+      volume,
+    });
+    console.log(`[MT5] Partial close: ${positionId} volume=${volume}`);
+    return result;
+  }
+
+  /**
    * Get historical candles
    * @param {string} symbol - Trading symbol
    * @param {string} timeframe - e.g. '1h', '4h', '1d'

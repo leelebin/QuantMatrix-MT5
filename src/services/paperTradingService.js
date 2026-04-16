@@ -211,10 +211,22 @@ class PaperTradingService {
 
     // Run strategy engine analysis
     await strategyEngine.analyzeAll(
-      // Candle data fetcher
+      // Candle data fetcher — request the latest `count` bars (no startTime)
       async (symbol, timeframe, count) => {
-        const startTime = new Date(Date.now() - count * 60 * 60 * 1000);
-        return await mt5Service.getCandles(symbol, timeframe, startTime, count);
+        const candles = await mt5Service.getCandles(symbol, timeframe, null, count);
+        if (candles && candles.length > 0) {
+          console.log(
+            `[PaperTrading] Candles fetched: ${symbol} ${timeframe} `
+            + `| requested=${count} received=${candles.length} `
+            + `| first=${candles[0].time} last=${candles[candles.length - 1].time}`
+          );
+        } else {
+          console.log(
+            `[PaperTrading] Candles fetched: ${symbol} ${timeframe} `
+            + `| requested=${count} received=0`
+          );
+        }
+        return candles;
       },
       // Signal handler — execute paper trade
       async (signal) => {

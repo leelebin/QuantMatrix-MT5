@@ -31,7 +31,7 @@ exports.runBacktest = async (req, res) => {
       });
     }
 
-    const validStrategies = ['TrendFollowing', 'MeanReversion', 'MultiTimeframe', 'Momentum', 'Breakout'];
+    const validStrategies = ['TrendFollowing', 'MeanReversion', 'MultiTimeframe', 'Momentum', 'Breakout', 'VolumeFlowHybrid'];
     if (!validStrategies.includes(strategyType)) {
       return res.status(400).json({
         success: false,

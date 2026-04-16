@@ -17,7 +17,23 @@ const STRATEGY_TYPES = {
   MULTI_TIMEFRAME: 'MultiTimeframe',
   MOMENTUM: 'Momentum',
   BREAKOUT: 'Breakout',
+  // ─── Additive: volume / order-flow driven hybrid for metals + oil ───
+  // Added as a separate strategy type so it can be toggled independently
+  // of the existing strategies. Existing instrument strategyType mappings
+  // are unchanged; the default symbols for this strategy are tracked via
+  // VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS below.
+  VOLUME_FLOW_HYBRID: 'VolumeFlowHybrid',
 };
+
+/**
+ * Default symbol assignments for the additive VolumeFlowHybrid strategy.
+ * These are the symbols the strategy is registered to cover at startup
+ * (new enabled-by-default list). They are intentionally the metals + oil
+ * basket the strategy is tuned for. Indices are optional and opt-in —
+ * they can be enabled from the Strategies page.
+ */
+const VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS = ['XAUUSD', 'XAGUSD', 'XTIUSD', 'XBRUSD'];
+const VOLUME_FLOW_HYBRID_OPTIONAL_SYMBOLS = ['US30', 'NAS100', 'SPX500'];
 
 const instruments = {
   // ─── Forex Majors (Trend Following) ───
@@ -281,6 +297,14 @@ function getInstrumentsByCategory(category) {
 }
 
 function getInstrumentsByStrategy(strategyType) {
+  // The VolumeFlowHybrid strategy is additive — it is not assigned via each
+  // instrument's primary `strategyType` field, so resolve it against the
+  // dedicated default list instead.
+  if (strategyType === STRATEGY_TYPES.VOLUME_FLOW_HYBRID) {
+    return VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS
+      .map((symbol) => instruments[symbol])
+      .filter(Boolean);
+  }
   return Object.values(instruments).filter((i) => i.strategyType === strategyType);
 }
 
@@ -296,6 +320,8 @@ module.exports = {
   instruments,
   INSTRUMENT_CATEGORIES,
   STRATEGY_TYPES,
+  VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS,
+  VOLUME_FLOW_HYBRID_OPTIONAL_SYMBOLS,
   getInstrumentsByCategory,
   getInstrumentsByStrategy,
   getInstrument,

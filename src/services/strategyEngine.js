@@ -16,6 +16,7 @@ const MeanReversionStrategy = require('../strategies/MeanReversionStrategy');
 const MultiTimeframeStrategy = require('../strategies/MultiTimeframeStrategy');
 const MomentumStrategy = require('../strategies/MomentumStrategy');
 const BreakoutStrategy = require('../strategies/BreakoutStrategy');
+const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy');
 
 class StrategyEngine {
   constructor() {
@@ -34,6 +35,9 @@ class StrategyEngine {
     this.strategies[STRATEGY_TYPES.MULTI_TIMEFRAME] = new MultiTimeframeStrategy();
     this.strategies[STRATEGY_TYPES.MOMENTUM] = new MomentumStrategy();
     this.strategies[STRATEGY_TYPES.BREAKOUT] = new BreakoutStrategy();
+    // Additive: volume/order-flow hybrid strategy for metals + oil. Keeps
+    // the rest of the map intact so existing strategies continue working.
+    this.strategies[STRATEGY_TYPES.VOLUME_FLOW_HYBRID] = new VolumeFlowHybridStrategy();
   }
 
   _getExecutionConfig(symbol, strategyType) {

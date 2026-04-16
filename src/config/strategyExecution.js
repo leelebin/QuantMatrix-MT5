@@ -26,6 +26,14 @@ const STRATEGY_EXECUTION_DEFAULTS = {
     higherTimeframe: null,
     entryTimeframe: null,
   },
+  // VolumeFlowHybrid runs intraday on the setup TF (5m) with a lower TF
+  // trigger (1m). Higher TF is optional context (15m). These are additive
+  // and don't affect other strategies' configs.
+  [STRATEGY_TYPES.VOLUME_FLOW_HYBRID]: {
+    timeframe: '5m',
+    higherTimeframe: '15m',
+    entryTimeframe: '1m',
+  },
 };
 
 function getStrategyExecutionConfig(symbol, strategyType) {

@@ -106,6 +106,14 @@ tr:hover{background:var(--bg3)}
 .batch-group-table{padding:0 16px 16px}
 .batch-table-note{font-size:11px;color:var(--text2);margin-top:6px}
 .batch-results-pagination{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap}
+.portfolio-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+.portfolio-cell{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.portfolio-cell .label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-weight:600}
+.portfolio-cell .value{font-size:18px;font-weight:700;color:var(--text)}
+.portfolio-cell .value.pos{color:var(--green)}
+.portfolio-cell .value.neg{color:var(--red)}
+.portfolio-cell .sub{font-size:11px;color:var(--text2);margin-top:4px}
+.portfolio-note{font-size:11px;color:var(--text2);line-height:1.6;margin-top:8px;padding:8px 12px;background:var(--bg);border-left:3px solid var(--blue);border-radius:4px}
 
 /* Equity curve canvas */
 .equity-canvas{width:100%;height:200px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
@@ -567,11 +575,34 @@ tr:hover{background:var(--bg3)}
             <input type="number" id="btBatchBalance" value="10000">
           </div>
           <div class="form-group">
-            <label>Timeframe Mode</label>
-            <select id="btBatchTimeframeMode">
-              <option value="strategy_default">Use Strategy Default</option>
+            <label>Strategy Scope</label>
+            <select id="btBatchStrategyScopeMode">
+              <option value="enabled_assigned_only">Enabled + Assigned Only</option>
+              <option value="all_strategies">All Strategies × All Symbols</option>
             </select>
           </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Timeframe Mode</label>
+            <select id="btBatchTimeframeMode" onchange="toggleForcedTimeframeVisibility()">
+              <option value="strategy_default">Use Strategy Default</option>
+              <option value="forced_timeframe">Forced Timeframe</option>
+            </select>
+          </div>
+          <div class="form-group" id="btBatchForcedTimeframeGroup" style="display:none">
+            <label>Forced Timeframe</label>
+            <select id="btBatchForcedTimeframe">
+              <option value="1m">1m</option>
+              <option value="5m">5m</option>
+              <option value="15m" selected>15m</option>
+              <option value="1h">1h</option>
+              <option value="4h">4h</option>
+            </select>
+          </div>
+        </div>
+        <div class="batch-hint" id="btBatchForcedTimeframeNote" style="display:none;font-size:12px;color:var(--text2);margin:4px 0 8px">
+          Forced timeframe overrides every strategy's primary TF. Higher / entry TFs are derived one step up / down where applicable; strategies that require an entry or higher TF that cannot be derived (e.g. sub-1m) have that role disabled for this run.
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
           <button class="btn-primary" onclick="runBatchBacktest()" id="btBatchRunBtn">Run Batch Backtest</button>
@@ -586,6 +617,14 @@ tr:hover{background:var(--bg3)}
         <div class="card-header"><span class="card-title">Job Overview</span></div>
         <div id="btBatchOverview"><div class="empty">Run a batch job to see overview data</div></div>
       </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <span class="card-title">Portfolio Summary</span>
+        <span class="section-subtitle">Aggregate math across all scored strategy runs (not averaged percentages)</span>
+      </div>
+      <div id="btBatchPortfolioSummary"><div class="empty">Run a batch job to see the portfolio summary</div></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -2404,6 +2443,15 @@ function renderBatchProgress(progress) {
     + ((progress.currentStrategy && progress.currentSymbol) ? (' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol) : '');
 }
 
+function toggleForcedTimeframeVisibility() {
+  const mode = document.getElementById('btBatchTimeframeMode').value;
+  const group = document.getElementById('btBatchForcedTimeframeGroup');
+  const note = document.getElementById('btBatchForcedTimeframeNote');
+  const show = mode === 'forced_timeframe';
+  if (group) group.style.display = show ? '' : 'none';
+  if (note) note.style.display = show ? '' : 'none';
+}
+
 function resetBatchResultFilters() {
   document.getElementById('btBatchFilterStrategy').value = '';
   document.getElementById('btBatchFilterSymbol').value = '';
@@ -2420,18 +2468,27 @@ async function runBatchBacktest() {
   activeBatchResultItemsById = {};
   closeBatchChildModal();
   document.getElementById('btBatchOverview').innerHTML = '<div class="empty">Batch job is starting...</div>';
+  const portfolioEl = document.getElementById('btBatchPortfolioSummary');
+  if (portfolioEl) portfolioEl.innerHTML = '<div class="empty">Waiting for portfolio summary...</div>';
   document.getElementById('btBatchResults').innerHTML = '<div class="empty">Waiting for results...</div>';
   document.getElementById('btBatchStrategyAgg').innerHTML = '<div class="empty">Waiting for strategy summary...</div>';
   document.getElementById('btBatchSymbolAgg').innerHTML = '<div class="empty">Waiting for symbol summary...</div>';
   document.getElementById('btBatchReport').innerHTML = '<div class="empty">Waiting for report...</div>';
 
+  const timeframeMode = document.getElementById('btBatchTimeframeMode').value;
+  const body = {
+    startDate: document.getElementById('btBatchStartDate').value,
+    endDate: document.getElementById('btBatchEndDate').value,
+    initialBalance: parseInt(document.getElementById('btBatchBalance').value, 10) || 10000,
+    strategyScopeMode: document.getElementById('btBatchStrategyScopeMode').value,
+    timeframeMode,
+  };
+  if (timeframeMode === 'forced_timeframe') {
+    body.forcedTimeframe = document.getElementById('btBatchForcedTimeframe').value;
+  }
+
   try {
-    const response = await api('/api/backtest/batch/run', 'POST', {
-      startDate: document.getElementById('btBatchStartDate').value,
-      endDate: document.getElementById('btBatchEndDate').value,
-      initialBalance: parseInt(document.getElementById('btBatchBalance').value, 10) || 10000,
-      timeframeMode: document.getElementById('btBatchTimeframeMode').value,
-    });
+    const response = await api('/api/backtest/batch/run', 'POST', body);
 
     if (!response.success) {
       document.getElementById('btBatchOverview').innerHTML = '<div class="empty" style="color:var(--red)">' + (response.message || 'Failed to start batch backtest') + '</div>';
@@ -2461,6 +2518,7 @@ function scheduleBatchJobPoll(jobId) {
       if (!response.success) return;
       const job = response.data;
       renderBatchOverview(job);
+      renderBatchPortfolioSummary(job);
       if (job.progress) renderBatchProgress(job.progress);
       renderBatchAggregateTable('btBatchStrategyAgg', job.aggregate && job.aggregate.byStrategy ? job.aggregate.byStrategy : [], 'strategy');
       renderBatchAggregateTable('btBatchSymbolAgg', job.aggregate && job.aggregate.bySymbol ? job.aggregate.bySymbol : [], 'symbol');
@@ -2486,6 +2544,7 @@ async function loadBatchJob(jobId) {
     const job = response.data;
 
     renderBatchOverview(job);
+    renderBatchPortfolioSummary(job);
     if (job.progress) renderBatchProgress(job.progress);
     renderBatchAggregateTable('btBatchStrategyAgg', job.aggregate && job.aggregate.byStrategy ? job.aggregate.byStrategy : [], 'strategy');
     renderBatchAggregateTable('btBatchSymbolAgg', job.aggregate && job.aggregate.bySymbol ? job.aggregate.bySymbol : [], 'symbol');
@@ -2519,20 +2578,38 @@ async function loadBatchJobHistory() {
       return;
     }
 
-    let html = '<table><tr><th>Date</th><th>Status</th><th>Scope</th><th>Runs</th><th>Profitables</th><th>Action</th></tr>';
+    let html = '<table><tr><th>Date</th><th>Status</th><th>Scope Mode</th><th>TF Mode</th><th>Coverage</th><th>Runs</th><th>Profitables</th><th>Return %</th><th>Action</th></tr>';
     response.data.forEach((job) => {
       const totalRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.totalRuns : (job.progress ? job.progress.total : '--');
       const profitableRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.profitableRuns : '--';
+      const portfolio = job.aggregate && job.aggregate.portfolio ? job.aggregate.portfolio : null;
+      const returnPct = portfolio && portfolio.scoredRuns > 0 ? num(portfolio.returnPercent) + '%' : '--';
+      const returnTone = portfolio && portfolio.scoredRuns > 0 ? (portfolio.returnPercent >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text)';
       html += '<tr><td>' + fmtTime(job.createdAt) + '</td>';
       html += '<td>' + batchStatusBadge(job.status) + '</td>';
-      html += '<td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols x ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td>';
+      html += '<td>' + escapeHtml(formatScopeModeLabel(job.strategyScopeMode)) + '</td>';
+      html += '<td>' + escapeHtml(formatTimeframeModeLabel(job)) + '</td>';
+      html += '<td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' × ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0)) + '</td>';
       html += '<td>' + totalRuns + '</td>';
       html += '<td>' + profitableRuns + '</td>';
+      html += '<td style="color:' + returnTone + '">' + returnPct + '</td>';
       html += '<td><button class="btn-outline btn-sm" onclick="switchBacktestMode(\'batch\'); loadBatchJob(\'' + job.jobId + '\')">Open</button></td></tr>';
     });
     html += '</table>';
     el.innerHTML = html;
   } catch (e) {}
+}
+
+function formatScopeModeLabel(mode) {
+  if (mode === 'all_strategies') return 'All Strategies × All Symbols';
+  return 'Enabled + Assigned Only';
+}
+
+function formatTimeframeModeLabel(job) {
+  if (job && job.timeframeMode === 'forced_timeframe') {
+    return 'Forced (' + (job.forcedTimeframe || '?') + ')';
+  }
+  return 'Strategy Default';
 }
 
 function renderBatchOverview(job) {
@@ -2543,8 +2620,10 @@ function renderBatchOverview(job) {
   html += '<tr><td style="color:var(--text2)">Status</td><td>' + batchStatusBadge(job.status) + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Run Model</td><td>' + (job.runModel || '--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Period</td><td>' + fmtTime(job.period && job.period.start) + ' -> ' + fmtTime(job.period && job.period.end) + '</td></tr>';
-  html += '<tr><td style="color:var(--text2)">Initial Balance</td><td>$' + num(job.initialBalance) + '</td></tr>';
-  html += '<tr><td style="color:var(--text2)">Scope</td><td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols x ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Initial Balance / Run</td><td>$' + num(job.initialBalance) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Strategy Scope</td><td>' + escapeHtml(formatScopeModeLabel(job.strategyScopeMode)) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Timeframe Mode</td><td>' + escapeHtml(formatTimeframeModeLabel(job)) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Coverage</td><td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols × ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td></tr>';
   if (job.progress) {
     html += '<tr><td style="color:var(--text2)">Progress</td><td>' + job.progress.current + '/' + job.progress.total + ' (' + job.progress.percent + '%)</td></tr>';
   }
@@ -2560,6 +2639,51 @@ function renderBatchOverview(job) {
   }
   html += '</table>';
   el.innerHTML = html;
+}
+
+function portfolioCell(label, value, tone, sub) {
+  const toneClass = tone === 'pos' ? ' pos' : tone === 'neg' ? ' neg' : '';
+  let html = '<div class="portfolio-cell">';
+  html += '<div class="label">' + escapeHtml(label) + '</div>';
+  html += '<div class="value' + toneClass + '">' + value + '</div>';
+  if (sub) html += '<div class="sub">' + sub + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderBatchPortfolioSummary(job) {
+  const el = document.getElementById('btBatchPortfolioSummary');
+  if (!el) return;
+  const portfolio = job && job.aggregate && job.aggregate.portfolio ? job.aggregate.portfolio : null;
+  if (!portfolio || portfolio.scoredRuns === 0) {
+    el.innerHTML = '<div class="empty">' + (portfolio ? 'No scored strategy runs yet — portfolio summary will appear when at least one child completes with trades.' : 'Run a batch job to see the portfolio summary.') + '</div>';
+    return;
+  }
+
+  const winPct = (portfolio.winRate * 100).toFixed(2);
+  const lossPct = (portfolio.lossRate * 100).toFixed(2);
+  const returnTone = portfolio.returnPercent > 0 ? 'pos' : portfolio.returnPercent < 0 ? 'neg' : '';
+  const netTone = portfolio.netProfitMoney > 0 ? 'pos' : portfolio.netProfitMoney < 0 ? 'neg' : '';
+  const pfTone = portfolio.profitFactor >= 1 ? 'pos' : portfolio.profitFactor > 0 ? 'neg' : '';
+
+  let grid = '<div class="portfolio-grid">';
+  grid += portfolioCell('Starting Capital', '$' + num(portfolio.totalStartingBalance), '', '$' + num(portfolio.initialBalancePerRun) + ' × ' + portfolio.scoredRuns + ' runs');
+  grid += portfolioCell('Ending Capital', '$' + num(portfolio.totalEndingBalance), netTone);
+  grid += portfolioCell('Net P/L', '$' + num(portfolio.netProfitMoney), netTone);
+  grid += portfolioCell('Return %', num(portfolio.returnPercent) + '%', returnTone);
+  grid += portfolioCell('Total Trades', num(portfolio.totalTrades), '', portfolio.winningTrades + ' W / ' + portfolio.losingTrades + ' L');
+  grid += portfolioCell('Win Rate', winPct + '%', '', 'Aggregate (wins / total trades)');
+  grid += portfolioCell('Loss Rate', lossPct + '%', '', 'Aggregate (losses / total trades)');
+  grid += portfolioCell('Profit Factor', num(portfolio.profitFactor), pfTone, '$' + num(portfolio.grossProfitMoney) + ' / $' + num(portfolio.grossLossMoney));
+  grid += portfolioCell('Avg Trade', '$' + num(portfolio.avgTradeMoney), portfolio.avgTradeMoney >= 0 ? 'pos' : 'neg');
+  grid += portfolioCell('Avg Max DD', num(portfolio.avgMaxDrawdownPercent) + '%', '', 'Mean per-run max drawdown');
+  grid += portfolioCell('Worst Run DD', num(portfolio.worstRunMaxDrawdownPercent) + '%', portfolio.worstRunMaxDrawdownPercent >= 25 ? 'neg' : '', 'Worst single strategy sleeve');
+  grid += portfolioCell('Profitable Runs', portfolio.profitableRuns + ' / ' + portfolio.scoredRuns, portfolio.profitableRuns > 0 ? 'pos' : '', portfolio.losingRuns + ' losing · ' + portfolio.noTradeRuns + ' no trades');
+  grid += '</div>';
+
+  grid += '<div class="portfolio-note">Portfolio math uses <strong>total wins / total trades</strong> for win rate, <strong>aggregated gross profit / gross loss</strong> for profit factor, and <strong>combined capital</strong> for return %. Max drawdown is reported as a worst-sleeve value plus the mean across sleeves (upper-bound portfolio DD assuming simultaneous drawdowns).</div>';
+
+  el.innerHTML = grid;
 }
 
 async function loadBatchJobResults(jobId, page=1) {

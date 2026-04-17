@@ -61,6 +61,12 @@ tr:hover{background:var(--bg3)}
 .tag-buy{background:rgba(16,185,129,.15);color:var(--green)}
 .tag-sell{background:rgba(239,68,68,.15);color:var(--red)}
 .tag-active{background:rgba(59,130,246,.15);color:var(--blue)}
+.tag-paper{background:rgba(139,92,246,.15);color:var(--purple)}
+.tag-live{background:rgba(239,68,68,.15);color:var(--red)}
+.paper-banner{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.35);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.paper-banner strong{color:var(--purple)}
+.section-subtitle{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;font-weight:600}
+.section-subtitle:first-child{margin-top:0}
 
 /* Forms */
 .form-group{margin-bottom:12px}
@@ -174,6 +180,7 @@ tr:hover{background:var(--bg3)}
     <button class="active" data-page="dashboard">Dashboard</button>
     <button data-page="positions">Positions</button>
     <button data-page="trades">Trades</button>
+    <button data-page="paper-trading">Paper Trading</button>
     <button data-page="strategies">Strategies</button>
     <button data-page="backtest">Backtest</button>
     <button data-page="optimizer">Optimizer</button>
@@ -211,22 +218,20 @@ tr:hover{background:var(--bg3)}
   <div class="grid grid-2">
     <div class="card">
       <div class="card-header">
-        <span class="card-title">Trading Status</span>
+        <span class="card-title"><span class="tag tag-live" style="margin-right:6px">LIVE</span>Live Trading Status</span>
         <div style="display:flex;gap:8px">
-          <button class="btn-primary btn-sm" id="paperTradingToggle" onclick="togglePaperTrading()">Start Paper Trading</button>
-          <button class="btn-success btn-sm" id="tradingToggle" onclick="toggleTrading()">Start Trading</button>
+          <button class="btn-success btn-sm" id="tradingToggle" onclick="toggleTrading()">Start Live Trading</button>
         </div>
       </div>
       <table>
         <tr><td style="color:var(--text2)">MT5 Connection</td><td id="dMt5Status">--</td></tr>
         <tr><td style="color:var(--text2)">Account Mode</td><td id="dAccountMode">--</td></tr>
-        <tr><td style="color:var(--text2)">Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
-        <tr><td style="color:var(--text2)">Paper Trading</td><td id="dPaperTrading">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
         <tr><td style="color:var(--text2)">Risk Profile</td><td id="dRiskProfile">--</td></tr>
-        <tr><td style="color:var(--text2)">Trading Loop</td><td id="dTradingLoop">--</td></tr>
-        <tr><td style="color:var(--text2)">Position Monitor</td><td id="dMonitor">--</td></tr>
-        <tr><td style="color:var(--text2)">Active Assignments</td><td id="dActiveAssignments">--</td></tr>
-        <tr><td style="color:var(--text2)">Active Symbols</td><td id="dActiveSymbols">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Trading Loop</td><td id="dTradingLoop">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Position Monitor</td><td id="dMonitor">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Active Assignments</td><td id="dActiveAssignments">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Active Symbols</td><td id="dActiveSymbols">--</td></tr>
         <tr><td style="color:var(--text2)">Daily Loss</td><td id="dDailyLoss">--</td></tr>
         <tr><td style="color:var(--text2)">Max Drawdown</td><td id="dDrawdown">--</td></tr>
         <tr><td style="color:var(--text2)">WS Clients</td><td id="dWsClients">0</td></tr>
@@ -234,11 +239,33 @@ tr:hover{background:var(--bg3)}
     </div>
     <div class="card">
       <div class="card-header">
-        <span class="card-title">Recent Signals</span>
+        <span class="card-title"><span class="tag tag-paper" style="margin-right:6px">PAPER</span>Paper Trading Status</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary btn-sm" id="paperTradingToggle" onclick="togglePaperTrading()">Start Paper Trading</button>
+        </div>
       </div>
-      <div id="recentSignals" style="max-height:260px;overflow-y:auto">
-        <div class="empty">No signals yet</div>
+      <table>
+        <tr><td style="color:var(--text2)">Status</td><td id="dPaperStatus">--</td></tr>
+        <tr><td style="color:var(--text2)">Runtime</td><td id="dPaperRuntime">--</td></tr>
+        <tr><td style="color:var(--text2)">Open Paper Positions</td><td id="dPaperOpen">--</td></tr>
+        <tr><td style="color:var(--text2)">Today Paper Trades</td><td id="dPaperTodayTrades">--</td></tr>
+        <tr><td style="color:var(--text2)">All-Time Trades</td><td id="dPaperTotalTrades">--</td></tr>
+        <tr><td style="color:var(--text2)">All-Time Win Rate</td><td id="dPaperWinRate">--</td></tr>
+        <tr><td style="color:var(--text2)">All-Time Profit</td><td id="dPaperTotalProfit">--</td></tr>
+        <tr><td style="color:var(--text2)">Daily Report Scheduler</td><td id="dPaperDailyReport">--</td></tr>
+      </table>
+      <div style="margin-top:12px">
+        <button class="btn-outline btn-sm" onclick="goToPaperTradingPage()">Open Paper Trading Workspace</button>
       </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Recent Signals</span>
+    </div>
+    <div id="recentSignals" style="max-height:260px;overflow-y:auto">
+      <div class="empty">No signals yet</div>
     </div>
   </div>
 </div>
@@ -328,6 +355,89 @@ tr:hover{background:var(--bg3)}
     </div>
     <div id="executionAuditTable">
       <div class="empty">No execution events yet</div>
+    </div>
+  </div>
+</div>
+
+<!-- Paper Trading Page -->
+<div class="page" id="page-paper-trading">
+  <div class="paper-banner">
+    <span class="tag tag-paper">PAPER</span>
+    <span><strong>Paper / demo workspace.</strong> All positions, trades and stats on this page are paper records only. Live trading data is on the other pages.</span>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Paper Trading Control</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-outline btn-sm" onclick="loadPaperTrading()">Refresh</button>
+          <button class="btn-primary btn-sm" id="paperTradingToggle2" onclick="togglePaperTrading()">Start Paper Trading</button>
+        </div>
+      </div>
+      <table>
+        <tr><td style="color:var(--text2)">Status</td><td id="ptStatus">--</td></tr>
+        <tr><td style="color:var(--text2)">Started At</td><td id="ptStartedAt">--</td></tr>
+        <tr><td style="color:var(--text2)">Runtime</td><td id="ptRuntime">--</td></tr>
+        <tr><td style="color:var(--text2)">Open Paper Positions</td><td id="ptOpen">--</td></tr>
+        <tr><td style="color:var(--text2)">Today Paper Trades</td><td id="ptTodayTrades">--</td></tr>
+        <tr><td style="color:var(--text2)">Daily Report Scheduler</td><td id="ptDailyReport">--</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Paper Trading Report</span>
+      </div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Manually generate and send the paper-trading daily report (uses the configured Telegram channel if available).</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Report Date (optional)</label>
+          <input type="date" id="ptReportDate">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" onclick="generatePaperReport()" id="ptReportBtn">Generate Paper Report</button>
+        <button class="btn-outline btn-sm" onclick="document.getElementById('ptReportDate').value=''">Clear Date</button>
+      </div>
+      <div id="ptReportResult" style="margin-top:12px;font-size:13px"></div>
+      <pre id="ptReportPreview" style="display:none;margin-top:12px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--text);max-height:260px;overflow:auto"></pre>
+    </div>
+  </div>
+
+  <div class="grid grid-4" style="margin-top:16px">
+    <div class="card stat-card"><div class="stat-label">Paper Trades</div><div class="stat-value" id="ptsTotalTrades">0</div></div>
+    <div class="card stat-card"><div class="stat-label">Paper Win Rate</div><div class="stat-value" id="ptsWinRate">--</div></div>
+    <div class="card stat-card"><div class="stat-label">Paper Profit</div><div class="stat-value" id="ptsTotalProfit">--</div></div>
+    <div class="card stat-card"><div class="stat-label">Paper Avg P/L</div><div class="stat-value" id="ptsAvgProfit">--</div></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title"><span class="tag tag-paper" style="margin-right:6px">PAPER</span>Open Paper Positions</span>
+      <button class="btn-outline btn-sm" onclick="loadPaperPositions()">Refresh</button>
+    </div>
+    <div id="paperPositionsTable">
+      <div class="empty">No open paper positions</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title"><span class="tag tag-paper" style="margin-right:6px">PAPER</span>Paper Trade Log</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="ptTradeFilterStatus" style="width:auto">
+          <option value="">All Statuses</option>
+          <option value="OPEN">Open</option>
+          <option value="CLOSED">Closed</option>
+        </select>
+        <input type="text" id="ptTradeFilterSymbol" placeholder="Symbol..." style="width:140px">
+        <button class="btn-primary btn-sm" onclick="loadPaperTradeLog()">Apply</button>
+        <button class="btn-outline btn-sm" onclick="resetPaperTradeLogFilters()">Reset</button>
+      </div>
+    </div>
+    <div id="paperTradeLogTable">
+      <div class="empty">No paper trades yet</div>
     </div>
   </div>
 </div>
@@ -646,8 +756,21 @@ tr:hover{background:var(--bg3)}
     <div class="card">
       <div class="card-header"><span class="card-title">Telegram Notifications</span></div>
       <div id="notifyStatus" style="margin-bottom:12px"></div>
-      <button class="btn-primary btn-sm" onclick="testNotification()">Send Test Notification</button>
-      <div id="notifyResult" style="margin-top:8px;font-size:13px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn-outline btn-sm" onclick="testNotification()">Send Test Notification</button>
+      </div>
+      <div id="notifyResult" style="margin-top:4px;font-size:13px;margin-bottom:12px"></div>
+      <div class="section-subtitle">Send Custom Notification</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Manual outbound notification tool. The text below will be sent via Telegram using the configured bot.</div>
+      <div class="form-group">
+        <label>Message</label>
+        <textarea id="notifyCustomMessage" rows="4" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;font-family:inherit" placeholder="Type the message to send to Telegram..."></textarea>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" onclick="sendCustomNotification()" id="notifySendBtn">Send Notification</button>
+        <button class="btn-outline btn-sm" onclick="document.getElementById('notifyCustomMessage').value=''">Clear</button>
+      </div>
+      <div id="notifySendResult" style="margin-top:8px;font-size:13px"></div>
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">WebSocket Connection Log</span></div>
@@ -759,6 +882,73 @@ tr:hover{background:var(--bg3)}
     <div class="card-header"><span class="card-title">Account Info</span></div>
     <div id="accountInfo"><div class="empty">Not connected</div></div>
   </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title"><span class="tag tag-live" style="margin-right:6px">LIVE</span>Live Test Order</span>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+      Diagnostic tool. Places a protected order on the connected MT5 broker using the configured risk profile, then immediately closes it to verify order placement, preflight, and broker-side validation. This sends a real order to the broker — use carefully.
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Symbol</label>
+        <select id="testOrderSymbol"></select>
+      </div>
+      <div class="form-group">
+        <label>Direction</label>
+        <select id="testOrderType">
+          <option value="BUY">BUY</option>
+          <option value="SELL">SELL</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-primary btn-sm" onclick="runTestOrder()" id="testOrderBtn">Run Test Order</button>
+    </div>
+    <div id="testOrderResult" style="margin-top:12px;font-size:13px"></div>
+  </div>
+</div>
+
+<!-- Strategy Signals Modal -->
+<div class="modal-overlay" id="strategySignalsModal" onclick="handleStrategySignalsBackdrop(event)">
+  <div class="modal" style="width:960px;max-width:95vw">
+    <div class="modal-header">
+      <div>
+        <h3 id="strategySignalsTitle">Recent Signals</h3>
+        <div class="modal-meta" id="strategySignalsMeta">Showing latest signals emitted by this strategy.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="refreshStrategySignals()">Refresh</button>
+        <button class="btn-outline btn-sm" onclick="closeStrategySignalsModal()">Close</button>
+      </div>
+    </div>
+    <div id="strategySignalsBody" style="margin-top:16px"><div class="empty">Loading signals...</div></div>
+    <div class="modal-actions">
+      <button class="btn-outline btn-sm" onclick="closeStrategySignalsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Optimizer Full Results Modal -->
+<div class="modal-overlay" id="optimizerFullResultsModal" onclick="handleOptimizerFullResultsBackdrop(event)">
+  <div class="modal" style="width:1100px;max-width:98vw">
+    <div class="modal-header">
+      <div>
+        <h3>Full Optimizer Results</h3>
+        <div class="modal-meta" id="optimizerFullResultsMeta">Complete list of parameter combinations evaluated by the optimizer.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="reloadOptimizerFullResults()">Reload</button>
+        <button class="btn-outline btn-sm" onclick="closeOptimizerFullResultsModal()">Close</button>
+      </div>
+    </div>
+    <div id="optimizerFullResultsBody" style="margin-top:16px"><div class="empty">Loading full results...</div></div>
+    <div id="optimizerFullResultsPagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap"></div>
+    <div class="modal-actions">
+      <button class="btn-outline btn-sm" onclick="closeOptimizerFullResultsModal()">Close</button>
+    </div>
+  </div>
 </div>
 </main>
 <script>
@@ -811,7 +1001,7 @@ function setAvailableSymbols(symbols) {
 }
 
 function populateSymbolSelects() {
-  ['btSymbol','optSymbol','btBatchFilterSymbol'].forEach(id => {
+  ['btSymbol','optSymbol','btBatchFilterSymbol','testOrderSymbol'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const currentValue = sel.value;
@@ -878,6 +1068,7 @@ function setupNav() {
 function onPageSwitch(page) {
   if (page === 'positions') loadPositions();
   else if (page === 'trades') { refreshTradesView({ mode: 'incremental', silent: true }); }
+  else if (page === 'paper-trading') loadPaperTrading();
   else if (page === 'strategies') loadStrategies();
   else if (page === 'backtest') {
     switchBacktestMode(backtestMode);
@@ -1251,31 +1442,256 @@ async function loadDashboard() {
 }
 
 async function loadPaperTradingStatus() {
-  const statusEl = document.getElementById('dPaperTrading');
   const btn = document.getElementById('paperTradingToggle');
-  if (!statusEl || !btn) return;
+  const btn2 = document.getElementById('paperTradingToggle2');
+
+  const setButtons = (running) => {
+    [btn, btn2].forEach((b) => {
+      if (!b) return;
+      b.textContent = running ? 'Stop Paper Trading' : 'Start Paper Trading';
+      b.className = running ? 'btn-danger btn-sm' : 'btn-primary btn-sm';
+    });
+  };
+
   try {
     const r = await api('/api/paper-trading/status');
     if (!r.success) {
-      statusEl.textContent = '--';
-      btn.textContent = 'Start Paper Trading';
-      btn.className = 'btn-primary btn-sm';
-      return;
+      setPaperTradingDashboard(null);
+      setPaperTradingWorkspace(null);
+      setButtons(false);
+      return null;
     }
     const d = r.data || {};
-    if (d.running) {
-      statusEl.innerHTML = '<span style="color:var(--green)">Running</span>'
-        + (d.runtime ? ' <span style="color:var(--text2)">(' + d.runtime + ')</span>' : '')
-        + ' · <span style="color:var(--text2)">' + (d.openPositions || 0) + ' open</span>';
-      btn.textContent = 'Stop Paper Trading';
-      btn.className = 'btn-danger btn-sm';
-    } else {
-      statusEl.innerHTML = '<span style="color:var(--red)">Stopped</span>';
-      btn.textContent = 'Start Paper Trading';
-      btn.className = 'btn-primary btn-sm';
+    setPaperTradingDashboard(d);
+    setPaperTradingWorkspace(d);
+    setButtons(Boolean(d.running));
+    return d;
+  } catch (e) {
+    setPaperTradingDashboard(null);
+    setPaperTradingWorkspace(null);
+    setButtons(false);
+    return null;
+  }
+}
+
+function setPaperTradingDashboard(d) {
+  const statusEl = document.getElementById('dPaperStatus');
+  if (!statusEl) return;
+  if (!d) {
+    statusEl.textContent = '--';
+    ['dPaperRuntime','dPaperOpen','dPaperTodayTrades','dPaperTotalTrades','dPaperWinRate','dPaperTotalProfit','dPaperDailyReport'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '--';
+    });
+    return;
+  }
+
+  statusEl.innerHTML = d.running
+    ? '<span style="color:var(--green)">Running</span>'
+    : '<span style="color:var(--red)">Stopped</span>';
+  document.getElementById('dPaperRuntime').textContent = d.runtime || '--';
+  document.getElementById('dPaperOpen').textContent = d.openPositions != null ? d.openPositions : '--';
+  document.getElementById('dPaperTodayTrades').textContent = d.todayTrades != null ? d.todayTrades : '--';
+
+  const stats = d.allTimeStats || {};
+  document.getElementById('dPaperTotalTrades').textContent = stats.totalTrades != null ? stats.totalTrades : '--';
+  document.getElementById('dPaperWinRate').textContent = stats.winRate != null ? (stats.winRate * 100).toFixed(1) + '%' : '--';
+  document.getElementById('dPaperTotalProfit').textContent = stats.totalProfit != null ? '$' + num(stats.totalProfit) : '--';
+
+  const dailyReport = d.dailyReport;
+  document.getElementById('dPaperDailyReport').textContent = dailyReport
+    ? (dailyReport.running ? 'Running' : 'Stopped')
+    : '--';
+}
+
+function setPaperTradingWorkspace(d) {
+  const statusEl = document.getElementById('ptStatus');
+  if (!statusEl) return;
+  if (!d) {
+    statusEl.textContent = '--';
+    ['ptStartedAt','ptRuntime','ptOpen','ptTodayTrades','ptDailyReport'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '--';
+    });
+    return;
+  }
+  statusEl.innerHTML = d.running
+    ? '<span style="color:var(--green)">Running</span>'
+    : '<span style="color:var(--red)">Stopped</span>';
+  document.getElementById('ptStartedAt').textContent = d.startedAt ? fmtTime(d.startedAt) : '--';
+  document.getElementById('ptRuntime').textContent = d.runtime || '--';
+  document.getElementById('ptOpen').textContent = d.openPositions != null ? d.openPositions : '--';
+  document.getElementById('ptTodayTrades').textContent = d.todayTrades != null ? d.todayTrades : '--';
+  const dailyReport = d.dailyReport;
+  document.getElementById('ptDailyReport').textContent = dailyReport
+    ? (dailyReport.running ? 'Running' : 'Stopped')
+    : '--';
+}
+
+function goToPaperTradingPage() {
+  const navBtn = document.querySelector('.nav button[data-page="paper-trading"]');
+  if (navBtn) navBtn.click();
+}
+
+async function loadPaperTrading() {
+  await loadPaperTradingStatus();
+  await Promise.all([
+    loadPaperPositions(),
+    loadPaperTradeLog(),
+    loadPaperStats(),
+  ]);
+}
+
+async function loadPaperPositions() {
+  const el = document.getElementById('paperPositionsTable');
+  if (!el) return;
+  try {
+    const r = await api('/api/paper-trading/positions');
+    if (!r.success) throw new Error(r.message || 'Failed to load paper positions');
+    const positions = Array.isArray(r.data) ? r.data : [];
+    if (positions.length === 0) {
+      el.innerHTML = '<div class="empty">No open paper positions</div>';
+      return;
+    }
+    let html = '<table><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>SL</th><th>TP</th><th>Lot</th><th>Strategy</th><th>Opened</th><th>Unrealized P/L</th><th>Action</th></tr>';
+    positions.forEach((p) => {
+      const pl = p.unrealizedPl || 0;
+      const typeTag = (p.type || '').toLowerCase();
+      html += '<tr><td><strong>' + escapeHtml(p.symbol || '--') + '</strong> <span class="tag tag-paper">PAPER</span></td>';
+      html += '<td><span class="tag tag-' + typeTag + '">' + escapeHtml(p.type || '--') + '</span></td>';
+      html += '<td>' + fmtPrice(p.entryPrice) + '</td><td>' + fmtPrice(p.currentSl) + '</td><td>' + fmtPrice(p.currentTp) + '</td>';
+      html += '<td>' + (p.lotSize != null ? p.lotSize : '--') + '</td>';
+      html += '<td>' + escapeHtml(p.strategy || '--') + '</td>';
+      html += '<td>' + fmtTime(p.openedAt) + '</td>';
+      html += '<td style="color:' + (pl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (pl >= 0 ? '+' : '') + pl.toFixed(2) + '</td>';
+      html += '<td><button class="btn-danger btn-sm" onclick="closePaperPosition(\'' + p._id + '\', \'' + escapeJsString(p.symbol || '') + '\')">Close</button></td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function closePaperPosition(id, symbol) {
+  if (!confirm('Close paper position' + (symbol ? ' for ' + symbol : '') + '?')) return;
+  try {
+    const r = await api('/api/paper-trading/positions/' + id + '/close', 'POST', { reason: 'MANUAL' });
+    if (!r.success) throw new Error(r.message || 'Failed to close paper position');
+    wsLog('success', 'Paper position closed' + (symbol ? ': ' + symbol : ''));
+    await loadPaperTrading();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function loadPaperTradeLog() {
+  const el = document.getElementById('paperTradeLogTable');
+  if (!el) return;
+  try {
+    const params = new URLSearchParams();
+    const status = document.getElementById('ptTradeFilterStatus')?.value || '';
+    const symbol = (document.getElementById('ptTradeFilterSymbol')?.value || '').trim();
+    if (status) params.set('status', status);
+    if (symbol) params.set('symbol', symbol);
+    params.set('limit', '200');
+    const r = await api('/api/paper-trading/trade-log?' + params.toString());
+    if (!r.success) throw new Error(r.message || 'Failed to load paper trade log');
+    const trades = Array.isArray(r.data) ? r.data : [];
+    if (trades.length === 0) {
+      el.innerHTML = '<div class="empty">No paper trades match the current filters</div>';
+      return;
+    }
+    let html = '<table><tr><th>Opened</th><th>Closed</th><th>Symbol</th><th>Type</th><th>Strategy</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Pips</th><th>Status</th><th>Reason</th></tr>';
+    trades.forEach((t) => {
+      const pl = t.profitLoss != null ? t.profitLoss : 0;
+      const typeTag = (t.type || '').toLowerCase();
+      html += '<tr><td>' + fmtTime(t.openedAt) + '</td>';
+      html += '<td>' + (t.closedAt ? fmtTime(t.closedAt) : '--') + '</td>';
+      html += '<td><strong>' + escapeHtml(t.symbol || '--') + '</strong> <span class="tag tag-paper">PAPER</span></td>';
+      html += '<td><span class="tag tag-' + typeTag + '">' + escapeHtml(t.type || '--') + '</span></td>';
+      html += '<td>' + escapeHtml(t.strategy || '--') + '</td>';
+      html += '<td>' + (t.lotSize != null ? t.lotSize : '--') + '</td>';
+      html += '<td>' + fmtPrice(t.entryPrice) + '</td>';
+      html += '<td>' + fmtPrice(t.exitPrice) + '</td>';
+      html += '<td style="color:' + (pl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (t.profitLoss != null ? ((pl >= 0 ? '+' : '') + pl.toFixed(2)) : '--') + '</td>';
+      html += '<td>' + (t.profitPips != null ? t.profitPips.toFixed(1) : '--') + '</td>';
+      html += '<td>' + badge(t.status || '--', t.status === 'OPEN' ? 'var(--blue)' : (pl >= 0 ? 'var(--green)' : 'var(--red)')) + '</td>';
+      html += '<td>' + escapeHtml(t.exitReason || t.signalReason || '--') + '</td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function resetPaperTradeLogFilters() {
+  const statusSel = document.getElementById('ptTradeFilterStatus');
+  const symbolInput = document.getElementById('ptTradeFilterSymbol');
+  if (statusSel) statusSel.value = '';
+  if (symbolInput) symbolInput.value = '';
+  loadPaperTradeLog();
+}
+
+async function loadPaperStats() {
+  try {
+    const r = await api('/api/paper-trading/stats');
+    if (!r.success) throw new Error(r.message || 'Failed to load paper stats');
+    const s = r.data || {};
+    const totalTradesEl = document.getElementById('ptsTotalTrades');
+    const winRateEl = document.getElementById('ptsWinRate');
+    const totalProfitEl = document.getElementById('ptsTotalProfit');
+    const avgProfitEl = document.getElementById('ptsAvgProfit');
+    if (totalTradesEl) totalTradesEl.textContent = s.totalTrades != null ? s.totalTrades : '0';
+    if (winRateEl) {
+      winRateEl.textContent = s.winRate != null ? (s.winRate * 100).toFixed(1) + '%' : '--';
+      winRateEl.className = 'stat-value ' + (s.winRate != null && s.winRate >= 0.5 ? 'positive' : (s.winRate != null ? 'negative' : ''));
+    }
+    if (totalProfitEl) {
+      totalProfitEl.textContent = s.totalProfit != null ? '$' + num(s.totalProfit) : '--';
+      totalProfitEl.className = 'stat-value ' + (s.totalProfit != null && s.totalProfit >= 0 ? 'positive' : (s.totalProfit != null ? 'negative' : ''));
+    }
+    if (avgProfitEl) {
+      avgProfitEl.textContent = s.averageProfit != null ? '$' + num(s.averageProfit) : '--';
+      avgProfitEl.className = 'stat-value ' + (s.averageProfit != null && s.averageProfit >= 0 ? 'positive' : (s.averageProfit != null ? 'negative' : ''));
     }
   } catch (e) {
-    statusEl.textContent = '--';
+    ['ptsTotalTrades','ptsWinRate','ptsTotalProfit','ptsAvgProfit'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = '--'; el.className = 'stat-value'; }
+    });
+  }
+}
+
+async function generatePaperReport() {
+  const btn = document.getElementById('ptReportBtn');
+  const resultEl = document.getElementById('ptReportResult');
+  const previewEl = document.getElementById('ptReportPreview');
+  const dateInput = document.getElementById('ptReportDate');
+  const body = {};
+  if (dateInput && dateInput.value) body.date = dateInput.value;
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Generating...';
+  if (resultEl) resultEl.innerHTML = '';
+  if (previewEl) { previewEl.style.display = 'none'; previewEl.textContent = ''; }
+
+  try {
+    const r = await api('/api/paper-trading/report', 'POST', body);
+    if (!r.success) throw new Error(r.message || 'Failed to generate paper report');
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--green)">' + escapeHtml(r.message || 'Report sent') + '</span>';
+    if (previewEl && r.preview) {
+      previewEl.textContent = typeof r.preview === 'string' ? r.preview : JSON.stringify(r.preview, null, 2);
+      previewEl.style.display = 'block';
+    }
+    wsLog('success', 'Paper trading report generated');
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(e.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
@@ -1626,10 +2042,13 @@ function renderStrategyCards(data) {
     const effectiveBreakeven = getNormalizedBreakeven(s.effectiveBreakeven);
     const overrideActive = Boolean(s.tradeManagement && s.tradeManagement.breakevenOverride);
     html += '<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;background:var(--bg3)">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px;flex-wrap:wrap">';
     html += '<div><strong>' + (s.displayName||s.name) + '</strong>';
     html += ' <span class="tag ' + (s.enabled?'tag-active':'') + '">' + (s.enabled?'Enabled':'Disabled') + '</span></div>';
+    html += '<div style="display:flex;gap:8px;align-items:center">';
+    html += '<button class="btn-outline btn-sm" onclick="openStrategySignals(\'' + s._id + '\', \'' + escapeJsString(s.displayName || s.name) + '\')">View Signals</button>';
     html += '<label class="toggle"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleStrategy(\'' + s._id + '\')"><span class="slider"></span></label>';
+    html += '</div>';
     html += '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + (s.description||'') + '</div>';
     html += '<div style="font-size:12px;color:var(--text2)">Symbols: ' + (s.symbols && s.symbols.length ? s.symbols.join(', ') : 'None') + '</div>';
@@ -1946,18 +2365,31 @@ async function loadBacktestHistory() {
     if (!r.success) return;
     const el = document.getElementById('btHistory');
     if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No previous backtests</div>'; return; }
-    let html = '<table><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th></tr>';
+    let html = '<table><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th><th>Action</th></tr>';
     r.data.forEach(b => {
       const s = b.summary;
       html += '<tr><td>' + fmtTime(b.createdAt) + '</td><td>' + b.symbol + '</td><td>' + b.strategy + '</td>';
       html += '<td>' + s.totalTrades + '</td>';
       html += '<td>' + (s.winRate*100).toFixed(1) + '%</td>';
       html += '<td>' + s.profitFactor + '</td>';
-      html += '<td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td></tr>';
+      html += '<td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td>';
+      html += '<td><button class="btn-danger btn-sm" onclick="deleteBacktestResult(\'' + b._id + '\', \'' + escapeJsString(b.symbol + ' / ' + b.strategy) + '\')">Delete</button></td></tr>';
     });
     html += '</table>';
     el.innerHTML = html;
   } catch (e) {}
+}
+
+async function deleteBacktestResult(id, label) {
+  if (!confirm('Delete backtest result' + (label ? ' for ' + label : '') + '? This cannot be undone.')) return;
+  try {
+    const r = await api('/api/backtest/results/' + id, 'DELETE');
+    if (!r.success) throw new Error(r.message || 'Failed to delete backtest result');
+    wsLog('success', 'Backtest result deleted');
+    await loadBacktestHistory();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 // ─── Optimizer ───
@@ -2525,6 +2957,7 @@ function renderOptResult(data) {
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
   html += '<button class="btn-primary btn-sm" onclick="applyBestOptimizerParams()">Apply Best Params</button>';
   html += '<button class="btn-outline btn-sm" onclick="rerunBestOptimizerBacktest()">Run Backtest With Best Params</button>';
+  html += '<button class="btn-outline btn-sm" onclick="openOptimizerFullResultsModal()">View All Results</button>';
   html += '</div>';
   html += '</div>';
 
@@ -2996,9 +3429,243 @@ function auditStatusColor(status) {
   return 'var(--green)';
 }
 function fmtTime(t) { if (!t) return '--'; const d = new Date(t); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
+function escapeJsString(value) {
+  return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\r?\n/g, ' ');
+}
+
+// ─── Strategy Signals Modal ───
+let activeStrategySignals = { id: null, name: null };
+
+async function openStrategySignals(strategyId, strategyName) {
+  activeStrategySignals = { id: strategyId, name: strategyName || 'Strategy' };
+  const overlay = document.getElementById('strategySignalsModal');
+  const titleEl = document.getElementById('strategySignalsTitle');
+  const metaEl = document.getElementById('strategySignalsMeta');
+  const bodyEl = document.getElementById('strategySignalsBody');
+  if (titleEl) titleEl.textContent = 'Recent Signals - ' + (strategyName || 'Strategy');
+  if (metaEl) metaEl.textContent = 'Loading recent signals for this strategy...';
+  if (bodyEl) bodyEl.innerHTML = '<div class="empty">Loading signals...</div>';
+  overlay.classList.add('show');
+  await refreshStrategySignals();
+}
+
+function closeStrategySignalsModal() {
+  const overlay = document.getElementById('strategySignalsModal');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function handleStrategySignalsBackdrop(event) {
+  if (event && event.target && event.target.id === 'strategySignalsModal') closeStrategySignalsModal();
+}
+
+async function refreshStrategySignals() {
+  if (!activeStrategySignals.id) return;
+  const bodyEl = document.getElementById('strategySignalsBody');
+  const metaEl = document.getElementById('strategySignalsMeta');
+  try {
+    const r = await api('/api/strategies/' + activeStrategySignals.id + '/signals?limit=50');
+    if (!r.success) throw new Error(r.message || 'Failed to load signals');
+    const signals = Array.isArray(r.data) ? r.data : [];
+    if (metaEl) metaEl.textContent = 'Showing ' + signals.length + ' most recent signal record' + (signals.length === 1 ? '' : 's') + '.';
+    if (!signals.length) {
+      bodyEl.innerHTML = '<div class="empty">No signals recorded for this strategy yet</div>';
+      return;
+    }
+    let html = '<table><tr><th>Time</th><th>Symbol</th><th>Signal</th><th>Confidence</th><th>Status</th><th>Reason</th><th>Trigger Reason</th></tr>';
+    signals.forEach((s) => {
+      const sig = (s.signal || '--').toUpperCase();
+      const sigTag = sig === 'BUY' || sig === 'SELL' ? 'tag-' + sig.toLowerCase() : '';
+      html += '<tr><td>' + fmtTime(s.timestamp || s.candleTime) + '</td>';
+      html += '<td>' + escapeHtml(s.symbol || '--') + '</td>';
+      html += '<td>' + (sigTag ? '<span class="tag ' + sigTag + '">' + sig + '</span>' : sig) + '</td>';
+      html += '<td>' + (s.confidence != null ? (s.confidence * 100).toFixed(0) + '%' : '--') + '</td>';
+      html += '<td>' + badge(s.status || '--', 'var(--blue)') + '</td>';
+      html += '<td>' + escapeHtml(s.reason || '--') + '</td>';
+      html += '<td>' + escapeHtml(s.triggerReason || s.filterReason || '--') + '</td></tr>';
+    });
+    html += '</table>';
+    bodyEl.innerHTML = html;
+  } catch (e) {
+    bodyEl.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// ─── Optimizer Full Results Modal ───
+let optimizerFullResultsCache = null;
+let optimizerFullResultsPage = 1;
+const OPTIMIZER_FULL_PAGE_SIZE = 50;
+
+function openOptimizerFullResultsModal() {
+  const overlay = document.getElementById('optimizerFullResultsModal');
+  if (!overlay) return;
+  overlay.classList.add('show');
+  optimizerFullResultsPage = 1;
+  reloadOptimizerFullResults();
+}
+
+function closeOptimizerFullResultsModal() {
+  const overlay = document.getElementById('optimizerFullResultsModal');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function handleOptimizerFullResultsBackdrop(event) {
+  if (event && event.target && event.target.id === 'optimizerFullResultsModal') closeOptimizerFullResultsModal();
+}
+
+async function reloadOptimizerFullResults() {
+  const bodyEl = document.getElementById('optimizerFullResultsBody');
+  const metaEl = document.getElementById('optimizerFullResultsMeta');
+  const paginationEl = document.getElementById('optimizerFullResultsPagination');
+  if (bodyEl) bodyEl.innerHTML = '<div class="empty">Loading full results...</div>';
+  if (paginationEl) paginationEl.innerHTML = '';
+  try {
+    const r = await api('/api/optimizer/result/full');
+    if (!r.success) throw new Error(r.message || 'Failed to load full optimizer result');
+    optimizerFullResultsCache = r.data || null;
+    renderOptimizerFullResults();
+  } catch (e) {
+    if (bodyEl) bodyEl.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+    if (metaEl) metaEl.textContent = 'Unable to load full optimizer result.';
+  }
+}
+
+function renderOptimizerFullResults() {
+  const bodyEl = document.getElementById('optimizerFullResultsBody');
+  const metaEl = document.getElementById('optimizerFullResultsMeta');
+  const paginationEl = document.getElementById('optimizerFullResultsPagination');
+  if (!bodyEl || !optimizerFullResultsCache) return;
+  const data = optimizerFullResultsCache;
+  const all = Array.isArray(data.allResults) ? data.allResults : [];
+
+  if (metaEl) {
+    metaEl.textContent =
+      (data.symbol || '--') + ' · ' + (data.strategy || '--')
+      + ' · Optimized for ' + (data.optimizeFor || '--')
+      + ' · ' + (data.totalCombinations || all.length || 0) + ' combinations'
+      + ' · ' + (data.validResults || all.length || 0) + ' valid';
+  }
+
+  if (!all.length) {
+    bodyEl.innerHTML = '<div class="empty">No individual result rows available</div>';
+    if (paginationEl) paginationEl.innerHTML = '';
+    return;
+  }
+
+  const paramKeys = data.bestResult && data.bestResult.parameters
+    ? Object.keys(data.bestResult.parameters)
+    : Object.keys(all[0].parameters || {});
+
+  const totalPages = Math.max(1, Math.ceil(all.length / OPTIMIZER_FULL_PAGE_SIZE));
+  if (optimizerFullResultsPage > totalPages) optimizerFullResultsPage = totalPages;
+  const start = (optimizerFullResultsPage - 1) * OPTIMIZER_FULL_PAGE_SIZE;
+  const pageRows = all.slice(start, start + OPTIMIZER_FULL_PAGE_SIZE);
+
+  let html = '<div style="overflow-x:auto"><table><tr><th>#</th>';
+  paramKeys.forEach((k) => { html += '<th>' + escapeHtml(k) + '</th>'; });
+  html += '<th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th><th>DD</th><th>Sharpe</th></tr>';
+  pageRows.forEach((row, idx) => {
+    const globalIdx = start + idx + 1;
+    const s = row.summary || {};
+    html += '<tr><td>' + globalIdx + '</td>';
+    paramKeys.forEach((k) => {
+      const v = row.parameters ? row.parameters[k] : undefined;
+      html += '<td>' + escapeHtml(v != null ? String(v) : '--') + '</td>';
+    });
+    html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
+    html += '<td>' + (s.winRate != null ? (s.winRate * 100).toFixed(1) + '%' : '--') + '</td>';
+    html += '<td>' + (s.profitFactor != null ? s.profitFactor : '--') + '</td>';
+    html += '<td style="color:' + ((s.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? s.returnPercent + '%' : '--') + '</td>';
+    html += '<td>' + (s.maxDrawdownPercent != null ? s.maxDrawdownPercent + '%' : '--') + '</td>';
+    html += '<td>' + (s.sharpeRatio != null ? s.sharpeRatio : '--') + '</td></tr>';
+  });
+  html += '</table></div>';
+  bodyEl.innerHTML = html;
+
+  if (paginationEl) {
+    paginationEl.innerHTML = '<div style="font-size:12px;color:var(--text2)">Page ' + optimizerFullResultsPage + ' / ' + totalPages + ' · Showing ' + pageRows.length + ' of ' + all.length + ' rows</div>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button class="btn-outline btn-sm" ' + (optimizerFullResultsPage <= 1 ? 'disabled' : '') + ' onclick="changeOptimizerFullResultsPage(-1)">Prev</button>'
+      + '<button class="btn-outline btn-sm" ' + (optimizerFullResultsPage >= totalPages ? 'disabled' : '') + ' onclick="changeOptimizerFullResultsPage(1)">Next</button>'
+      + '</div>';
+  }
+}
+
+function changeOptimizerFullResultsPage(delta) {
+  optimizerFullResultsPage = Math.max(1, optimizerFullResultsPage + delta);
+  renderOptimizerFullResults();
+}
+
+// ─── Custom Notification Send ───
+async function sendCustomNotification() {
+  const input = document.getElementById('notifyCustomMessage');
+  const resultEl = document.getElementById('notifySendResult');
+  const btn = document.getElementById('notifySendBtn');
+  if (!input) return;
+  const message = (input.value || '').trim();
+  if (!message) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">Message is required</span>';
+    return;
+  }
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Sending...';
+  if (resultEl) resultEl.innerHTML = '';
+  try {
+    const r = await api('/api/notifications/send', 'POST', { message });
+    if (!r.success) throw new Error(r.message || 'Failed to send notification');
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--green)">' + escapeHtml(r.message || 'Notification sent') + '</span>';
+    input.value = '';
+    wsLog('success', 'Custom notification sent');
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(e.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+// ─── Live Test Order ───
+async function runTestOrder() {
+  const btn = document.getElementById('testOrderBtn');
+  const resultEl = document.getElementById('testOrderResult');
+  const symbol = document.getElementById('testOrderSymbol')?.value;
+  const type = document.getElementById('testOrderType')?.value || 'BUY';
+  if (!symbol) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">Please select a symbol</span>';
+    return;
+  }
+  if (!confirm('Run a real live test order for ' + symbol + ' (' + type + ')? The order will be opened with protective SL/TP and auto-closed.')) return;
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Running...';
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--text2)">Submitting test order...</span>';
+  try {
+    const r = await api('/api/trading/test-order', 'POST', { symbol, type });
+    if (!r.success) throw new Error(r.message || 'Test order failed');
+    let html = '<span style="color:var(--green)">' + escapeHtml(r.message || 'Test order completed') + '</span>';
+    if (r.data) {
+      html += '<pre style="margin-top:8px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;max-height:300px;overflow:auto">'
+        + escapeHtml(JSON.stringify(r.data, null, 2))
+        + '</pre>';
+    }
+    if (resultEl) resultEl.innerHTML = html;
+    wsLog('success', 'Live test order completed: ' + symbol + ' ' + type);
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(e.message) + '</span>';
+    wsLog('error', 'Live test order failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closeBatchChildModal();
+  if (event.key === 'Escape') {
+    closeBatchChildModal();
+    closeStrategySignalsModal();
+    closeOptimizerFullResultsModal();
+  }
 });
 
 // Auto-refresh dashboard every 30s

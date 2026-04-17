@@ -6,7 +6,12 @@ const Strategy = require('../models/Strategy');
 const RiskProfile = require('../models/RiskProfile');
 const BatchBacktestJob = require('../models/BatchBacktestJob');
 const { getAllSymbols } = require('../config/instruments');
-const { getStrategyExecutionConfig } = require('../config/strategyExecution');
+const {
+  FORCED_TIMEFRAME_OPTIONS,
+  getStrategyExecutionConfig,
+  getForcedTimeframeExecutionConfig,
+  isValidForcedTimeframe,
+} = require('../config/strategyExecution');
 const {
   clampDateRangeToNow,
   DEFAULT_WARMUP_BARS,
@@ -42,10 +47,33 @@ class BatchBacktestService {
     const normalizedRange = normalizeDateRange(params.startDate, params.endDate);
     const { start, endExclusive } = clampDateRangeToNow(normalizedRange.start, normalizedRange.endExclusive);
     const rangeEnd = new Date(endExclusive.getTime() - 1);
-    const timeframeMode = params.timeframeMode || 'strategy_default';
 
-    if (timeframeMode !== 'strategy_default') {
-      const error = new Error('Only timeframeMode=strategy_default is supported in this version');
+    const timeframeMode = params.timeframeMode || 'strategy_default';
+    if (!['strategy_default', 'forced_timeframe'].includes(timeframeMode)) {
+      const error = new Error(
+        `Unsupported timeframeMode: ${timeframeMode}. Expected 'strategy_default' or 'forced_timeframe'.`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let forcedTimeframe = null;
+    if (timeframeMode === 'forced_timeframe') {
+      forcedTimeframe = params.forcedTimeframe;
+      if (!isValidForcedTimeframe(forcedTimeframe)) {
+        const error = new Error(
+          `Invalid forcedTimeframe: ${forcedTimeframe}. Allowed: ${FORCED_TIMEFRAME_OPTIONS.join(', ')}`
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
+    const strategyScopeMode = params.strategyScopeMode || 'enabled_assigned_only';
+    if (!['enabled_assigned_only', 'all_strategies'].includes(strategyScopeMode)) {
+      const error = new Error(
+        `Unsupported strategyScopeMode: ${strategyScopeMode}. Expected 'enabled_assigned_only' or 'all_strategies'.`
+      );
       error.statusCode = 400;
       throw error;
     }
@@ -53,11 +81,15 @@ class BatchBacktestService {
     const strategyInfos = strategyEngine.getStrategiesInfo();
     await Strategy.initDefaults(strategyInfos);
     const strategyRecords = await Strategy.findAll();
-    const eligibleScope = this._buildEligibleScope(strategyRecords);
+    const eligibleScope = strategyScopeMode === 'all_strategies'
+      ? this._buildAllStrategiesScope(strategyInfos)
+      : this._buildEligibleScope(strategyRecords);
 
     if (eligibleScope.combinations.length === 0) {
       const error = new Error(
-        'No enabled strategy assignments are available for batch backtest. Assign strategies to symbols in Strategies first.'
+        strategyScopeMode === 'all_strategies'
+          ? 'No strategies or symbols available for all_strategies scope.'
+          : 'No enabled strategy assignments are available for batch backtest. Assign strategies to symbols in Strategies first.'
       );
       error.statusCode = 400;
       throw error;
@@ -72,7 +104,7 @@ class BatchBacktestService {
         symbols: eligibleScope.symbols,
         strategies: eligibleScope.strategies,
         assignmentsBySymbol: eligibleScope.assignmentsBySymbol,
-        eligibilityRule: 'enabled_assignments',
+        eligibilityRule: eligibleScope.eligibilityRule,
       },
       runModel: 'independent',
       period: {
@@ -80,7 +112,9 @@ class BatchBacktestService {
         end: rangeEnd.toISOString(),
       },
       initialBalance: Number(params.initialBalance) || 10000,
+      strategyScopeMode,
       timeframeMode,
+      forcedTimeframe,
       progress,
       aggregate: null,
       results: [],
@@ -131,6 +165,8 @@ class BatchBacktestService {
       const start = new Date(job.period.start);
       const endExclusive = new Date(new Date(job.period.end).getTime() + 1);
       const combinations = this._buildCombinationsFromScope(job.scope || {});
+      const jobTimeframeMode = job.timeframeMode || 'strategy_default';
+      const jobForcedTimeframe = jobTimeframeMode === 'forced_timeframe' ? job.forcedTimeframe || null : null;
       const candleCache = new Map();
       const results = [];
 
@@ -165,6 +201,7 @@ class BatchBacktestService {
             candleCache,
             storedStrategyParameters: storedParametersByStrategy.get(combo.strategy) || {},
             breakevenConfig: effectiveBreakevenByStrategy.get(combo.strategy) || breakevenService.getDefaultBreakevenConfig(),
+            forcedTimeframe: jobForcedTimeframe,
           });
         } catch (err) {
           resultItem = {
@@ -198,7 +235,7 @@ class BatchBacktestService {
         }
       }
 
-      const aggregate = buildBatchAggregate(results);
+      const aggregate = buildBatchAggregate(results, { initialBalance: job.initialBalance });
       const report = buildBatchReport(job, aggregate);
       const completedJob = await BatchBacktestJob.update(jobId, {
         status: 'completed',
@@ -260,8 +297,11 @@ class BatchBacktestService {
     candleCache,
     storedStrategyParameters,
     breakevenConfig,
+    forcedTimeframe = null,
   }) {
-    const executionConfig = getStrategyExecutionConfig(combo.symbol, combo.strategy);
+    const executionConfig = forcedTimeframe
+      ? getForcedTimeframeExecutionConfig(combo.symbol, combo.strategy, forcedTimeframe)
+      : getStrategyExecutionConfig(combo.symbol, combo.strategy);
     if (!executionConfig) {
       throw new Error(`Unknown symbol: ${combo.symbol}`);
     }
@@ -332,6 +372,7 @@ class BatchBacktestService {
       storedStrategyParameters,
       breakevenConfig,
       batchJobId: jobId,
+      executionConfigOverride: forcedTimeframe ? executionConfig : null,
     });
 
     return {
@@ -340,6 +381,9 @@ class BatchBacktestService {
       timeframe: executionConfig.timeframe,
       higherTimeframe: executionConfig.higherTimeframe || null,
       entryTimeframe: executionConfig.entryTimeframe || null,
+      forcedTimeframe: forcedTimeframe || null,
+      higherTimeframeDisabled: executionConfig.higherTimeframeDisabled || null,
+      entryTimeframeDisabled: executionConfig.entryTimeframeDisabled || null,
       status: result.summary.totalTrades > 0 ? 'completed' : 'no_trades',
       summary: result.summary,
       parameters: result.parameters,
@@ -404,10 +448,38 @@ class BatchBacktestService {
       symbols,
       strategies,
       assignmentsBySymbol: normalizedAssignmentsBySymbol,
+      eligibilityRule: 'enabled_assignments',
       combinations: this._buildCombinationsFromScope({
         symbols,
         strategies,
         assignmentsBySymbol: normalizedAssignmentsBySymbol,
+      }),
+    };
+  }
+
+  // Builds a full cross product of every registered strategy and every
+  // supported symbol, irrespective of user assignments or enabled flags.
+  // This is the input for the `all_strategies` scope mode — useful for
+  // exploratory benchmarks across the complete strategy library.
+  _buildAllStrategiesScope(strategyInfos = []) {
+    const validSymbols = getAllSymbols();
+    const strategies = strategyInfos
+      .map((info) => (info && info.name ? info.name : null))
+      .filter(Boolean);
+
+    const assignmentsBySymbol = Object.fromEntries(
+      validSymbols.map((symbol) => [symbol, [...strategies]])
+    );
+
+    return {
+      symbols: validSymbols,
+      strategies,
+      assignmentsBySymbol,
+      eligibilityRule: 'all_strategies',
+      combinations: this._buildCombinationsFromScope({
+        symbols: validSymbols,
+        strategies,
+        assignmentsBySymbol,
       }),
     };
   }

@@ -179,13 +179,15 @@ exports.deleteResult = async (req, res) => {
 // @route   POST /api/backtest/batch/run
 exports.runBatchBacktest = async (req, res) => {
   try {
-    const { startDate, endDate, initialBalance, timeframeMode } = req.body;
+    const { startDate, endDate, initialBalance, timeframeMode, forcedTimeframe, strategyScopeMode } = req.body;
     const job = await batchBacktestService.startJob(
       {
         startDate,
         endDate,
         initialBalance,
         timeframeMode,
+        forcedTimeframe,
+        strategyScopeMode,
       },
       {
         onProgress: (data) => {

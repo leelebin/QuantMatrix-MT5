@@ -10,12 +10,24 @@
  * Existing database records are NEVER overwritten during normal startup.
  * Only the symbols array is affected by a reset; enabled flags, parameters, and
  * trade-management overrides are left untouched.
+ *
+ * Crypto assignments are additive — they appear alongside existing defaults
+ * but do not displace any. Mean reversion is intentionally left without
+ * crypto symbols because crypto ranges are unstable and whipsaw frequently.
  */
 
 const DEFAULT_STRATEGY_SYMBOL_ASSIGNMENTS = {
-  Breakout: ['GBPUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'XAGUSD', 'NAS100', 'XTIUSD', 'XBRUSD'],
+  Breakout: [
+    'GBPUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'XAGUSD', 'NAS100', 'XTIUSD', 'XBRUSD',
+    // Crypto: BTC/ETH/SOL/XRP/DOGE — strong intraday breakouts on news cycles
+    'BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD', 'DOGEUSD',
+  ],
   MeanReversion: ['SPX500', 'XTIUSD'],
-  Momentum: ['GBPUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'US30', 'NAS100'],
+  Momentum: [
+    'GBPUSD', 'USDCHF', 'NZDUSD', 'XAUUSD', 'US30', 'NAS100',
+    // Crypto: mid-caps that trend cleanly once direction is established
+    'LTCUSD', 'BCHUSD', 'ADAUSD',
+  ],
   MultiTimeframe: ['SPX500', 'NAS100', 'XTIUSD'],
   TrendFollowing: ['EURUSD', 'GBPUSD', 'USDCHF', 'NZDUSD'],
   VolumeFlowHybrid: ['XAUUSD', 'XAGUSD', 'XTIUSD', 'XBRUSD'],

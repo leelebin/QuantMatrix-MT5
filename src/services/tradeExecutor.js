@@ -14,6 +14,7 @@ const RiskProfile = require('../models/RiskProfile');
 const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
+const auditService = require('./auditService');
 
 class TradeExecutor {
   async _recordAudit(stage, status, signal, extra = {}) {
@@ -126,6 +127,19 @@ class TradeExecutor {
           accountInfo,
           details: preflight,
         });
+        auditService.preflightRejected({
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          module: 'tradeExecutor',
+          scope: 'live',
+          signal: signal.signal,
+          calculatedLot: riskCheck.lotSize,
+          mt5Retcode: preflight.retcode,
+          preflightMessage,
+          reasonCode: preflight.retcodeName || 'PREFLIGHT_REJECTED',
+          reasonText: preflightMessage,
+          details: preflight,
+        });
         this._broadcastRejection(signal, preflightMessage, {
           stage: 'preflight',
           code: preflight.retcode,
@@ -225,6 +239,25 @@ class TradeExecutor {
         `[Executor] Trade executed: ${signal.signal} ${riskCheck.lotSize} ${signal.symbol} @ ${executedEntryPrice} | SL: ${signal.sl} TP: ${signal.tp}`
       );
 
+      auditService.orderOpened({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        module: 'tradeExecutor',
+        scope: 'live',
+        signal: signal.signal,
+        calculatedLot: riskCheck.lotSize,
+        price: executedEntryPrice,
+        sl: signal.sl,
+        tp: signal.tp,
+        positionDbId: position._id,
+        reasonText: `Opened ${signal.signal} ${riskCheck.lotSize} ${signal.symbol} @ ${executedEntryPrice}`,
+        details: {
+          mt5PositionId,
+          mt5EntryDealId,
+          orderId: result.orderId || null,
+        },
+      });
+
       // Broadcast via WebSocket
       websocketService.broadcast('trades', 'trade_opened', position);
       websocketService.broadcast('positions', 'position_update', { action: 'opened', position });
@@ -257,6 +290,18 @@ class TradeExecutor {
       } catch (auditError) {
         console.error('[Executor] Failed to record execution audit:', auditError.message);
       }
+
+      auditService.orderFailed({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        module: 'tradeExecutor',
+        scope: 'live',
+        signal: signal.signal,
+        mt5Retcode: typeof auditCode === 'number' ? auditCode : null,
+        reasonCode: auditCodeName || `ORDER_FAILED:${auditStage}`,
+        reasonText: err.message,
+        details: err.details || { method: err.method || null, stage: auditStage },
+      });
 
       this._broadcastRejection(signal, err.message, {
         stage: auditStage,
@@ -341,6 +386,27 @@ class TradeExecutor {
       console.log(
         `[Executor] Position closed: ${position.symbol} ${position.type} | P/L: ${closedSnapshot.profitLoss.toFixed(2)} (${closedSnapshot.profitPips.toFixed(1)} pips) | Reason: ${closedSnapshot.exitReason}`
       );
+
+      auditService.orderClosed({
+        symbol: position.symbol,
+        strategy: position.strategy,
+        module: 'tradeExecutor',
+        scope: 'live',
+        signal: position.type,
+        price: closedSnapshot.exitPrice,
+        positionDbId: position._id,
+        exitReason: closedSnapshot.exitReason,
+        pnl: closedSnapshot.profitLoss,
+        reasonCode: closedSnapshot.exitReason || 'CLOSED',
+        reasonText: `Closed ${position.symbol} ${position.type} P/L ${closedSnapshot.profitLoss.toFixed(2)}`,
+        details: {
+          exitPrice: closedSnapshot.exitPrice,
+          profitPips: closedSnapshot.profitPips,
+          commission: closedSnapshot.commission,
+          swap: closedSnapshot.swap,
+          fee: closedSnapshot.fee,
+        },
+      });
 
       const closedTrade = {
         ...position,

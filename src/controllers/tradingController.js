@@ -149,7 +149,9 @@ exports.startTrading = async (req, res) => {
             async (symbol, timeframe, count) => await mt5Service.getCandles(symbol, timeframe, null, count),
             async (signal) => {
               await tradeExecutor.executeTrade(signal);
-            }
+            },
+            null,
+            { scope: 'live' }
           );
         } catch (err) {
           console.error('[Trading Loop] Error:', err.message);

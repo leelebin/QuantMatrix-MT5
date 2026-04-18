@@ -63,6 +63,11 @@ tr:hover{background:var(--bg3)}
 .tag-active{background:rgba(59,130,246,.15);color:var(--blue)}
 .tag-paper{background:rgba(139,92,246,.15);color:var(--purple)}
 .tag-live{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-green{background:rgba(16,185,129,.15);color:var(--green)}
+.tag-red{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+.tag-neutral{background:rgba(148,163,184,.15);color:var(--text2)}
+.tag-none{background:rgba(148,163,184,.15);color:var(--text2)}
 .paper-banner{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.35);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .paper-banner strong{color:var(--purple)}
 .section-subtitle{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;font-weight:600}
@@ -192,6 +197,7 @@ tr:hover{background:var(--bg3)}
     <button data-page="strategies">Strategies</button>
     <button data-page="backtest">Backtest</button>
     <button data-page="optimizer">Optimizer</button>
+    <button data-page="diagnostics">Diagnostics</button>
     <button data-page="settings">Settings</button>
   </nav>
   <div class="ws-status">
@@ -789,6 +795,110 @@ tr:hover{background:var(--bg3)}
   </div>
 </div>
 
+<!-- Diagnostics Page -->
+<div class="page" id="page-diagnostics">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Decision Audit — Diagnostics</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-outline btn-sm" onclick="loadDiagnostics()">Refresh</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)">
+          <input type="checkbox" id="diagAutoStream" checked> Live stream
+        </label>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+      Every signal scan, risk check, preflight, order open, position adjustment and close is recorded here with a reason code. Use the filters to understand why a trade did or didn't fire.
+    </div>
+    <div class="grid grid-4" id="diagStatsCards" style="margin-bottom:12px">
+      <div class="stat-card"><div class="stat-label">Total events</div><div class="stat-value" id="diagStatTotal">—</div></div>
+      <div class="stat-card"><div class="stat-label">Triggered</div><div class="stat-value" id="diagStatTriggered" style="color:var(--green)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Rejected (risk/preflight)</div><div class="stat-value" id="diagStatRejected" style="color:var(--red)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Orders opened</div><div class="stat-value" id="diagStatOpened">—</div></div>
+    </div>
+    <div class="grid grid-3" style="gap:12px;margin-bottom:12px">
+      <div class="card" style="padding:10px">
+        <div class="card-title" style="font-size:13px;margin-bottom:6px">Top NO_SETUP reasons</div>
+        <div id="diagTopNoSetup" style="font-size:12px"></div>
+      </div>
+      <div class="card" style="padding:10px">
+        <div class="card-title" style="font-size:13px;margin-bottom:6px">Top FILTERED reasons</div>
+        <div id="diagTopFiltered" style="font-size:12px"></div>
+      </div>
+      <div class="card" style="padding:10px">
+        <div class="card-title" style="font-size:13px;margin-bottom:6px">Top RISK / EXEC rejections</div>
+        <div id="diagTopRejections" style="font-size:12px"></div>
+      </div>
+    </div>
+    <div class="grid grid-4" style="gap:8px;margin-bottom:10px">
+      <div class="form-group"><label>Symbol</label><input id="diagFilterSymbol" placeholder="e.g. EURUSD" /></div>
+      <div class="form-group"><label>Strategy</label><input id="diagFilterStrategy" placeholder="e.g. MeanReversion" /></div>
+      <div class="form-group"><label>Stage</label>
+        <select id="diagFilterStage">
+          <option value="">All</option>
+          <option value="NO_SETUP">NO_SETUP</option>
+          <option value="SETUP_FOUND">SETUP_FOUND</option>
+          <option value="FILTERED">FILTERED</option>
+          <option value="TRIGGERED">TRIGGERED</option>
+          <option value="DUPLICATE">DUPLICATE</option>
+          <option value="RISK_REJECTED">RISK_REJECTED</option>
+          <option value="PREFLIGHT_REJECTED">PREFLIGHT_REJECTED</option>
+          <option value="ORDER_OPENED">ORDER_OPENED</option>
+          <option value="ORDER_FAILED">ORDER_FAILED</option>
+          <option value="POSITION_MANAGED">POSITION_MANAGED</option>
+          <option value="ORDER_CLOSED">ORDER_CLOSED</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="diagFilterStatus">
+          <option value="">All</option>
+          <option value="OK">OK</option>
+          <option value="INFO">INFO</option>
+          <option value="WARN">WARN</option>
+          <option value="REJECTED">REJECTED</option>
+          <option value="FAILED">FAILED</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Scope</label>
+        <select id="diagFilterScope">
+          <option value="">All</option>
+          <option value="live">Live</option>
+          <option value="paper">Paper</option>
+          <option value="backtest">Backtest</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Start Date</label><input type="datetime-local" id="diagFilterStart" /></div>
+      <div class="form-group"><label>End Date</label><input type="datetime-local" id="diagFilterEnd" /></div>
+      <div class="form-group"><label>Search</label><input id="diagFilterSearch" placeholder="reasonCode / reasonText" /></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn-primary btn-sm" onclick="loadDiagnostics()">Apply Filters</button>
+      <button class="btn-outline btn-sm" onclick="clearDiagnosticsFilters()">Clear</button>
+      <span id="diagCount" style="font-size:12px;color:var(--text2);align-self:center"></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Symbol</th>
+            <th>Strategy</th>
+            <th>Module</th>
+            <th>Stage</th>
+            <th>Status</th>
+            <th>Signal</th>
+            <th>Conf</th>
+            <th>Reason Code</th>
+            <th>Reason Text</th>
+            <th>Scope</th>
+          </tr>
+        </thead>
+        <tbody id="diagRows"><tr><td colspan="11" class="empty">No diagnostic events yet. Start live or paper trading to populate.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- Settings Page -->
 <div class="page" id="page-settings">
   <div class="grid grid-2">
@@ -1119,6 +1229,7 @@ function onPageSwitch(page) {
     }
   }
   else if (page === 'optimizer') loadOptRanges();
+  else if (page === 'diagnostics') loadDiagnostics();
   else if (page === 'settings') { loadNotifyStatus(); loadAccountInfo(); loadRiskSettings(); }
   else if (page === 'dashboard') loadDashboard();
 }
@@ -1369,6 +1480,9 @@ function handleWsMessage(msg) {
       wsLog('info', 'Execution audit: ' + (msg.data.stage || 'execution') + ' - ' + msg.data.message);
       if (document.getElementById('page-trades').classList.contains('active')) loadExecutionAudits();
       break;
+    case 'decision_audit':
+      if (typeof handleDiagnosticsWsEvent === 'function') handleDiagnosticsWsEvent(msg);
+      break;
     case 'optimizer_progress':
       if (msg.data) {
         document.getElementById('optProgress').style.display = 'block';
@@ -1466,11 +1580,26 @@ async function loadDashboard() {
 
     // Recent signals
     if (d.recentSignals && d.recentSignals.length > 0) {
-      let html = '<table><tr><th>Time</th><th>Symbol</th><th>Signal</th><th>Strategy</th><th>Confidence</th></tr>';
+      const statusTag = (s) => {
+        const v = String(s || '').toUpperCase();
+        if (v === 'TRIGGERED') return 'tag-green';
+        if (v === 'FILTERED' || v === 'DUPLICATE') return 'tag-neutral';
+        if (v === 'NO_SETUP') return 'tag-neutral';
+        return 'tag-neutral';
+      };
+      let html = '<table><tr><th>Time</th><th>Symbol</th><th>Strategy</th><th>Signal</th><th>Status</th><th>Confidence</th><th>Filter / Reason</th></tr>';
       d.recentSignals.forEach(s => {
-        html += '<tr><td>' + fmtTime(s.timestamp) + '</td><td>' + s.symbol + '</td>';
-        html += '<td><span class="tag tag-' + s.signal.toLowerCase() + '">' + s.signal + '</span></td>';
-        html += '<td>' + s.strategy + '</td><td>' + (s.confidence*100).toFixed(0) + '%</td></tr>';
+        const conf = (typeof s.confidence === 'number') ? (s.confidence*100).toFixed(0) + '%' : '--';
+        const status = s.status || (s.signal !== 'NONE' ? 'TRIGGERED' : 'NO_SETUP');
+        const filterOrReason = s.filterReason || s.triggerReason || s.reason || '';
+        html += '<tr><td>' + fmtTime(s.timestamp) + '</td>';
+        html += '<td>' + escapeHtml(s.symbol || '--') + '</td>';
+        html += '<td>' + escapeHtml(s.strategy || '--') + '</td>';
+        html += '<td><span class="tag tag-' + String(s.signal || 'none').toLowerCase() + '">' + escapeHtml(s.signal || '--') + '</span></td>';
+        html += '<td><span class="tag ' + statusTag(status) + '">' + escapeHtml(status) + '</span></td>';
+        html += '<td>' + conf + '</td>';
+        html += '<td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'
+             + escapeHtml(filterOrReason) + '">' + escapeHtml(filterOrReason || '--') + '</td></tr>';
       });
       html += '</table>';
       document.getElementById('recentSignals').innerHTML = html;
@@ -3479,6 +3608,211 @@ async function deleteRiskProfile(id) {
     setRiskProfileMessage(e.message, 'red');
   }
 }
+
+// ─── Diagnostics Page ───
+const DIAG_STATE = { rows: [], autoStream: true };
+
+function clearDiagnosticsFilters() {
+  ['diagFilterSymbol','diagFilterStrategy','diagFilterStage','diagFilterStatus','diagFilterScope','diagFilterStart','diagFilterEnd','diagFilterSearch']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  loadDiagnostics();
+}
+
+function getDiagnosticsFilters() {
+  const filters = {};
+  const val = (id) => {
+    const el = document.getElementById(id);
+    return el && el.value ? String(el.value).trim() : '';
+  };
+  const s = val('diagFilterSymbol');
+  if (s) filters.symbol = s;
+  const strat = val('diagFilterStrategy');
+  if (strat) filters.strategy = strat;
+  const stage = val('diagFilterStage');
+  if (stage) filters.stage = stage;
+  const status = val('diagFilterStatus');
+  if (status) filters.status = status;
+  const scope = val('diagFilterScope');
+  if (scope) filters.scope = scope;
+  const start = val('diagFilterStart');
+  if (start) filters.startDate = new Date(start).toISOString();
+  const end = val('diagFilterEnd');
+  if (end) filters.endDate = new Date(end).toISOString();
+  const q = val('diagFilterSearch');
+  if (q) filters.q = q;
+  return filters;
+}
+
+function buildDiagQueryString(filters) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([k, v]) => { if (v !== '' && v != null) params.append(k, v); });
+  const s = params.toString();
+  return s ? ('?' + s) : '';
+}
+
+async function loadDiagnostics() {
+  const rowsEl = document.getElementById('diagRows');
+  const countEl = document.getElementById('diagCount');
+  if (!rowsEl) return;
+  rowsEl.innerHTML = '<tr><td colspan="11" class="empty">Loading...</td></tr>';
+
+  const filters = getDiagnosticsFilters();
+  const qs = buildDiagQueryString({ ...filters, limit: 200 });
+
+  try {
+    const [auditsResp, statsResp] = await Promise.all([
+      api('/api/diagnostics/audits' + qs),
+      api('/api/diagnostics/stats' + buildDiagQueryString({ ...filters, limit: 5000 })),
+    ]);
+
+    if (auditsResp && auditsResp.success) {
+      DIAG_STATE.rows = auditsResp.data || [];
+      renderDiagnosticsRows(DIAG_STATE.rows);
+      if (countEl) {
+        const pag = auditsResp.pagination || {};
+        countEl.textContent = `Showing ${DIAG_STATE.rows.length} of ${pag.total ?? DIAG_STATE.rows.length} events`;
+      }
+    } else {
+      rowsEl.innerHTML = '<tr><td colspan="11" class="empty" style="color:var(--red)">'
+        + escapeHtml((auditsResp && auditsResp.message) || 'Failed to load audits') + '</td></tr>';
+    }
+
+    if (statsResp && statsResp.success) {
+      renderDiagnosticsStats(statsResp.data);
+    }
+  } catch (e) {
+    rowsEl.innerHTML = '<tr><td colspan="11" class="empty" style="color:var(--red)">'
+      + escapeHtml(e.message) + '</td></tr>';
+  }
+
+  const autoEl = document.getElementById('diagAutoStream');
+  if (autoEl) DIAG_STATE.autoStream = autoEl.checked;
+}
+
+function renderDiagnosticsRows(rows) {
+  const rowsEl = document.getElementById('diagRows');
+  if (!rowsEl) return;
+  if (!rows || rows.length === 0) {
+    rowsEl.innerHTML = '<tr><td colspan="11" class="empty">No events match the current filters.</td></tr>';
+    return;
+  }
+
+  const stageTag = (stage) => {
+    const s = String(stage || '').toUpperCase();
+    if (s === 'TRIGGERED' || s === 'ORDER_OPENED') return 'tag-green';
+    if (s === 'FILTERED' || s === 'DUPLICATE' || s === 'NO_SETUP' || s === 'SETUP_FOUND') return 'tag-neutral';
+    if (s === 'RISK_REJECTED' || s === 'PREFLIGHT_REJECTED' || s === 'ORDER_FAILED') return 'tag-red';
+    if (s === 'ORDER_CLOSED') return 'tag-blue';
+    if (s === 'POSITION_MANAGED') return 'tag-neutral';
+    return '';
+  };
+
+  const statusColor = (status) => {
+    const s = String(status || '').toUpperCase();
+    if (s === 'OK') return 'var(--green)';
+    if (s === 'REJECTED' || s === 'FAILED') return 'var(--red)';
+    if (s === 'WARN') return 'var(--yellow)';
+    return 'var(--text2)';
+  };
+
+  let html = '';
+  rows.forEach((r, idx) => {
+    const time = r.timestamp ? new Date(r.timestamp).toLocaleString() : '--';
+    const conf = (typeof r.confidence === 'number' && isFinite(r.confidence))
+      ? (r.confidence > 1 ? r.confidence.toFixed(0) : (r.confidence * 100).toFixed(0)) + '%'
+      : '—';
+    html += '<tr style="cursor:pointer" onclick="openDiagnosticsDetail(' + idx + ')">';
+    html += '<td>' + escapeHtml(time) + '</td>';
+    html += '<td><strong>' + escapeHtml(r.symbol || '--') + '</strong></td>';
+    html += '<td>' + escapeHtml(r.strategy || '--') + '</td>';
+    html += '<td>' + escapeHtml(r.module || '--') + '</td>';
+    html += '<td><span class="tag ' + stageTag(r.stage) + '">' + escapeHtml(r.stage || '--') + '</span></td>';
+    html += '<td style="color:' + statusColor(r.status) + '">' + escapeHtml(r.status || '--') + '</td>';
+    html += '<td>' + escapeHtml(r.signal || '--') + '</td>';
+    html += '<td>' + conf + '</td>';
+    html += '<td>' + escapeHtml(r.reasonCode || '--') + '</td>';
+    html += '<td style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+         + escapeHtml(r.reasonText || r.filterReason || '--') + '</td>';
+    html += '<td>' + escapeHtml(r.scope || '--') + '</td>';
+    html += '</tr>';
+  });
+  rowsEl.innerHTML = html;
+}
+
+function renderDiagnosticsStats(stats) {
+  if (!stats) return;
+  const byStage = {};
+  (stats.byStage || []).forEach(x => { byStage[x.key] = x.count; });
+
+  const totalEl = document.getElementById('diagStatTotal');
+  if (totalEl) totalEl.textContent = stats.total ?? 0;
+  const triggeredEl = document.getElementById('diagStatTriggered');
+  if (triggeredEl) triggeredEl.textContent = byStage.TRIGGERED || 0;
+  const rejectedEl = document.getElementById('diagStatRejected');
+  if (rejectedEl) rejectedEl.textContent = (byStage.RISK_REJECTED || 0) + (byStage.PREFLIGHT_REJECTED || 0) + (byStage.ORDER_FAILED || 0);
+  const openedEl = document.getElementById('diagStatOpened');
+  if (openedEl) openedEl.textContent = byStage.ORDER_OPENED || 0;
+
+  const renderList = (id, items) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!items || items.length === 0) {
+      el.innerHTML = '<div class="empty" style="padding:4px;font-size:12px">None</div>';
+      return;
+    }
+    el.innerHTML = items.slice(0, 8).map(it =>
+      '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border)">'
+      + '<span>' + escapeHtml(it.key) + '</span>'
+      + '<span style="color:var(--text2)">' + it.count + '</span>'
+      + '</div>'
+    ).join('');
+  };
+  renderList('diagTopNoSetup', stats.topNoSetup);
+  renderList('diagTopFiltered', stats.topFiltered);
+  const merged = [...(stats.topRiskReject || []), ...(stats.topExecReject || [])]
+    .sort((a, b) => b.count - a.count);
+  renderList('diagTopRejections', merged);
+}
+
+function openDiagnosticsDetail(idx) {
+  const row = DIAG_STATE.rows[idx];
+  if (!row) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay show';
+  overlay.style.display = 'flex';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const formatted = JSON.stringify(row, null, 2);
+  overlay.innerHTML =
+    '<div class="modal" style="max-width:720px;max-height:80vh;overflow:auto">'
+    + '<div class="card-header"><span class="card-title">Decision Audit Detail</span>'
+    + '<button class="btn-outline btn-sm" onclick="this.closest(\'.modal-overlay\').remove()">Close</button></div>'
+    + '<div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px">'
+    + '<span><strong>Stage:</strong> ' + escapeHtml(row.stage || '--') + '</span>'
+    + '<span><strong>Status:</strong> ' + escapeHtml(row.status || '--') + '</span>'
+    + '<span><strong>Symbol:</strong> ' + escapeHtml(row.symbol || '--') + '</span>'
+    + '<span><strong>Strategy:</strong> ' + escapeHtml(row.strategy || '--') + '</span>'
+    + '<span><strong>Scope:</strong> ' + escapeHtml(row.scope || '--') + '</span>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'
+    + escapeHtml(row.reasonText || '') + '</div>'
+    + '<pre style="background:var(--bg3);padding:12px;border-radius:6px;font-size:12px;overflow:auto;max-height:55vh">'
+    + escapeHtml(formatted) + '</pre>'
+    + '</div>';
+  document.body.appendChild(overlay);
+}
+
+function handleDiagnosticsWsEvent(msg) {
+  if (!DIAG_STATE.autoStream) return;
+  const page = document.getElementById('page-diagnostics');
+  if (!page || !page.classList.contains('active')) return;
+  if (!msg || !msg.data) return;
+  DIAG_STATE.rows = [msg.data, ...DIAG_STATE.rows].slice(0, 200);
+  renderDiagnosticsRows(DIAG_STATE.rows);
+}
+window.loadDiagnostics = loadDiagnostics;
+window.clearDiagnosticsFilters = clearDiagnosticsFilters;
+window.openDiagnosticsDetail = openDiagnosticsDetail;
 
 async function loadNotifyStatus() {
   try {

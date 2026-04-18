@@ -19,6 +19,7 @@ const { getInstrument } = require('../config/instruments');
 const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
+const auditService = require('./auditService');
 
 class PaperTradingService {
   constructor() {
@@ -231,7 +232,9 @@ class PaperTradingService {
       // Signal handler — execute paper trade
       async (signal) => {
         await this._executePaperTrade(signal);
-      }
+      },
+      null,
+      { scope: 'paper' }
     );
   }
 
@@ -299,6 +302,19 @@ class PaperTradingService {
           codeName: preflight.retcodeName,
           volume: riskCheck.lotSize,
           accountInfo,
+          details: preflight,
+        });
+        auditService.preflightRejected({
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          module: 'paperTradingService',
+          scope: 'paper',
+          signal: signal.signal,
+          calculatedLot: riskCheck.lotSize,
+          mt5Retcode: preflight.retcode,
+          preflightMessage,
+          reasonCode: preflight.retcodeName || 'PREFLIGHT_REJECTED',
+          reasonText: preflightMessage,
           details: preflight,
         });
         this._broadcastRejection(signal, preflightMessage, {
@@ -380,6 +396,25 @@ class PaperTradingService {
         + `@ ${entryPrice} | SL: ${signal.sl} TP: ${signal.tp} | ${signal.reason}`
       );
 
+      auditService.orderOpened({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        module: 'paperTradingService',
+        scope: 'paper',
+        signal: signal.signal,
+        calculatedLot: riskCheck.lotSize,
+        price: entryPrice,
+        sl: signal.sl,
+        tp: signal.tp,
+        positionDbId: position._id,
+        reasonText: `Paper opened ${signal.signal} ${riskCheck.lotSize} ${signal.symbol} @ ${entryPrice}`,
+        details: {
+          mt5PositionId,
+          mt5DealId,
+          orderId: result.orderId || null,
+        },
+      });
+
       // Broadcast + notify
       websocketService.broadcast('trades', 'paper_trade_opened', position);
       await notificationService.notifyTradeOpened(position);
@@ -402,6 +437,17 @@ class PaperTradingService {
           codeName: auditCodeName,
           accountInfo,
           details: err.details || { method: err.method || null },
+        });
+        auditService.orderFailed({
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          module: 'paperTradingService',
+          scope: 'paper',
+          signal: signal.signal,
+          mt5Retcode: typeof auditCode === 'number' ? auditCode : null,
+          reasonCode: auditCodeName || `ORDER_FAILED:${auditStage}`,
+          reasonText: err.message,
+          details: err.details || { method: err.method || null, stage: auditStage },
         });
         this._broadcastRejection(signal, err.message, {
           stage: auditStage,
@@ -589,6 +635,25 @@ class PaperTradingService {
       + `| Reason: ${closedSnapshot.exitReason} | Held: ${closedTrade.holdingTime}`
     );
 
+    auditService.orderClosed({
+      symbol: localPos.symbol,
+      strategy: localPos.strategy,
+      module: 'paperTradingService',
+      scope: 'paper',
+      signal: localPos.type,
+      price: closedSnapshot.exitPrice,
+      positionDbId: localPos._id,
+      exitReason: closedSnapshot.exitReason,
+      pnl: closedSnapshot.profitLoss,
+      reasonCode: closedSnapshot.exitReason || 'CLOSED',
+      reasonText: `Paper closed ${localPos.symbol} ${localPos.type} P/L ${closedSnapshot.profitLoss.toFixed(2)}`,
+      details: {
+        exitPrice: closedSnapshot.exitPrice,
+        profitPips: closedSnapshot.profitPips,
+        holdingTime: closedTrade.holdingTime,
+      },
+    });
+
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
     await notificationService.notifyTradeClosed(closedTrade);
   }
@@ -671,6 +736,25 @@ class PaperTradingService {
       ...closedSnapshot,
       holdingTime: TradeLog.formatHoldingTime(closedSnapshot.closedAt - openedAt),
     };
+
+    auditService.orderClosed({
+      symbol: position.symbol,
+      strategy: position.strategy,
+      module: 'paperTradingService',
+      scope: 'paper',
+      signal: position.type,
+      price: closedSnapshot.exitPrice,
+      positionDbId: position._id,
+      exitReason: closedSnapshot.exitReason,
+      pnl: closedSnapshot.profitLoss,
+      reasonCode: closedSnapshot.exitReason || reason || 'MANUAL',
+      reasonText: `Paper manual close ${position.symbol} ${position.type} P/L ${closedSnapshot.profitLoss.toFixed(2)}`,
+      details: {
+        exitPrice: closedSnapshot.exitPrice,
+        profitPips: closedSnapshot.profitPips,
+        holdingTime: closedTrade.holdingTime,
+      },
+    });
 
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
     await notificationService.notifyTradeClosed(closedTrade);

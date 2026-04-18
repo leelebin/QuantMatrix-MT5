@@ -804,6 +804,62 @@ def handle_get_price(params):
     }}
 
 
+def handle_get_symbol_info(params):
+    """Look up a single broker symbol by its name.
+
+    Returns the serialized symbol_info if the broker recognises the name
+    (even when not yet visible in Market Watch), otherwise returns a
+    null-valued result. Does NOT auto-select the symbol — used by the
+    alias resolver to test candidate names cheaply before committing.
+    """
+    symbol = params["symbol"]
+    info = mt5.symbol_info(symbol)
+    if info is None:
+        return {"success": True, "result": None}
+
+    return {"success": True, "result": serialize_symbol_info(info)}
+
+
+def handle_list_symbols(params):
+    """List broker symbols, optionally filtered by group pattern.
+
+    Used by the alias resolver's discovery fallback when explicit
+    candidate names do not match. The 'group' param is forwarded to
+    mt5.symbols_get(group=...), so standard MT5 wildcard syntax applies
+    (e.g. "*BTC*,*ETH*"). Without a group, all broker symbols are
+    returned — which can be large; callers should prefer a group.
+    """
+    group = params.get("group")
+    limit = int(params.get("limit", 5000))
+
+    try:
+        if group:
+            raw = mt5.symbols_get(group=group)
+        else:
+            raw = mt5.symbols_get()
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"success": False, "error": f"symbols_get failed: {exc}"}
+
+    if raw is None:
+        error = mt5.last_error()
+        if error and error[0] != 0:
+            return {"success": False, "error": f"symbols_get error: {error}"}
+        raw = []
+
+    names = []
+    for info in list(raw)[:limit]:
+        names.append({
+            "symbol": info.name,
+            "path": getattr(info, "path", None),
+            "tradeMode": info.trade_mode,
+            "tradeModeName": SYMBOL_TRADE_MODE_NAMES.get(info.trade_mode, str(info.trade_mode)),
+            "visible": info.visible,
+            "digits": info.digits,
+        })
+
+    return {"success": True, "result": names}
+
+
 def handle_get_deals(params):
     """Get deal history"""
     start_time = params.get("startTime")
@@ -851,6 +907,8 @@ HANDLERS = {
     "getCandles": handle_get_candles,
     "getPrice": handle_get_price,
     "getDeals": handle_get_deals,
+    "getSymbolInfo": handle_get_symbol_info,
+    "listSymbols": handle_list_symbols,
 }
 
 

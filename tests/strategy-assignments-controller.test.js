@@ -147,7 +147,7 @@ describe('strategy assignments controller', () => {
     const req = {
       body: {
         assignmentsBySymbol: {
-          BTCUSD: ['TrendFollowing'],
+          ZZZZZZ: ['TrendFollowing'],
         },
       },
     };
@@ -158,7 +158,7 @@ describe('strategy assignments controller', () => {
     expect(res.statusCode).toBe(400);
     expect(res.payload).toEqual(expect.objectContaining({
       success: false,
-      message: 'Invalid symbol: BTCUSD',
+      message: 'Invalid symbol: ZZZZZZ',
     }));
   });
 });

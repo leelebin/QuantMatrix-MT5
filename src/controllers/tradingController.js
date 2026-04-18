@@ -7,7 +7,8 @@ const indicatorService = require('../services/indicatorService');
 const websocketService = require('../services/websocketService');
 const Strategy = require('../models/Strategy');
 const ExecutionAudit = require('../models/ExecutionAudit');
-const { getAllSymbols, getInstrument } = require('../config/instruments');
+const { getAllSymbols, getInstrument, instruments, INSTRUMENT_CATEGORIES } = require('../config/instruments');
+const symbolResolver = require('../services/symbolResolver');
 
 let tradingLoopInterval = null;
 
@@ -402,6 +403,90 @@ exports.testOrder = async (req, res) => {
   } catch (err) {
     console.error('[Test Order] Error:', err.message);
     res.status(500).json({ success: false, message: err.message, data: order ? { order } : undefined });
+  }
+};
+
+// @desc    List all canonical trading symbols with metadata
+// @route   GET /api/trading/symbols
+// Returns canonical symbol, category, strategy type, pip config, plus
+// broker alias resolution status (OK / MISSING / CANONICAL / UNKNOWN).
+// Safe to call when MT5 is disconnected — resolution just reports UNKNOWN.
+exports.getSymbolsStatus = async (req, res) => {
+  try {
+    const report = symbolResolver.getStatusReport();
+    const reportByCanonical = Object.fromEntries(
+      report.map((entry) => [entry.canonical, entry])
+    );
+
+    const symbols = getAllSymbols().map((canonical) => {
+      const instrument = instruments[canonical];
+      const resolution = reportByCanonical[canonical] || symbolResolver.getResolution(canonical);
+      return {
+        canonical,
+        category: instrument.category,
+        strategyType: instrument.strategyType,
+        pipSize: instrument.pipSize,
+        pipValue: instrument.pipValue,
+        contractSize: instrument.contractSize,
+        minLot: instrument.minLot,
+        lotStep: instrument.lotStep,
+        spread: instrument.spread,
+        timeframe: instrument.timeframe,
+        higherTimeframe: instrument.higherTimeframe || null,
+        entryTimeframe: instrument.entryTimeframe || null,
+        broker: resolution.broker,
+        resolutionStatus: resolution.status,
+        resolutionError: resolution.error,
+        candidates: resolution.candidates,
+      };
+    });
+
+    const byCategory = {};
+    for (const entry of symbols) {
+      if (!byCategory[entry.category]) byCategory[entry.category] = [];
+      byCategory[entry.category].push(entry.canonical);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        symbols,
+        categories: INSTRUMENT_CATEGORIES,
+        byCategory,
+        mt5Connected: mt5Service.isConnected(),
+      },
+    });
+  } catch (err) {
+    console.error('[Trading] getSymbolsStatus error:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Re-run broker symbol alias discovery
+// @route   POST /api/trading/symbols/rediscover
+exports.rediscoverSymbols = async (req, res) => {
+  try {
+    if (!mt5Service.isConnected()) {
+      return res.status(400).json({
+        success: false,
+        message: 'MT5 is not connected. Connect before running discovery.',
+      });
+    }
+
+    symbolResolver.clear();
+    const report = await symbolResolver.discoverAll(mt5Service);
+    res.json({
+      success: true,
+      data: {
+        total: report.total,
+        resolved: report.resolved.length,
+        missing: report.missing.map((m) => m.canonical),
+        errors: report.errors.map((e) => ({ canonical: e.canonical, error: e.error })),
+      },
+    });
+  } catch (err) {
+    console.error('[Trading] rediscoverSymbols error:', err.message);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 

@@ -6,6 +6,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const readline = require('readline');
+const symbolResolver = require('./symbolResolver');
 
 const ACCOUNT_MODE_NAMES = {
   0: 'DEMO',
@@ -177,7 +178,22 @@ class MT5Service {
 
     this.connected = true;
     console.log('[MT5] Connected successfully');
+
+    // Fire-and-forget alias discovery for symbols with aliases. Missing
+    // symbols are logged but do NOT block startup — trading simply skips
+    // them when orders are later attempted. Runs in the background so the
+    // connect handshake returns immediately.
+    this._runSymbolDiscovery();
+
     return true;
+  }
+
+  _runSymbolDiscovery() {
+    setImmediate(() => {
+      symbolResolver.discoverAll(this).catch((err) => {
+        console.warn('[MT5] Symbol alias discovery failed:', err.message);
+      });
+    });
   }
 
   async disconnect() {
@@ -271,10 +287,22 @@ class MT5Service {
     return await this._sendCommand('getOrders');
   }
 
+  /**
+   * Translate a canonical symbol (BTCUSD) to the broker-side name
+   * (BTCUSDm, etc.) using the cached symbol resolver. For symbols
+   * without a known alias this is a no-op — the canonical name is
+   * returned unchanged. Keeps database records stable regardless of
+   * which broker the session connects to.
+   */
+  _resolveSymbol(symbol) {
+    return symbolResolver.resolveForBroker(symbol);
+  }
+
   async preflightOrder(symbol, type, volume, stopLoss, takeProfit, comment = '') {
     this._ensureConnected();
+    const broker = this._resolveSymbol(symbol);
     return await this._sendCommand('preflightOrder', {
-      symbol,
+      symbol: broker,
       type,
       volume,
       sl: stopLoss,
@@ -294,9 +322,10 @@ class MT5Service {
    */
   async placeOrder(symbol, type, volume, stopLoss, takeProfit, comment = '') {
     this._ensureConnected();
+    const broker = this._resolveSymbol(symbol);
 
     const result = await this._sendCommand('placeOrder', {
-      symbol,
+      symbol: broker,
       type,
       volume,
       sl: stopLoss,
@@ -304,7 +333,7 @@ class MT5Service {
       comment: comment || `QM-${type}-${symbol}`,
     });
 
-    console.log(`[MT5] Order placed: ${type} ${volume} ${symbol} | SL: ${stopLoss} TP: ${takeProfit}`);
+    console.log(`[MT5] Order placed: ${type} ${volume} ${symbol}${broker !== symbol ? ` (broker: ${broker})` : ''} | SL: ${stopLoss} TP: ${takeProfit}`);
     return result;
   }
 
@@ -360,7 +389,7 @@ class MT5Service {
   async getCandles(symbol, timeframe, startTime, limit = 500, endTime = null) {
     this._ensureConnected();
     return await this._sendCommand('getCandles', {
-      symbol,
+      symbol: this._resolveSymbol(symbol),
       timeframe,
       startTime: startTime instanceof Date ? startTime.toISOString() : startTime,
       endTime: endTime instanceof Date ? endTime.toISOString() : endTime,
@@ -374,7 +403,7 @@ class MT5Service {
    */
   async getPrice(symbol) {
     this._ensureConnected();
-    return await this._sendCommand('getPrice', { symbol });
+    return await this._sendCommand('getPrice', { symbol: this._resolveSymbol(symbol) });
   }
 
   /**
@@ -382,6 +411,25 @@ class MT5Service {
    * @param {Date} startTime - Start date
    * @param {Date} endTime - End date
    */
+  /**
+   * Look up symbol info by exact broker name. Returns null if the broker
+   * does not recognise the symbol. Does not throw on "not found" — only
+   * throws on bridge/connection errors.
+   */
+  async getSymbolInfo(symbol) {
+    this._ensureConnected();
+    return await this._sendCommand('getSymbolInfo', { symbol });
+  }
+
+  /**
+   * List broker symbols, optionally filtered by MT5 group pattern
+   * (e.g. "*BTC*,*ETH*"). Used by the alias resolver discovery fallback.
+   */
+  async listSymbols({ group = null, limit = 5000 } = {}) {
+    this._ensureConnected();
+    return await this._sendCommand('listSymbols', { group, limit });
+  }
+
   async getDeals(startTime, endTime) {
     this._ensureConnected();
     return await this._sendCommand('getDeals', {

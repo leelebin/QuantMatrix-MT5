@@ -918,6 +918,35 @@ tr:hover{background:var(--bg3)}
       </table>
     </div>
   </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="card-header">
+      <span class="card-title">Broker Symbol Resolution</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="loadSymbolResolution()">Refresh</button>
+        <button class="btn-outline btn-sm" onclick="rediscoverSymbols()">Re-discover</button>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px">
+      Maps each canonical app symbol (e.g. BTCUSD) to the broker's actual name (BTCUSDm, BTCUSD.a, etc.). Discovery runs automatically when MT5 connects. Set <code>QM_SYMBOL_ALIAS_BTCUSD=BTCUSDm</code> etc. in <code>.env</code> to force a specific broker name.
+    </div>
+    <div id="symbolResolutionSummary" style="font-size:12px;color:var(--text2);margin-bottom:8px"></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Canonical</th>
+            <th>Category</th>
+            <th>Strategy Type</th>
+            <th>Broker Name</th>
+            <th>Status</th>
+            <th>Candidates tried</th>
+          </tr>
+        </thead>
+        <tbody id="symbolResolutionRows"><tr><td colspan="6" class="empty">Click Refresh to load symbol resolution status.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- Settings Page -->
@@ -1250,7 +1279,7 @@ function onPageSwitch(page) {
     }
   }
   else if (page === 'optimizer') loadOptRanges();
-  else if (page === 'diagnostics') loadDiagnostics();
+  else if (page === 'diagnostics') { loadDiagnostics(); loadSymbolResolution(); }
   else if (page === 'settings') { loadNotifyStatus(); loadAccountInfo(); loadRiskSettings(); }
   else if (page === 'dashboard') loadDashboard();
 }
@@ -3988,6 +4017,74 @@ function handleDiagnosticsWsEvent(msg) {
 window.loadDiagnostics = loadDiagnostics;
 window.clearDiagnosticsFilters = clearDiagnosticsFilters;
 window.openDiagnosticsDetail = openDiagnosticsDetail;
+
+async function loadSymbolResolution() {
+  const summary = document.getElementById('symbolResolutionSummary');
+  const rows = document.getElementById('symbolResolutionRows');
+  if (!rows) return;
+  rows.innerHTML = '<tr><td colspan="6" class="empty">Loading...</td></tr>';
+  try {
+    const r = await api('/api/trading/symbols');
+    if (!r.success || !r.data) {
+      rows.innerHTML = '<tr><td colspan="6" class="empty">Failed to load</td></tr>';
+      return;
+    }
+    const list = r.data.symbols || [];
+    const okCount = list.filter((s) => s.resolutionStatus === 'ok').length;
+    const missingCount = list.filter((s) => s.resolutionStatus === 'missing').length;
+    const unknownCount = list.filter((s) => s.resolutionStatus === 'unknown').length;
+    const errorCount = list.filter((s) => s.resolutionStatus === 'error').length;
+    const mt5Note = r.data.mt5Connected ? '' : ' <span style="color:var(--text2)">(MT5 not connected — resolution not yet run)</span>';
+    if (summary) {
+      summary.innerHTML =
+        '<strong>' + list.length + '</strong> symbols · ' +
+        '<span style="color:var(--green)">' + okCount + ' ok</span> · ' +
+        '<span style="color:var(--red)">' + missingCount + ' missing</span> · ' +
+        '<span style="color:var(--text2)">' + unknownCount + ' untested</span>' +
+        (errorCount ? ' · <span style="color:var(--orange,#e9a84c)">' + errorCount + ' errors</span>' : '') +
+        mt5Note;
+    }
+    if (list.length === 0) {
+      rows.innerHTML = '<tr><td colspan="6" class="empty">No symbols configured</td></tr>';
+      return;
+    }
+    const statusColor = (s) => (
+      s === 'ok' ? 'var(--green)' :
+      s === 'missing' ? 'var(--red)' :
+      s === 'error' ? 'var(--orange,#e9a84c)' : 'var(--text2)'
+    );
+    rows.innerHTML = list.map((s) => (
+      '<tr>' +
+      '<td><strong>' + s.canonical + '</strong></td>' +
+      '<td>' + (s.category || '--') + '</td>' +
+      '<td>' + (s.strategyType || '--') + '</td>' +
+      '<td>' + (s.broker || '<span style="color:var(--text2)">—</span>') + '</td>' +
+      '<td><span style="color:' + statusColor(s.resolutionStatus) + '">' + s.resolutionStatus + '</span></td>' +
+      '<td style="font-size:11px;color:var(--text2)">' + (s.candidates || []).join(', ') + '</td>' +
+      '</tr>'
+    )).join('');
+  } catch (err) {
+    rows.innerHTML = '<tr><td colspan="6" class="empty">Error: ' + (err.message || err) + '</td></tr>';
+  }
+}
+
+async function rediscoverSymbols() {
+  try {
+    const r = await api('/api/trading/symbols/rediscover', 'POST');
+    if (!r.success) {
+      alert(r.message || 'Discovery failed');
+      return;
+    }
+    const d = r.data || {};
+    alert('Symbol discovery: ' + d.resolved + '/' + d.total + ' resolved, ' + (d.missing?.length || 0) + ' missing');
+    loadSymbolResolution();
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+  }
+}
+
+window.loadSymbolResolution = loadSymbolResolution;
+window.rediscoverSymbols = rediscoverSymbols;
 
 async function loadNotifyStatus() {
   try {

@@ -7,6 +7,8 @@ const {
   getStatus,
   getAccount,
   testOrder,
+  getSymbolsStatus,
+  rediscoverSymbols,
 } = require('../controllers/tradingController');
 
 router.use(protect);
@@ -16,5 +18,7 @@ router.post('/stop', stopTrading);
 router.get('/status', getStatus);
 router.get('/account', getAccount);
 router.post('/test-order', testOrder);
+router.get('/symbols', getSymbolsStatus);
+router.post('/symbols/rediscover', rediscoverSymbols);
 
 module.exports = router;

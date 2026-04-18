@@ -583,6 +583,18 @@ tr:hover{background:var(--bg3)}
           </div>
         </div>
         <div class="form-row">
+          <div class="form-group" style="flex:1 1 100%">
+            <label>Run Model</label>
+            <select id="btBatchRunModel" onchange="updateRunModelHint()">
+              <option value="independent">Independent Sleeve Aggregation</option>
+              <option value="shared_portfolio">Shared Portfolio Simulation</option>
+            </select>
+          </div>
+        </div>
+        <div class="batch-hint" id="btBatchRunModelHint" style="font-size:12px;color:var(--text2);margin:-4px 0 8px">
+          <strong>Independent Sleeve Aggregation</strong>: each combination trades its own copy of the initial balance; totals are aggregated after the fact (true sums, not averaged percentages).
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label>Timeframe Mode</label>
             <select id="btBatchTimeframeMode" onchange="toggleForcedTimeframeVisibility()">
@@ -619,12 +631,21 @@ tr:hover{background:var(--bg3)}
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px">
+    <div class="card" id="btBatchPortfolioCard" style="margin-top:16px">
       <div class="card-header">
-        <span class="card-title">Portfolio Summary</span>
-        <span class="section-subtitle">Aggregate math across all scored strategy runs (not averaged percentages)</span>
+        <span class="card-title" id="btBatchPortfolioTitle">Portfolio Summary — Independent Sleeve Aggregation</span>
+        <span class="section-subtitle" id="btBatchPortfolioSubtitle">True aggregate math across all scored strategy runs (not averaged percentages). Each sleeve starts with its own copy of the initial balance.</span>
       </div>
       <div id="btBatchPortfolioSummary"><div class="empty">Run a batch job to see the portfolio summary</div></div>
+    </div>
+
+    <div class="card" id="btBatchSharedCard" style="margin-top:16px;display:none">
+      <div class="card-header">
+        <span class="card-title">Shared Portfolio Simulation</span>
+        <span class="section-subtitle">Real shared-capital simulation — ONE balance, ONE equity curve, ONE drawdown. All combinations compete for capacity in chronological order.</span>
+      </div>
+      <div id="btBatchSharedSummary"><div class="empty">Run a shared-portfolio job to see the simulation summary</div></div>
+      <div id="btBatchSharedContributions" style="margin-top:12px"></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -2439,8 +2460,22 @@ function renderBatchProgress(progress) {
   if (!box || !fill || !text) return;
   box.style.display = '';
   fill.style.width = (progress.percent || 0) + '%';
-  text.textContent = (progress.current || 0) + '/' + (progress.total || 0) + ' (' + (progress.percent || 0) + '%)'
-    + ((progress.currentStrategy && progress.currentSymbol) ? (' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol) : '');
+  let label;
+  if (progress.runModel === 'shared_portfolio' || progress.phase === 'simulate' || progress.phase === 'prepare') {
+    const phaseLabel = progress.phase === 'simulate' ? 'simulating' : progress.phase === 'prepare' ? 'preparing data' : 'queued';
+    label = '[shared] ' + phaseLabel + ' (' + (progress.percent || 0) + '%)';
+    if (progress.phase === 'prepare' && progress.currentSymbol && progress.currentStrategy) {
+      label += ' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol;
+    } else if (progress.phase === 'simulate') {
+      if (typeof progress.balance !== 'undefined') label += ' | balance $' + num(progress.balance);
+      if (typeof progress.openPositions !== 'undefined') label += ' | open ' + progress.openPositions;
+      if (typeof progress.trades !== 'undefined') label += ' | trades ' + progress.trades;
+    }
+  } else {
+    label = (progress.current || 0) + '/' + (progress.total || 0) + ' (' + (progress.percent || 0) + '%)'
+      + ((progress.currentStrategy && progress.currentSymbol) ? (' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol) : '');
+  }
+  text.textContent = label;
 }
 
 function toggleForcedTimeframeVisibility() {
@@ -2476,16 +2511,19 @@ async function runBatchBacktest() {
   document.getElementById('btBatchReport').innerHTML = '<div class="empty">Waiting for report...</div>';
 
   const timeframeMode = document.getElementById('btBatchTimeframeMode').value;
+  const runModel = document.getElementById('btBatchRunModel').value || 'independent';
   const body = {
     startDate: document.getElementById('btBatchStartDate').value,
     endDate: document.getElementById('btBatchEndDate').value,
     initialBalance: parseInt(document.getElementById('btBatchBalance').value, 10) || 10000,
     strategyScopeMode: document.getElementById('btBatchStrategyScopeMode').value,
     timeframeMode,
+    runModel,
   };
   if (timeframeMode === 'forced_timeframe') {
     body.forcedTimeframe = document.getElementById('btBatchForcedTimeframe').value;
   }
+  applyRunModelVisibility(runModel);
 
   try {
     const response = await api('/api/backtest/batch/run', 'POST', body);
@@ -2578,15 +2616,25 @@ async function loadBatchJobHistory() {
       return;
     }
 
-    let html = '<table><tr><th>Date</th><th>Status</th><th>Scope Mode</th><th>TF Mode</th><th>Coverage</th><th>Runs</th><th>Profitables</th><th>Return %</th><th>Action</th></tr>';
+    let html = '<table><tr><th>Date</th><th>Status</th><th>Run Model</th><th>Scope Mode</th><th>TF Mode</th><th>Coverage</th><th>Runs</th><th>Profitables</th><th>Return %</th><th>Action</th></tr>';
     response.data.forEach((job) => {
       const totalRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.totalRuns : (job.progress ? job.progress.total : '--');
       const profitableRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.profitableRuns : '--';
-      const portfolio = job.aggregate && job.aggregate.portfolio ? job.aggregate.portfolio : null;
-      const returnPct = portfolio && portfolio.scoredRuns > 0 ? num(portfolio.returnPercent) + '%' : '--';
-      const returnTone = portfolio && portfolio.scoredRuns > 0 ? (portfolio.returnPercent >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text)';
+      let returnPct = '--';
+      let returnTone = 'var(--text)';
+      if (job.runModel === 'shared_portfolio' && job.portfolioResult && job.portfolioResult.summary) {
+        returnPct = num(job.portfolioResult.summary.returnPercent) + '%';
+        returnTone = job.portfolioResult.summary.returnPercent >= 0 ? 'var(--green)' : 'var(--red)';
+      } else {
+        const portfolio = job.aggregate && job.aggregate.portfolio ? job.aggregate.portfolio : null;
+        if (portfolio && portfolio.scoredRuns > 0) {
+          returnPct = num(portfolio.returnPercent) + '%';
+          returnTone = portfolio.returnPercent >= 0 ? 'var(--green)' : 'var(--red)';
+        }
+      }
       html += '<tr><td>' + fmtTime(job.createdAt) + '</td>';
       html += '<td>' + batchStatusBadge(job.status) + '</td>';
+      html += '<td>' + escapeHtml(formatRunModelLabel(job.runModel)) + '</td>';
       html += '<td>' + escapeHtml(formatScopeModeLabel(job.strategyScopeMode)) + '</td>';
       html += '<td>' + escapeHtml(formatTimeframeModeLabel(job)) + '</td>';
       html += '<td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' × ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0)) + '</td>';
@@ -2605,6 +2653,11 @@ function formatScopeModeLabel(mode) {
   return 'Enabled + Assigned Only';
 }
 
+function formatRunModelLabel(runModel) {
+  if (runModel === 'shared_portfolio') return 'Shared Portfolio Simulation';
+  return 'Independent Sleeve Aggregation';
+}
+
 function formatTimeframeModeLabel(job) {
   if (job && job.timeframeMode === 'forced_timeframe') {
     return 'Forced (' + (job.forcedTimeframe || '?') + ')';
@@ -2618,7 +2671,7 @@ function renderBatchOverview(job) {
   let html = '<table>';
   html += '<tr><td style="color:var(--text2)">Job ID</td><td>' + job.jobId + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Status</td><td>' + batchStatusBadge(job.status) + '</td></tr>';
-  html += '<tr><td style="color:var(--text2)">Run Model</td><td>' + (job.runModel || '--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Run Model</td><td>' + escapeHtml(formatRunModelLabel(job.runModel)) + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Period</td><td>' + fmtTime(job.period && job.period.start) + ' -> ' + fmtTime(job.period && job.period.end) + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Initial Balance / Run</td><td>$' + num(job.initialBalance) + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Strategy Scope</td><td>' + escapeHtml(formatScopeModeLabel(job.strategyScopeMode)) + '</td></tr>';
@@ -2652,6 +2705,14 @@ function portfolioCell(label, value, tone, sub) {
 }
 
 function renderBatchPortfolioSummary(job) {
+  const runModel = (job && job.runModel) || 'independent';
+  applyRunModelVisibility(runModel);
+
+  if (runModel === 'shared_portfolio') {
+    renderSharedPortfolioSummary(job);
+    return;
+  }
+
   const el = document.getElementById('btBatchPortfolioSummary');
   if (!el) return;
   const portfolio = job && job.aggregate && job.aggregate.portfolio ? job.aggregate.portfolio : null;
@@ -2684,6 +2745,120 @@ function renderBatchPortfolioSummary(job) {
   grid += '<div class="portfolio-note">Portfolio math uses <strong>total wins / total trades</strong> for win rate, <strong>aggregated gross profit / gross loss</strong> for profit factor, and <strong>combined capital</strong> for return %. Max drawdown is reported as a worst-sleeve value plus the mean across sleeves (upper-bound portfolio DD assuming simultaneous drawdowns).</div>';
 
   el.innerHTML = grid;
+}
+
+function updateRunModelHint() {
+  const runModel = document.getElementById('btBatchRunModel').value || 'independent';
+  const hint = document.getElementById('btBatchRunModelHint');
+  if (!hint) return;
+  if (runModel === 'shared_portfolio') {
+    hint.innerHTML = '<strong>Shared Portfolio Simulation</strong>: ONE initial balance, ONE equity curve, ONE drawdown. Signals from every combination are processed in chronological order; position sizing uses the CURRENT shared balance at signal time. Portfolio-level concurrency cap applies.';
+  } else {
+    hint.innerHTML = '<strong>Independent Sleeve Aggregation</strong>: each combination trades its own copy of the initial balance; totals are aggregated after the fact (true sums, not averaged percentages).';
+  }
+}
+
+function applyRunModelVisibility(runModel) {
+  const independentCard = document.getElementById('btBatchPortfolioCard');
+  const sharedCard = document.getElementById('btBatchSharedCard');
+  const portfolioTitle = document.getElementById('btBatchPortfolioTitle');
+  const portfolioSubtitle = document.getElementById('btBatchPortfolioSubtitle');
+  if (runModel === 'shared_portfolio') {
+    if (independentCard) independentCard.style.display = 'none';
+    if (sharedCard) sharedCard.style.display = '';
+  } else {
+    if (independentCard) independentCard.style.display = '';
+    if (sharedCard) sharedCard.style.display = 'none';
+    if (portfolioTitle) portfolioTitle.textContent = 'Portfolio Summary — Independent Sleeve Aggregation';
+    if (portfolioSubtitle) portfolioSubtitle.textContent = 'True aggregate math across all scored strategy runs (not averaged percentages). Each sleeve starts with its own copy of the initial balance.';
+  }
+}
+
+function renderSharedPortfolioSummary(job) {
+  const summaryEl = document.getElementById('btBatchSharedSummary');
+  const contribEl = document.getElementById('btBatchSharedContributions');
+  if (!summaryEl || !contribEl) return;
+  const portfolioResult = job && job.portfolioResult ? job.portfolioResult : null;
+  if (!portfolioResult || !portfolioResult.summary) {
+    summaryEl.innerHTML = '<div class="empty">Shared portfolio simulation is still running — the summary will appear once the event walker finishes.</div>';
+    contribEl.innerHTML = '';
+    return;
+  }
+  const s = portfolioResult.summary;
+  const rejected = portfolioResult.rejectedSignals || { noCapacity: 0, zeroSize: 0 };
+  const combosUsed = typeof portfolioResult.combinationsUsed === 'number'
+    ? portfolioResult.combinationsUsed
+    : (Array.isArray(portfolioResult.combinationsUsed) ? portfolioResult.combinationsUsed.length : 0);
+  const netTone = s.netProfitMoney > 0 ? 'pos' : s.netProfitMoney < 0 ? 'neg' : '';
+  const returnTone = s.returnPercent > 0 ? 'pos' : s.returnPercent < 0 ? 'neg' : '';
+  const pfTone = s.profitFactor >= 1 ? 'pos' : s.profitFactor > 0 ? 'neg' : '';
+  const ddTone = s.maxDrawdownPercent >= 25 ? 'neg' : '';
+
+  let grid = '<div class="portfolio-grid">';
+  grid += portfolioCell('Initial Balance', '$' + num(s.initialBalance), '', 'Shared across the entire portfolio');
+  grid += portfolioCell('Final Balance', '$' + num(s.finalBalance), netTone);
+  grid += portfolioCell('Net P/L', '$' + num(s.netProfitMoney), netTone);
+  grid += portfolioCell('Return %', num(s.returnPercent) + '%', returnTone);
+  grid += portfolioCell('Total Trades', num(s.totalTrades), '', s.winningTrades + ' W / ' + s.losingTrades + ' L');
+  grid += portfolioCell('Win Rate', (s.winRate * 100).toFixed(2) + '%', '', 'Wins / total trades');
+  grid += portfolioCell('Loss Rate', (s.lossRate * 100).toFixed(2) + '%', '', 'Losses / total trades');
+  grid += portfolioCell('Profit Factor', num(s.profitFactor), pfTone, '$' + num(s.grossProfitMoney) + ' / $' + num(s.grossLossMoney));
+  grid += portfolioCell('Avg Trade', '$' + num(s.averageTradeMoney), s.averageTradeMoney >= 0 ? 'pos' : 'neg');
+  grid += portfolioCell('Max Drawdown', num(s.maxDrawdownPercent) + '%', ddTone, 'Real portfolio-level peak-to-trough');
+  grid += portfolioCell('Max Cons Wins', num(s.maxConsecutiveWins));
+  grid += portfolioCell('Max Cons Losses', num(s.maxConsecutiveLosses));
+  grid += portfolioCell('Concurrency Cap', num(portfolioResult.maxConcurrentPositions || 0), '', 'Max simultaneous open positions');
+  grid += portfolioCell('Rejected (No Capacity)', num(rejected.noCapacity || 0), rejected.noCapacity > 0 ? 'neg' : '', 'Signals denied because all slots were full');
+  grid += portfolioCell('Rejected (Zero Size)', num(rejected.zeroSize || 0), rejected.zeroSize > 0 ? 'neg' : '', 'Signals sized to 0 lots at the shared balance');
+  grid += portfolioCell('Combinations Used', combosUsed + ' / ' + (portfolioResult.combinationsRequested || 0), '', 'Only those with sufficient data');
+  grid += '</div>';
+
+  grid += '<div class="portfolio-note"><strong>Shared Portfolio Simulation</strong>: these numbers describe a real chronological simulation against ONE account — position sizing always uses the current shared balance, not a per-sleeve copy.</div>';
+
+  summaryEl.innerHTML = grid;
+
+  let contribHtml = '';
+  const perStrategy = portfolioResult.perStrategyContribution || [];
+  const perSymbol = portfolioResult.perSymbolContribution || [];
+  if (perStrategy.length > 0 || perSymbol.length > 0) {
+    contribHtml += '<div class="grid grid-2" style="margin-top:12px">';
+    contribHtml += '<div>';
+    contribHtml += '<div style="font-weight:600;margin-bottom:6px">Per-Strategy Contribution</div>';
+    if (perStrategy.length === 0) {
+      contribHtml += '<div class="empty">No strategy contributed trades.</div>';
+    } else {
+      contribHtml += '<table><tr><th>Strategy</th><th>Trades</th><th>Win %</th><th>Net P/L</th><th>PF</th></tr>';
+      perStrategy.forEach((item) => {
+        const tone = item.netMoney > 0 ? 'var(--green)' : item.netMoney < 0 ? 'var(--red)' : 'var(--text)';
+        contribHtml += '<tr><td>' + escapeHtml(item.strategy) + '</td>';
+        contribHtml += '<td>' + num(item.trades) + '</td>';
+        contribHtml += '<td>' + (item.winRate * 100).toFixed(2) + '%</td>';
+        contribHtml += '<td style="color:' + tone + '">$' + num(item.netMoney) + '</td>';
+        contribHtml += '<td>' + num(item.profitFactor) + '</td></tr>';
+      });
+      contribHtml += '</table>';
+    }
+    contribHtml += '</div>';
+    contribHtml += '<div>';
+    contribHtml += '<div style="font-weight:600;margin-bottom:6px">Per-Symbol Contribution</div>';
+    if (perSymbol.length === 0) {
+      contribHtml += '<div class="empty">No symbol contributed trades.</div>';
+    } else {
+      contribHtml += '<table><tr><th>Symbol</th><th>Trades</th><th>Win %</th><th>Net P/L</th><th>PF</th></tr>';
+      perSymbol.forEach((item) => {
+        const tone = item.netMoney > 0 ? 'var(--green)' : item.netMoney < 0 ? 'var(--red)' : 'var(--text)';
+        contribHtml += '<tr><td>' + escapeHtml(item.symbol) + '</td>';
+        contribHtml += '<td>' + num(item.trades) + '</td>';
+        contribHtml += '<td>' + (item.winRate * 100).toFixed(2) + '%</td>';
+        contribHtml += '<td style="color:' + tone + '">$' + num(item.netMoney) + '</td>';
+        contribHtml += '<td>' + num(item.profitFactor) + '</td></tr>';
+      });
+      contribHtml += '</table>';
+    }
+    contribHtml += '</div>';
+    contribHtml += '</div>';
+  }
+  contribEl.innerHTML = contribHtml;
 }
 
 async function loadBatchJobResults(jobId, page=1) {

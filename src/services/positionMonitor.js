@@ -13,6 +13,7 @@ const strategyEngine = require('./strategyEngine');
 const { getInstrument } = require('../config/instruments');
 const { positionsDb, tradesDb } = require('../config/db');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
+const auditService = require('./auditService');
 
 class PositionMonitor {
   constructor() {
@@ -190,6 +191,35 @@ class PositionMonitor {
           { $set: { currentSl: update.newSl } }
         );
       }
+
+      const actionKind = update.kind || update.action || (update.newSl !== undefined ? 'SL_UPDATE' : null);
+      let reasonCode = actionKind;
+      if (actionKind === 'SL_UPDATE') {
+        reasonCode = update.phase === 'breakeven'
+          ? auditService.REASON.BREAKEVEN_SET
+          : update.phase === 'trailing'
+            ? auditService.REASON.TRAILING_UPDATED
+            : 'SL_UPDATE';
+      } else if (actionKind === 'PARTIAL_CLOSE') {
+        reasonCode = auditService.REASON.PARTIAL_CLOSE;
+      }
+
+      auditService.positionManaged({
+        symbol: localPosition.symbol,
+        strategy: localPosition.strategy,
+        module: 'positionMonitor',
+        scope: 'live',
+        signal: localPosition.type,
+        positionDbId: localPosition._id,
+        reasonCode: reasonCode || 'POSITION_UPDATE',
+        reasonText: update.message
+          || (actionKind === 'SL_UPDATE'
+            ? `SL updated to ${update.newSl}`
+            : actionKind === 'PARTIAL_CLOSE'
+              ? `Partial close ${update.volume || ''}`
+              : `Position update`),
+        details: update,
+      });
     }
 
     const refreshedPositions = await positionsDb.find({});
@@ -261,6 +291,24 @@ class PositionMonitor {
       ...localPos,
       ...closedSnapshot,
     };
+
+    auditService.orderClosed({
+      symbol: localPos.symbol,
+      strategy: localPos.strategy,
+      module: 'positionMonitor',
+      scope: 'live',
+      signal: localPos.type,
+      price: closedSnapshot.exitPrice,
+      positionDbId: localPos._id,
+      exitReason: closedSnapshot.exitReason,
+      pnl: closedSnapshot.profitLoss,
+      reasonCode: closedSnapshot.exitReason || 'EXTERNAL',
+      reasonText: `Externally closed ${localPos.symbol} ${localPos.type} P/L ${closedSnapshot.profitLoss.toFixed(2)}`,
+      details: {
+        exitPrice: closedSnapshot.exitPrice,
+        profitPips: closedSnapshot.profitPips,
+      },
+    });
 
     // Broadcast via WebSocket
     websocketService.broadcast('trades', 'trade_closed', closedTrade);

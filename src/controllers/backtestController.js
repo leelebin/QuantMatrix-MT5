@@ -1,6 +1,7 @@
 const backtestEngine = require('../services/backtestEngine');
 const batchBacktestService = require('../services/batchBacktestService');
 const mt5Service = require('../services/mt5Service');
+const strategyEngine = require('../services/strategyEngine');
 const websocketService = require('../services/websocketService');
 const breakevenService = require('../services/breakevenService');
 const Strategy = require('../models/Strategy');
@@ -134,6 +135,134 @@ exports.runBacktest = async (req, res) => {
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('[Backtest] Error:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Run a backtest for the given symbol across every registered strategy
+// @route   POST /api/backtest/run-all-strategies
+exports.runAllStrategies = async (req, res) => {
+  try {
+    const { symbol, timeframe, startDate, endDate, initialBalance } = req.body;
+
+    const instrument = getInstrument(symbol);
+    if (!instrument) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid symbol: ${symbol}. Available: ${getAllSymbols().join(', ')}`,
+      });
+    }
+
+    const strategiesInfo = strategyEngine.getStrategiesInfo();
+    if (!strategiesInfo || strategiesInfo.length === 0) {
+      return res.status(500).json({ success: false, message: 'No strategies registered' });
+    }
+
+    if (!mt5Service.isConnected()) {
+      await mt5Service.connect();
+    }
+
+    const activeProfile = await RiskProfile.getActive();
+    const normalizedRange = normalizeDateRange(startDate, endDate);
+    const { start, endExclusive } = clampDateRangeToNow(normalizedRange.start, normalizedRange.endExclusive);
+    const rangeEnd = new Date(endExclusive.getTime() - 1);
+    const balance = initialBalance || 10000;
+
+    const candleCache = new Map();
+    const fetchCandles = async (sym, tf) => {
+      const fetchStart = getWarmupStart(start, tf, DEFAULT_WARMUP_BARS);
+      const key = `${sym}|${tf}|${fetchStart.getTime()}|${endExclusive.getTime()}`;
+      if (!candleCache.has(key)) {
+        const limit = estimateFetchLimit(tf, fetchStart, endExclusive);
+        candleCache.set(key, mt5Service.getCandles(sym, tf, fetchStart, limit, endExclusive)
+          .then((raw) => ({ raw, fetchStart })));
+      }
+      return candleCache.get(key);
+    };
+
+    console.log(`[Backtest-All] Starting: ${symbol} x ${strategiesInfo.length} strategies from ${start.toISOString()} to ${rangeEnd.toISOString()}`);
+
+    const results = [];
+    for (const info of strategiesInfo) {
+      const strategyType = info.type;
+      const entry = { strategyType, displayName: info.name || strategyType };
+      try {
+        const executionConfig = getStrategyExecutionConfig(symbol, strategyType) || instrument;
+        const tf = timeframe || executionConfig.timeframe || instrument.timeframe || '1h';
+        entry.timeframe = tf;
+
+        const strategyConfig = await Strategy.findByName(strategyType);
+        const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyConfig);
+
+        const higherTimeframe = executionConfig.higherTimeframe || null;
+        const entryTimeframe = executionConfig.entryTimeframe || null;
+
+        const [{ raw: mainRaw, fetchStart }, higherResp, lowerResp] = await Promise.all([
+          fetchCandles(symbol, tf),
+          higherTimeframe ? fetchCandles(symbol, higherTimeframe) : null,
+          entryTimeframe ? fetchCandles(symbol, entryTimeframe) : null,
+        ]);
+
+        const candles = filterCandlesByRange(mainRaw, fetchStart, endExclusive);
+        const inRangeCandles = filterCandlesByRange(mainRaw, start, endExclusive);
+        if (!candles || candles.length < DEFAULT_WARMUP_BARS + 2 || inRangeCandles.length < 50) {
+          entry.error = `Insufficient historical data: got ${inRangeCandles.length} candles, need at least 50 after warmup`;
+          results.push(entry);
+          continue;
+        }
+
+        const higherTfCandles = higherResp
+          ? filterCandlesByRange(higherResp.raw, higherResp.fetchStart, endExclusive)
+          : null;
+        const lowerTfCandles = lowerResp
+          ? filterCandlesByRange(lowerResp.raw, lowerResp.fetchStart, endExclusive)
+          : null;
+
+        const fallbackNow = new Date();
+        const effectiveStart = inRangeCandles[0] ? new Date(inRangeCandles[0].time) : null;
+        const effectiveEnd = inRangeCandles[inRangeCandles.length - 1]
+          ? new Date(inRangeCandles[inRangeCandles.length - 1].time)
+          : new Date(Math.min(rangeEnd.getTime(), fallbackNow.getTime()));
+
+        const result = await backtestEngine.run({
+          symbol,
+          strategyType,
+          timeframe: tf,
+          candles,
+          higherTfCandles,
+          lowerTfCandles,
+          initialBalance: balance,
+          tradeStartTime: (effectiveStart || start).toISOString(),
+          tradeEndTime: effectiveEnd.toISOString(),
+          storedStrategyParameters: strategyConfig?.parameters || null,
+          strategyParams: null,
+          breakevenConfig: effectiveBreakeven,
+        });
+
+        entry.summary = result.summary;
+        entry.backtestId = result._id || result.id || null;
+      } catch (err) {
+        console.error(`[Backtest-All] ${strategyType} failed: ${err.message}`);
+        entry.error = err.message;
+      }
+      results.push(entry);
+    }
+
+    const completed = results.filter((r) => r.summary).length;
+    console.log(`[Backtest-All] Completed: ${completed}/${results.length} strategies produced results`);
+
+    res.json({
+      success: true,
+      data: {
+        symbol,
+        startDate: start.toISOString(),
+        endDate: rangeEnd.toISOString(),
+        initialBalance: balance,
+        results,
+      },
+    });
+  } catch (err) {
+    console.error('[Backtest-All] Error:', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 };

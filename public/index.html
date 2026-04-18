@@ -508,6 +508,7 @@ tr:hover{background:var(--bg3)}
           <div class="form-group">
             <label>Strategy</label>
             <select id="btStrategy" onchange="loadBacktestParams()">
+              <option value="ALL">All Strategies (compare)</option>
               <option value="TrendFollowing">Trend Following</option>
               <option value="MeanReversion">Mean Reversion</option>
               <option value="Momentum">Momentum</option>
@@ -2423,9 +2424,15 @@ async function saveStrategyBreakevenOverride(strategyId) {
 }
 
 async function loadBacktestParams() {
+  const selectedStrategy = document.getElementById('btStrategy').value;
+  if (selectedStrategy === 'ALL') {
+    document.getElementById('btParams').innerHTML =
+      '<div class="empty">Each strategy runs with its saved parameters. To tune parameters, pick a single strategy.</div>';
+    return;
+  }
   try {
     await fetchStrategyConfigs();
-    const strategy = getStrategyConfigByName(document.getElementById('btStrategy').value);
+    const strategy = getStrategyConfigByName(selectedStrategy);
     if (!strategy) {
       document.getElementById('btParams').innerHTML = '<div class="empty">No strategy configuration found</div>';
       return;
@@ -2443,23 +2450,93 @@ async function loadBacktestParams() {
 
 async function runBacktest() {
   const btn = document.getElementById('btRunBtn');
-  btn.disabled = true; btn.textContent = 'Running...';
+  const strategyType = document.getElementById('btStrategy').value;
+  const isAll = strategyType === 'ALL';
+  btn.disabled = true; btn.textContent = isAll ? 'Running all strategies...' : 'Running...';
   try {
-    const r = await api('/api/backtest/run', 'POST', {
-      symbol: document.getElementById('btSymbol').value,
-      strategyType: document.getElementById('btStrategy').value,
-      timeframe: document.getElementById('btTimeframe').value || undefined,
-      startDate: document.getElementById('btStartDate').value,
-      endDate: document.getElementById('btEndDate').value,
-      initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
-      strategyParams: collectParameterInputs('btparam'),
-    });
-    if (r.success) {
-      renderBacktestResult(r.data);
-      loadBacktestHistory();
-    } else { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>'; }
+    if (isAll) {
+      const r = await api('/api/backtest/run-all-strategies', 'POST', {
+        symbol: document.getElementById('btSymbol').value,
+        timeframe: document.getElementById('btTimeframe').value || undefined,
+        startDate: document.getElementById('btStartDate').value,
+        endDate: document.getElementById('btEndDate').value,
+        initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
+      });
+      if (r.success) {
+        renderAllStrategiesResult(r.data);
+        loadBacktestHistory();
+      } else {
+        document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>';
+      }
+    } else {
+      const r = await api('/api/backtest/run', 'POST', {
+        symbol: document.getElementById('btSymbol').value,
+        strategyType,
+        timeframe: document.getElementById('btTimeframe').value || undefined,
+        startDate: document.getElementById('btStartDate').value,
+        endDate: document.getElementById('btEndDate').value,
+        initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
+        strategyParams: collectParameterInputs('btparam'),
+      });
+      if (r.success) {
+        renderBacktestResult(r.data);
+        loadBacktestHistory();
+      } else { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>'; }
+    }
   } catch (e) { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>'; }
   finally { btn.disabled = false; btn.textContent = 'Run Backtest'; }
+}
+
+function renderAllStrategiesResult(data) {
+  const rows = Array.isArray(data.results) ? data.results : [];
+  if (rows.length === 0) {
+    document.getElementById('btResult').innerHTML = '<div class="empty">No strategies produced results</div>';
+    return;
+  }
+  const green = 'var(--green)';
+  const red = 'var(--red)';
+  const muted = 'var(--text2)';
+  let html = '<div style="font-size:12px;color:' + muted + ';margin-bottom:8px">';
+  html += 'Symbol <strong>' + escapeHtml(data.symbol) + '</strong> · ';
+  html += new Date(data.startDate).toISOString().slice(0, 10) + ' → ' + new Date(data.endDate).toISOString().slice(0, 10);
+  html += ' · each strategy uses its saved parameters';
+  html += '</div>';
+  html += '<table><thead><tr>';
+  html += '<th>Strategy</th><th>TF</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Net P/L</th><th>Return</th>';
+  html += '</tr></thead><tbody>';
+  rows.forEach((row) => {
+    const label = escapeHtml(row.displayName || row.strategyType);
+    const tf = escapeHtml(row.timeframe || '--');
+    if (row.error) {
+      html += '<tr><td>' + label + '</td><td>' + tf + '</td><td colspan="5" style="color:' + red + '">' + escapeHtml(row.error) + '</td></tr>';
+      return;
+    }
+    const s = row.summary || {};
+    const wr = typeof s.winRate === 'number' ? (s.winRate * 100).toFixed(1) + '%' : '--';
+    const wrColor = typeof s.winRate === 'number' && s.winRate >= 0.5 ? green : red;
+    const pf = (s.profitFactor !== undefined && s.profitFactor !== null) ? s.profitFactor : '--';
+    const pfColor = typeof s.profitFactor === 'number' && s.profitFactor >= 1 ? green : red;
+    const net = typeof s.netProfitMoney === 'number' ? '$' + num(s.netProfitMoney) : '--';
+    const netColor = typeof s.netProfitMoney === 'number' && s.netProfitMoney >= 0 ? green : red;
+    const ret = (s.returnPercent !== undefined && s.returnPercent !== null) ? s.returnPercent + '%' : '--';
+    const retColor = typeof s.returnPercent === 'number' && s.returnPercent >= 0 ? green : red;
+    html += '<tr>';
+    html += '<td>' + label + '</td>';
+    html += '<td>' + tf + '</td>';
+    html += '<td>' + (s.totalTrades !== undefined ? s.totalTrades : '--') + '</td>';
+    html += '<td style="color:' + wrColor + '">' + wr + '</td>';
+    html += '<td style="color:' + pfColor + '">' + pf + '</td>';
+    html += '<td style="color:' + netColor + '">' + net + '</td>';
+    html += '<td style="color:' + retColor + '">' + ret + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('btResult').innerHTML = html;
+  const canvas = document.getElementById('equityCanvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
 function switchBacktestMode(mode) {

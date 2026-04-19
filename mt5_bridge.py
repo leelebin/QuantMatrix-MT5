@@ -106,6 +106,9 @@ TRADE_RETCODE_NAMES = {
     getattr(mt5, "TRADE_RETCODE_LIMIT_ORDERS", 10033): "LIMIT_ORDERS",
     getattr(mt5, "TRADE_RETCODE_LIMIT_VOLUME", 10034): "LIMIT_VOLUME",
 }
+if 0 not in TRADE_RETCODE_NAMES:
+    TRADE_RETCODE_NAMES[0] = "CHECK_OK"
+# If MetaTrader5 already exposes a retcode 0 name, keep that mapping intact.
 
 DEAL_ENTRY_NAMES = {
     getattr(mt5, "DEAL_ENTRY_IN", 0): "IN",
@@ -369,11 +372,24 @@ def build_market_order_request(symbol, order_type, volume, sl=0.0, tp=0.0, comme
     return request, symbol_info, tick, None
 
 
+def is_check_retcode_ok(retcode):
+    """True when MqlTradeCheckResult.retcode means 'can send'."""
+    if retcode is None:
+        return False
+
+    ok_codes = {
+        0,
+        getattr(mt5, "TRADE_RETCODE_DONE", 10009),
+        getattr(mt5, "TRADE_RETCODE_PLACED", 10008),
+    }
+    return retcode in ok_codes
+
+
 def serialize_trade_check(check_result, symbol_info=None, tick=None):
     retcode = getattr(check_result, "retcode", None)
 
     return {
-        "allowed": retcode == getattr(mt5, "TRADE_RETCODE_DONE", 10009),
+        "allowed": is_check_retcode_ok(retcode),
         "retcode": retcode,
         "retcodeName": TRADE_RETCODE_NAMES.get(retcode, str(retcode) if retcode is not None else None),
         "comment": getattr(check_result, "comment", None),
@@ -559,6 +575,7 @@ def handle_preflight_order(params):
         check_result["allowed"] = False
         check_result["comment"] = "Symbol is short-only"
 
+    # With `allowed` fixed, retcode=0 only falls through here when the tick is actually stale.
     if not check_result["allowed"] and check_result["retcode"] in (None, 0) and is_tick_stale(tick):
         check_result = build_market_closed_result(symbol_info, tick, request)
 

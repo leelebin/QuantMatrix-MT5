@@ -523,12 +523,17 @@ class MT5Service {
     return this.summarizePositionDeals(deals);
   }
 
+  // allowed is authored in Python bridge based on MqlTradeCheckResult.retcode.
   isOrderAllowed(preflight = {}) {
     return preflight.allowed === true;
   }
 
   getPreflightMessage(preflight = {}) {
     if (preflight.allowed === false) {
+      if (preflight.retcode === 0 && preflight.comment === 'Done') {
+        return 'preflight inconsistent (retcode=0/Done but allowed=false)';
+      }
+
       if (preflight.retcodeName === 'MARKET_CLOSED') {
         return 'Market closed';
       }

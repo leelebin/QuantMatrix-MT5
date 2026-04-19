@@ -32,6 +32,10 @@ jest.mock('../src/models/RiskProfile', () => ({
   getActive: jest.fn().mockResolvedValue(null),
 }));
 
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
+}));
+
 const backtestController = require('../src/controllers/backtestController');
 const batchBacktestService = require('../src/services/batchBacktestService');
 

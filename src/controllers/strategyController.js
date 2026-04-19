@@ -1,4 +1,5 @@
 const Strategy = require('../models/Strategy');
+const StrategyInstance = require('../models/StrategyInstance');
 const RiskProfile = require('../models/RiskProfile');
 const strategyEngine = require('../services/strategyEngine');
 const breakevenService = require('../services/breakevenService');
@@ -7,6 +8,24 @@ const {
   getStrategyParameterDefinitions,
   resolveStrategyParameters,
 } = require('../config/strategyParameters');
+
+async function ensureStrategyInstancesForSymbols(strategyName, symbols = []) {
+  const uniqueSymbols = [...new Set(Array.isArray(symbols) ? symbols : [])];
+  for (const symbol of uniqueSymbols) {
+    await StrategyInstance.upsert(strategyName, symbol, {});
+  }
+}
+
+async function syncStrategyInstances(strategyName, symbols = [], patch = {}) {
+  const existingInstances = await StrategyInstance.findByStrategyName(strategyName);
+  const targetSymbols = new Set(existingInstances.map((instance) => instance.symbol));
+
+  (Array.isArray(symbols) ? symbols : []).forEach((symbol) => targetSymbols.add(symbol));
+
+  for (const symbol of targetSymbols) {
+    await StrategyInstance.upsert(strategyName, symbol, patch);
+  }
+}
 
 function buildAssignmentsPayload(strategies) {
   const symbols = getAllSymbols();
@@ -108,6 +127,24 @@ exports.updateStrategy = async (req, res) => {
     }
 
     const updatedStrategy = await Strategy.update(req.params.id, updateFields);
+    const shouldEnsureInstances = symbols !== undefined || enabled !== undefined || parameters !== undefined;
+    if (shouldEnsureInstances) {
+      await ensureStrategyInstancesForSymbols(updatedStrategy.name, updatedStrategy.symbols);
+    }
+
+    const instancePatch = {};
+    if (parameters !== undefined) {
+      console.warn(`[Strategy] PUT /api/strategies/:id parameters is deprecated for ${updatedStrategy.name}; writing through to all instances.`);
+      instancePatch.parameters = parameters;
+    }
+    if (enabled !== undefined) {
+      instancePatch.enabled = enabled;
+    }
+
+    if (Object.keys(instancePatch).length > 0) {
+      await syncStrategyInstances(updatedStrategy.name, updatedStrategy.symbols, instancePatch);
+    }
+
     const activeProfile = await RiskProfile.getActive();
     res.json({ success: true, data: enrichStrategy(updatedStrategy, activeProfile) });
   } catch (err) {
@@ -189,6 +226,10 @@ exports.updateAssignments = async (req, res) => {
       return Strategy.update(strategy._id, { symbols: nextSymbols });
     }));
 
+    for (const strategy of strategies) {
+      await ensureStrategyInstancesForSymbols(strategy.name, nextAssignmentsByStrategy[strategy.name]);
+    }
+
     const updatedStrategies = await Strategy.findAll();
     res.json({
       success: true,
@@ -208,6 +249,7 @@ exports.toggleStrategy = async (req, res) => {
     if (!strategy) {
       return res.status(404).json({ success: false, message: 'Strategy not found' });
     }
+    await syncStrategyInstances(strategy.name, strategy.symbols, { enabled: strategy.enabled });
     res.json({
       success: true,
       message: `Strategy ${strategy.enabled ? 'enabled' : 'disabled'}`,
@@ -225,6 +267,9 @@ exports.resetAssignments = async (req, res) => {
     await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
     await Strategy.resetToDefaults();
     const strategies = await Strategy.findAll();
+    for (const strategy of strategies) {
+      await ensureStrategyInstancesForSymbols(strategy.name, strategy.symbols);
+    }
     res.json({
       success: true,
       message: 'Strategy symbol assignments reset to defaults',

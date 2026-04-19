@@ -503,7 +503,7 @@ tr:hover{background:var(--bg3)}
         <div class="form-row">
           <div class="form-group">
             <label>Symbol</label>
-            <select id="btSymbol"></select>
+            <select id="btSymbol" onchange="loadBacktestParams()"></select>
           </div>
           <div class="form-group">
             <label>Strategy</label>
@@ -2256,7 +2256,9 @@ function renderStrategyCards(data) {
     return;
   }
 
-  let html = '';
+  let html = '<div style="margin-bottom:12px;padding:12px 14px;border:1px solid rgba(245,158,11,.35);border-radius:8px;background:rgba(245,158,11,.08);color:var(--text)">'
+    + 'Parameters are now per-(symbol, strategy). This screen edits the legacy global fallback and will write through to all instances for compatibility.'
+    + '</div>';
   data.forEach(s => {
     const effectiveBreakeven = getNormalizedBreakeven(s.effectiveBreakeven);
     const overrideActive = Boolean(s.tradeManagement && s.tradeManagement.breakevenOverride);
@@ -2425,9 +2427,14 @@ async function saveStrategyBreakevenOverride(strategyId) {
 
 async function loadBacktestParams() {
   const selectedStrategy = document.getElementById('btStrategy').value;
+  const selectedSymbol = document.getElementById('btSymbol').value;
   if (selectedStrategy === 'ALL') {
     document.getElementById('btParams').innerHTML =
       '<div class="empty">Each strategy runs with its saved parameters. To tune parameters, pick a single strategy.</div>';
+    return;
+  }
+  if (!selectedSymbol) {
+    document.getElementById('btParams').innerHTML = '<div class="empty">Pick a symbol to load saved parameters</div>';
     return;
   }
   try {
@@ -2437,9 +2444,15 @@ async function loadBacktestParams() {
       document.getElementById('btParams').innerHTML = '<div class="empty">No strategy configuration found</div>';
       return;
     }
+    const instanceResponse = await api(
+      '/api/strategy-instances/' + encodeURIComponent(selectedStrategy) + '/' + encodeURIComponent(selectedSymbol)
+    );
+    if (!instanceResponse.success) {
+      throw new Error(instanceResponse.message || 'No strategy instance configuration found');
+    }
     renderParameterInputs(
       'btParams',
-      strategy.resolvedParameters || strategy.parameters || {},
+      (instanceResponse.data && instanceResponse.data.parameters) || {},
       strategy.parameterDefinitions || [],
       'btparam'
     );
@@ -3533,18 +3546,23 @@ function renderOptResult(data) {
 async function applyBestOptimizerParams() {
   if (!lastOptimizerResult || !lastOptimizerResult.bestResult) return;
   try {
-    await fetchStrategyConfigs(true);
-    const strategy = getStrategyConfigByName(lastOptimizerResult.strategy);
-    if (!strategy) throw new Error('Strategy config not found');
-    const r = await api('/api/strategies/' + strategy._id, 'PUT', {
+    const strategyName = lastOptimizerResult.strategy;
+    const symbol = lastOptimizerResult.symbol || document.getElementById('optSymbol').value;
+    const r = await api(
+      '/api/strategy-instances/' + encodeURIComponent(strategyName) + '/' + encodeURIComponent(symbol),
+      'PUT',
+      {
       parameters: lastOptimizerResult.bestResult.parameters,
-    });
+      }
+    );
     if (!r.success) throw new Error(r.message || 'Failed to apply parameters');
-    await fetchStrategyConfigs(true);
-    if (document.getElementById('btStrategy').value === lastOptimizerResult.strategy) {
-      loadBacktestParams();
+    if (
+      document.getElementById('btStrategy').value === strategyName
+      && document.getElementById('btSymbol').value === symbol
+    ) {
+      await loadBacktestParams();
     }
-    wsLog('success', 'Applied best optimizer parameters to ' + lastOptimizerResult.strategy);
+    wsLog('success', 'Applied best params to ' + strategyName + ' on ' + symbol);
   } catch (e) {
     alert(e.message);
   }

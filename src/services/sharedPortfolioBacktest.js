@@ -426,7 +426,7 @@ async function runSharedPortfolioBacktest({
   start,
   endExclusive,
   fetchCandles,
-  storedParametersByStrategy,
+  storedParametersByCombination,
   breakevenByStrategy,
   forcedTimeframe = null,
   maxConcurrentPositions = null,
@@ -512,8 +512,8 @@ async function runSharedPortfolioBacktest({
         candles: primary.candles,
         higherTfCandles: higher,
         lowerTfCandles: lower,
-        storedStrategyParameters: storedParametersByStrategy
-          ? storedParametersByStrategy.get(combo.strategy)
+        storedStrategyParameters: storedParametersByCombination
+          ? storedParametersByCombination.get(`${combo.symbol}:${combo.strategy}`)
           : null,
         breakevenConfig: breakevenByStrategy
           ? breakevenByStrategy.get(combo.strategy)

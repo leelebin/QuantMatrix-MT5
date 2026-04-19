@@ -1,6 +1,24 @@
 const { strategiesDb } = require('../config/db');
 const { DEFAULT_STRATEGY_SYMBOL_ASSIGNMENTS } = require('../config/defaultAssignments');
 
+function buildDefinitionPatch(existing, info) {
+  const patch = {};
+
+  if (existing.displayName !== info.name) {
+    patch.displayName = info.name;
+  }
+  if (existing.description !== info.description) {
+    patch.description = info.description;
+  }
+
+  const nextParameterDefinitions = info.parameterDefinitions || [];
+  if (JSON.stringify(existing.parameterDefinitions || []) !== JSON.stringify(nextParameterDefinitions)) {
+    patch.parameterDefinitions = nextParameterDefinitions;
+  }
+
+  return patch;
+}
+
 const Strategy = {
   async create(data) {
     const now = new Date();
@@ -51,9 +69,15 @@ const Strategy = {
           name: info.type,
           displayName: info.name,
           description: info.description,
+          parameterDefinitions: info.parameterDefinitions || [],
           symbols,
           enabled: true,
         });
+      } else {
+        const definitionPatch = buildDefinitionPatch(existing, info);
+        if (Object.keys(definitionPatch).length > 0) {
+          await this.update(existing._id, definitionPatch);
+        }
       }
     }
   },

@@ -2,10 +2,15 @@ jest.mock('../src/models/Strategy', () => ({
   findAll: jest.fn().mockResolvedValue([]),
 }));
 
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
+}));
+
 const MomentumStrategy = require('../src/strategies/MomentumStrategy');
 const BreakoutStrategy = require('../src/strategies/BreakoutStrategy');
 const strategyEngine = require('../src/services/strategyEngine');
 const Strategy = require('../src/models/Strategy');
+const { getStrategyInstance } = require('../src/services/strategyInstanceService');
 const { STRATEGY_TYPES } = require('../src/config/instruments');
 
 function makeMomentumCandles({ lastThreeBody = 1.2, baseBody = 0.4 } = {}) {
@@ -61,6 +66,11 @@ describe('market quality filters', () => {
     strategyEngine.lastEmittedSignals.clear();
     jest.restoreAllMocks();
     Strategy.findAll.mockResolvedValue([]);
+    getStrategyInstance.mockImplementation(async () => ({
+      parameters: {},
+      enabled: true,
+      source: 'instance',
+    }));
   });
 
   test('Momentum filters low-volatility regimes even when direction aligns', () => {

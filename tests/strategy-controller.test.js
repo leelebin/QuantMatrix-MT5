@@ -15,9 +15,15 @@ jest.mock('../src/models/RiskProfile', () => ({
   getActive: jest.fn().mockResolvedValue(null),
 }));
 
+jest.mock('../src/models/StrategyInstance', () => ({
+  upsert: jest.fn(),
+  findByStrategyName: jest.fn().mockResolvedValue([]),
+}));
+
 const strategyController = require('../src/controllers/strategyController');
 const Strategy = require('../src/models/Strategy');
 const RiskProfile = require('../src/models/RiskProfile');
+const StrategyInstance = require('../src/models/StrategyInstance');
 
 function createRes() {
   return {
@@ -37,6 +43,8 @@ function createRes() {
 describe('strategy controller breakeven support', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    StrategyInstance.findByStrategyName.mockResolvedValue([]);
+    StrategyInstance.upsert.mockResolvedValue({});
     RiskProfile.getActive.mockResolvedValue({
       _id: 'risk-1',
       name: 'Aggressive Default',

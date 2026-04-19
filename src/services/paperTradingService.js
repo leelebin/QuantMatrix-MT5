@@ -20,6 +20,7 @@ const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
 const auditService = require('./auditService');
+const { getStrategyInstance } = require('./strategyInstanceService');
 
 class PaperTradingService {
   constructor() {
@@ -197,13 +198,21 @@ class PaperTradingService {
 
     // Get enabled strategies/symbols
     const strategies = await Strategy.findAll();
-    const activeAssignments = strategies.reduce((total, strategy) => {
-      if (!strategy.enabled || !Array.isArray(strategy.symbols)) {
-        return total;
+    let activeAssignments = 0;
+    for (const strategy of strategies) {
+      if (!Array.isArray(strategy.symbols)) {
+        continue;
       }
 
-      return total + [...new Set(strategy.symbols)].length;
-    }, 0);
+      const uniqueSymbols = [...new Set(strategy.symbols)];
+      for (const symbol of uniqueSymbols) {
+        const strategyInstance = await getStrategyInstance(symbol, strategy.name);
+        if (strategyInstance.enabled === false) {
+          continue;
+        }
+        activeAssignments += 1;
+      }
+    }
 
     if (activeAssignments === 0) {
       console.log('[PaperTrading] No enabled strategy assignments to analyze');

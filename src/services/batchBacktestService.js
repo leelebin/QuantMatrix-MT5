@@ -7,6 +7,7 @@ const Strategy = require('../models/Strategy');
 const RiskProfile = require('../models/RiskProfile');
 const BatchBacktestJob = require('../models/BatchBacktestJob');
 const { getAllSymbols } = require('../config/instruments');
+const { getStrategyInstance } = require('./strategyInstanceService');
 const {
   FORCED_TIMEFRAME_OPTIONS,
   getStrategyExecutionConfig,
@@ -31,6 +32,10 @@ const {
 } = require('../utils/batchBacktestAnalysis');
 
 const RUN_MODELS = ['independent', 'shared_portfolio'];
+
+function buildCombinationKey(symbol, strategy) {
+  return `${symbol}:${strategy}`;
+}
 
 class BatchBacktestService {
   constructor() {
@@ -96,7 +101,7 @@ class BatchBacktestService {
     const strategyRecords = await Strategy.findAll();
     const eligibleScope = strategyScopeMode === 'all_strategies'
       ? this._buildAllStrategiesScope(strategyInfos)
-      : this._buildEligibleScope(strategyRecords);
+      : await this._buildEligibleScope(strategyRecords);
 
     if (eligibleScope.combinations.length === 0) {
       const error = new Error(
@@ -165,9 +170,6 @@ class BatchBacktestService {
       await Strategy.initDefaults(strategyInfos);
       const strategyRecords = await Strategy.findAll();
       const activeProfile = await RiskProfile.getActive();
-      const storedParametersByStrategy = new Map(
-        strategyRecords.map((strategy) => [strategy.name, strategy.parameters || {}])
-      );
       const effectiveBreakevenByStrategy = new Map(
         strategyRecords.map((strategy) => [
           strategy.name,
@@ -178,6 +180,7 @@ class BatchBacktestService {
       const start = new Date(job.period.start);
       const endExclusive = new Date(new Date(job.period.end).getTime() + 1);
       const combinations = this._buildCombinationsFromScope(job.scope || {});
+      const storedParametersByCombination = await this._buildStoredParametersByCombination(combinations);
       const jobTimeframeMode = job.timeframeMode || 'strategy_default';
       const jobForcedTimeframe = jobTimeframeMode === 'forced_timeframe' ? job.forcedTimeframe || null : null;
       const jobRunModel = job.runModel || 'independent';
@@ -190,7 +193,7 @@ class BatchBacktestService {
           start,
           endExclusive,
           candleCache,
-          storedParametersByStrategy,
+          storedParametersByCombination,
           effectiveBreakevenByStrategy,
           jobForcedTimeframe,
           hooks,
@@ -228,7 +231,9 @@ class BatchBacktestService {
             endExclusive,
             initialBalance: job.initialBalance,
             candleCache,
-            storedStrategyParameters: storedParametersByStrategy.get(combo.strategy) || {},
+            storedStrategyParameters: storedParametersByCombination.get(
+              buildCombinationKey(combo.symbol, combo.strategy)
+            ) || {},
             breakevenConfig: effectiveBreakevenByStrategy.get(combo.strategy) || breakevenService.getDefaultBreakevenConfig(),
             forcedTimeframe: jobForcedTimeframe,
           });
@@ -323,7 +328,7 @@ class BatchBacktestService {
     start,
     endExclusive,
     candleCache,
-    storedParametersByStrategy,
+    storedParametersByCombination,
     effectiveBreakevenByStrategy,
     jobForcedTimeframe,
     hooks,
@@ -354,7 +359,7 @@ class BatchBacktestService {
       start,
       endExclusive,
       fetchCandles,
-      storedParametersByStrategy,
+      storedParametersByCombination,
       breakevenByStrategy: effectiveBreakevenByStrategy,
       forcedTimeframe: jobForcedTimeframe,
       onProgress: async (update) => {
@@ -553,7 +558,7 @@ class BatchBacktestService {
     return combinations;
   }
 
-  _buildEligibleScope(strategyRecords = []) {
+  async _buildEligibleScope(strategyRecords = []) {
     const validSymbols = getAllSymbols();
     const validSymbolSet = new Set(validSymbols);
     const assignmentsBySymbol = new Map();
@@ -561,12 +566,21 @@ class BatchBacktestService {
     const seenStrategies = new Set();
 
     for (const strategyRecord of strategyRecords) {
-      if (!strategyRecord?.enabled || !Array.isArray(strategyRecord.symbols)) {
+      if (!Array.isArray(strategyRecord.symbols)) {
         continue;
       }
 
-      const eligibleSymbols = [...new Set(strategyRecord.symbols)]
+      const eligibleSymbols = [];
+      const symbols = [...new Set(strategyRecord.symbols)]
         .filter((symbol) => validSymbolSet.has(symbol));
+
+      for (const symbol of symbols) {
+        const strategyInstance = await getStrategyInstance(symbol, strategyRecord.name);
+        if (strategyInstance.enabled === false) {
+          continue;
+        }
+        eligibleSymbols.push(symbol);
+      }
 
       if (eligibleSymbols.length === 0) {
         continue;
@@ -667,6 +681,20 @@ class BatchBacktestService {
     }
 
     return this._buildCombinations(scope.symbols || [], scope.strategies || []);
+  }
+
+  async _buildStoredParametersByCombination(combinations = []) {
+    const storedParameters = new Map();
+
+    for (const combo of combinations) {
+      const strategyInstance = await getStrategyInstance(combo.symbol, combo.strategy);
+      storedParameters.set(
+        buildCombinationKey(combo.symbol, combo.strategy),
+        strategyInstance.parameters || {}
+      );
+    }
+
+    return storedParameters;
   }
 
   _createProgress(total) {

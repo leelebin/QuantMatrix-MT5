@@ -23,6 +23,10 @@ jest.mock('../src/models/RiskProfile', () => ({
   getActive: jest.fn(),
 }));
 
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
+}));
+
 jest.mock('../src/services/mt5Service', () => ({
   isConnected: jest.fn(),
   connect: jest.fn(),
@@ -39,6 +43,7 @@ const strategyEngine = require('../src/services/strategyEngine');
 const mt5Service = require('../src/services/mt5Service');
 const RiskProfile = require('../src/models/RiskProfile');
 const Strategy = require('../src/models/Strategy');
+const { getStrategyInstance } = require('../src/services/strategyInstanceService');
 
 function createRes() {
   return {
@@ -85,6 +90,11 @@ describe('backtest controller', () => {
       name: 'TrendFollowing',
       parameters: { ema_fast: 25, ema_slow: 60 },
     });
+    getStrategyInstance.mockImplementation(async (symbol, strategyName) => ({
+      parameters: { seed: `${strategyName}:${symbol}` },
+      enabled: true,
+      source: 'instance',
+    }));
     backtestEngine.run.mockResolvedValue({
       summary: { totalTrades: 1, winRate: 0.5, profitFactor: 1.2 },
     });
@@ -147,7 +157,7 @@ describe('backtest controller', () => {
       timeframe: '1h',
       tradeStartTime: '2026-04-01T00:00:00.000Z',
       tradeEndTime: '2026-04-05T13:00:00.000Z',
-      storedStrategyParameters: { ema_fast: 25, ema_slow: 60 },
+      storedStrategyParameters: { seed: 'TrendFollowing:EURUSD' },
       strategyParams: { ema_fast: 30 },
       breakevenConfig: expect.objectContaining({
         enabled: true,
@@ -218,13 +228,13 @@ describe('backtest controller', () => {
       expect(backtestEngine.run).toHaveBeenCalledTimes(2);
       expect(backtestEngine.run).toHaveBeenNthCalledWith(1, expect.objectContaining({
         strategyType: 'TrendFollowing',
-        storedStrategyParameters: { seed: 'TrendFollowing' },
+        storedStrategyParameters: { seed: 'TrendFollowing:EURUSD' },
         strategyParams: null,
         initialBalance: 5000,
       }));
       expect(backtestEngine.run).toHaveBeenNthCalledWith(2, expect.objectContaining({
         strategyType: 'MeanReversion',
-        storedStrategyParameters: { seed: 'MeanReversion' },
+        storedStrategyParameters: { seed: 'MeanReversion:EURUSD' },
         strategyParams: null,
         initialBalance: 5000,
       }));

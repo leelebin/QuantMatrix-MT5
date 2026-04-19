@@ -18,6 +18,7 @@ const MomentumStrategy = require('../strategies/MomentumStrategy');
 const BreakoutStrategy = require('../strategies/BreakoutStrategy');
 const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy');
 const auditService = require('./auditService');
+const { getStrategyInstance } = require('./strategyInstanceService');
 
 class StrategyEngine {
   constructor() {
@@ -89,7 +90,7 @@ class StrategyEngine {
     const seen = new Set();
     const tasks = [];
     for (const strategyRecord of strategyRecords) {
-      if (!strategyRecord.enabled || !Array.isArray(strategyRecord.symbols)) {
+      if (!Array.isArray(strategyRecord.symbols)) {
         continue;
       }
 
@@ -243,15 +244,19 @@ class StrategyEngine {
     const scope = options.scope || 'live';
     const symbolsToAnalyze = enabledSymbols || Object.keys(instruments);
     const strategyRecords = await Strategy.findAll();
-    const parametersByStrategy = new Map(
-      strategyRecords.map((strategy) => [strategy.name, strategy.parameters || {}])
-    );
     const analysisTasks = this._buildAnalysisTasks(strategyRecords, symbolsToAnalyze);
     const candleCache = new Map();
 
     for (const task of analysisTasks) {
       try {
         const { symbol, strategyType } = task;
+        const strategyInstance = await getStrategyInstance(symbol, strategyType);
+        if (strategyInstance.enabled === false) {
+          console.log(`[Engine] Skipping disabled strategy instance ${symbol}/${strategyType}`);
+          continue;
+        }
+
+        console.log(`[Engine] Using strategy parameters for ${symbol}/${strategyType} source='${strategyInstance.source}'`);
         const executionConfig = this._getExecutionConfig(symbol, strategyType);
         if (!executionConfig) continue;
 
@@ -288,14 +293,17 @@ class StrategyEngine {
           entryCandles = await fetchCachedCandles(executionConfig.entryTimeframe);
         }
 
-        const result = this.analyzeSymbol(
-          symbol,
-          strategyType,
-          candles,
-          higherTfCandles,
-          entryCandles,
-          parametersByStrategy.get(strategyType) || null
-        );
+        const result = {
+          ...this.analyzeSymbol(
+            symbol,
+            strategyType,
+            candles,
+            higherTfCandles,
+            entryCandles,
+            strategyInstance.parameters
+          ),
+          parameterSource: strategyInstance.source,
+        };
 
         this._auditAnalysisResult(result, { scope });
 

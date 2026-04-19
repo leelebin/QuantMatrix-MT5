@@ -9,15 +9,19 @@ const tradingRoutes = require('./routes/tradingRoutes');
 const positionRoutes = require('./routes/positionRoutes');
 const tradeRoutes = require('./routes/tradeRoutes');
 const strategyRoutes = require('./routes/strategyRoutes');
+const strategyInstanceRoutes = require('./routes/strategyInstanceRoutes');
 const backtestRoutes = require('./routes/backtestRoutes');
 const optimizerRoutes = require('./routes/optimizerRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const paperTradingRoutes = require('./routes/paperTradingRoutes');
 const riskSettingsRoutes = require('./routes/riskSettingsRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
+const Strategy = require('./models/Strategy');
+const StrategyInstance = require('./models/StrategyInstance');
 const websocketService = require('./services/websocketService');
 const notificationService = require('./services/notificationService');
 const fileLogger = require('./services/fileLogger');
+const strategyEngine = require('./services/strategyEngine');
 
 // Install persistent file logging (console.log/warn/error -> logs/system.log,
 // logs/error.log). Console output is preserved.
@@ -52,9 +56,6 @@ if (!process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET === 'your-
   process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(32).toString('hex');
   console.warn('[WARNING] Using default/generated JWT_REFRESH_SECRET. Please set a proper one in .env file.');
 }
-
-// Connect to database
-connectDB();
 
 // Initialize notification service
 notificationService.init();
@@ -102,6 +103,7 @@ app.use('/api/trading', tradingRoutes);
 app.use('/api/positions', positionRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/strategies', strategyRoutes);
+app.use('/api/strategy-instances', strategyInstanceRoutes);
 app.use('/api/backtest', backtestRoutes);
 app.use('/api/optimizer', optimizerRoutes);
 app.use('/api/notifications', notificationRoutes);
@@ -149,16 +151,9 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+let server = null;
 
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Dashboard: http://localhost:${PORT}`);
-
-  // Initialize WebSocket on the HTTP server
-  websocketService.init(server);
-});
-
-server.on('error', (err) => {
+function handleServerError(err) {
   if (err.code === 'EADDRINUSE') {
     console.error(`[Server] Port ${PORT} is already in use.`);
     console.error(`[Server] If QuantMatrix is already running, open http://localhost:${PORT} in your browser.`);
@@ -168,19 +163,61 @@ server.on('error', (err) => {
 
   console.error('[Server] Failed to start:', err.message);
   process.exit(1);
-});
+}
+
+async function startServer() {
+  if (server) {
+    return server;
+  }
+
+  try {
+    await connectDB();
+    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+    await StrategyInstance.migrateFromLegacy();
+
+    server = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Dashboard: http://localhost:${PORT}`);
+
+      // Initialize WebSocket on the HTTP server
+      websocketService.init(server);
+    });
+
+    server.on('error', handleServerError);
+    return server;
+  } catch (error) {
+    console.error('[Server] Startup failed:', error.message);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[Server] SIGTERM received, shutting down...');
   websocketService.shutdown();
+  if (!server) {
+    process.exit(0);
+    return;
+  }
   server.close(() => process.exit(0));
 });
 
 process.on('SIGINT', () => {
   console.log('[Server] SIGINT received, shutting down...');
   websocketService.shutdown();
+  if (!server) {
+    process.exit(0);
+    return;
+  }
   server.close(() => process.exit(0));
 });
 
-module.exports = { app, server };
+module.exports = {
+  app,
+  startServer,
+  get server() {
+    return server;
+  },
+};

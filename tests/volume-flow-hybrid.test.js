@@ -1,3 +1,7 @@
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
+}));
+
 const indicatorService = require('../src/services/indicatorService');
 const volumeFeatures = require('../src/services/volumeFeatureService');
 const VolumeFlowHybridStrategy = require('../src/strategies/VolumeFlowHybridStrategy');
@@ -6,6 +10,15 @@ const { getStrategyExecutionConfig } = require('../src/config/strategyExecution'
 const { getInstrument, STRATEGY_TYPES } = require('../src/config/instruments');
 const strategyEngine = require('../src/services/strategyEngine');
 const backtestEngine = require('../src/services/backtestEngine');
+const { getStrategyInstance } = require('../src/services/strategyInstanceService');
+
+beforeEach(() => {
+  getStrategyInstance.mockImplementation(async () => ({
+    parameters: {},
+    enabled: true,
+    source: 'instance',
+  }));
+});
 
 function buildBaselineCandles({
   symbol = 'XAUUSD',

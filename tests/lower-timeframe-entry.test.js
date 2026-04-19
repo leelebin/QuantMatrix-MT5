@@ -2,11 +2,16 @@ jest.mock('../src/models/Strategy', () => ({
   findAll: jest.fn().mockResolvedValue([]),
 }));
 
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
+}));
+
 const TrendFollowingStrategy = require('../src/strategies/TrendFollowingStrategy');
 const MultiTimeframeStrategy = require('../src/strategies/MultiTimeframeStrategy');
 const MeanReversionStrategy = require('../src/strategies/MeanReversionStrategy');
 const strategyEngine = require('../src/services/strategyEngine');
 const Strategy = require('../src/models/Strategy');
+const { getStrategyInstance } = require('../src/services/strategyInstanceService');
 const { STRATEGY_TYPES } = require('../src/config/instruments');
 
 function makeCandles(values, prefix = '2026-04-12T') {
@@ -25,6 +30,11 @@ describe('lower timeframe entry logic', () => {
     strategyEngine.lastEmittedSignals.clear();
     jest.restoreAllMocks();
     Strategy.findAll.mockResolvedValue([]);
+    getStrategyInstance.mockImplementation(async () => ({
+      parameters: {},
+      enabled: true,
+      source: 'instance',
+    }));
   });
 
   test('TrendFollowing waits for a 15m reclaim before triggering a BUY', () => {

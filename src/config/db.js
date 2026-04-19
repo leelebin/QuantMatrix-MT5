@@ -1,79 +1,62 @@
 const Datastore = require('nedb-promises');
 const path = require('path');
 const fs = require('fs');
+const isTestEnv = process.env.NODE_ENV === 'test';
 
 // Data directory for storing database files
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 
 // Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
+if (!isTestEnv && !fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+function createStore(filename) {
+  if (isTestEnv) {
+    return Datastore.create({
+      inMemoryOnly: true,
+      autoload: true,
+    });
+  }
+
+  return Datastore.create({
+    filename: path.join(DATA_DIR, filename),
+    autoload: true,
+  });
+}
+
 // Create database instances
-const usersDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'users.db'),
-  autoload: true,
-});
+const usersDb = createStore('users.db');
 
-const strategiesDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'strategies.db'),
-  autoload: true,
-});
+const strategiesDb = createStore('strategies.db');
 
-const tradesDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'trades.db'),
-  autoload: true,
-});
+const strategyInstancesDb = createStore('strategyInstances.db');
 
-const positionsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'positions.db'),
-  autoload: true,
-});
+const tradesDb = createStore('trades.db');
 
-const backtestsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'backtests.db'),
-  autoload: true,
-});
+const positionsDb = createStore('positions.db');
 
-const tradeLogDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'trade_log.db'),
-  autoload: true,
-});
+const backtestsDb = createStore('backtests.db');
 
-const paperPositionsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'paper_positions.db'),
-  autoload: true,
-});
+const tradeLogDb = createStore('trade_log.db');
 
-const riskStateDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'risk_state.db'),
-  autoload: true,
-});
+const paperPositionsDb = createStore('paper_positions.db');
 
-const riskProfilesDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'risk_profiles.db'),
-  autoload: true,
-});
+const riskStateDb = createStore('risk_state.db');
 
-const executionAuditDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'execution_audit.db'),
-  autoload: true,
-});
+const riskProfilesDb = createStore('risk_profiles.db');
 
-const batchBacktestJobsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'batch_backtest_jobs.db'),
-  autoload: true,
-});
+const executionAuditDb = createStore('execution_audit.db');
 
-const decisionAuditDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'decision_audit.db'),
-  autoload: true,
-});
+const batchBacktestJobsDb = createStore('batch_backtest_jobs.db');
+
+const decisionAuditDb = createStore('decision_audit.db');
 
 // Ensure indexes
 usersDb.ensureIndex({ fieldName: 'email', unique: true });
 strategiesDb.ensureIndex({ fieldName: 'name', unique: true });
+strategyInstancesDb.ensureIndex({ fieldName: 'strategyName' });
+strategyInstancesDb.ensureIndex({ fieldName: 'symbol' });
 tradesDb.ensureIndex({ fieldName: 'symbol' });
 tradesDb.ensureIndex({ fieldName: 'openedAt' });
 tradesDb.ensureIndex({ fieldName: 'closedAt' });
@@ -110,6 +93,7 @@ const connectDB = async () => {
   try {
     await usersDb.count({});
     await strategiesDb.count({});
+    await strategyInstancesDb.count({});
     await tradesDb.count({});
     await positionsDb.count({});
     await backtestsDb.count({});
@@ -131,6 +115,7 @@ const connectDB = async () => {
 module.exports = connectDB;
 module.exports.usersDb = usersDb;
 module.exports.strategiesDb = strategiesDb;
+module.exports.strategyInstancesDb = strategyInstancesDb;
 module.exports.tradesDb = tradesDb;
 module.exports.positionsDb = positionsDb;
 module.exports.backtestsDb = backtestsDb;

@@ -6,6 +6,7 @@ const websocketService = require('../services/websocketService');
 const breakevenService = require('../services/breakevenService');
 const Strategy = require('../models/Strategy');
 const RiskProfile = require('../models/RiskProfile');
+const { getStrategyInstance } = require('../services/strategyInstanceService');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const { getInstrument, getAllSymbols } = require('../config/instruments');
 const {
@@ -40,6 +41,7 @@ exports.runBacktest = async (req, res) => {
       });
     }
     const strategyConfig = await Strategy.findByName(strategyType);
+    const strategyInstance = await getStrategyInstance(symbol, strategyType);
     const activeProfile = await RiskProfile.getActive();
     const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyConfig);
 
@@ -125,7 +127,7 @@ exports.runBacktest = async (req, res) => {
       initialBalance: initialBalance || 10000,
       tradeStartTime: (effectiveStart || start).toISOString(),
       tradeEndTime: effectiveEnd.toISOString(),
-      storedStrategyParameters: strategyConfig?.parameters || null,
+      storedStrategyParameters: strategyInstance.parameters,
       strategyParams: strategyParams || null,
       breakevenConfig: effectiveBreakeven,
     });
@@ -135,7 +137,7 @@ exports.runBacktest = async (req, res) => {
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('[Backtest] Error:', err.message);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 };
 
@@ -192,6 +194,7 @@ exports.runAllStrategies = async (req, res) => {
         entry.timeframe = tf;
 
         const strategyConfig = await Strategy.findByName(strategyType);
+        const strategyInstance = await getStrategyInstance(symbol, strategyType);
         const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyConfig);
 
         const higherTimeframe = executionConfig.higherTimeframe || null;
@@ -234,7 +237,7 @@ exports.runAllStrategies = async (req, res) => {
           initialBalance: balance,
           tradeStartTime: (effectiveStart || start).toISOString(),
           tradeEndTime: effectiveEnd.toISOString(),
-          storedStrategyParameters: strategyConfig?.parameters || null,
+          storedStrategyParameters: strategyInstance.parameters,
           strategyParams: null,
           breakevenConfig: effectiveBreakeven,
         });

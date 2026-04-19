@@ -7,23 +7,31 @@ const indicatorService = require('../services/indicatorService');
 const websocketService = require('../services/websocketService');
 const Strategy = require('../models/Strategy');
 const ExecutionAudit = require('../models/ExecutionAudit');
+const { getStrategyInstance } = require('../services/strategyInstanceService');
 const { getAllSymbols, getInstrument, instruments, INSTRUMENT_CATEGORIES } = require('../config/instruments');
 const symbolResolver = require('../services/symbolResolver');
 
 let tradingLoopInterval = null;
 
-function getActiveAssignmentStats(strategies) {
+async function getActiveAssignmentStats(strategies) {
   const activeSymbols = new Set();
   let activeAssignments = 0;
 
   for (const strategy of strategies) {
-    if (!strategy.enabled || !Array.isArray(strategy.symbols)) {
+    if (!Array.isArray(strategy.symbols)) {
       continue;
     }
 
     const uniqueSymbols = [...new Set(strategy.symbols)];
-    activeAssignments += uniqueSymbols.length;
-    uniqueSymbols.forEach((symbol) => activeSymbols.add(symbol));
+    for (const symbol of uniqueSymbols) {
+      const strategyInstance = await getStrategyInstance(symbol, strategy.name);
+      if (strategyInstance.enabled === false) {
+        continue;
+      }
+
+      activeAssignments += 1;
+      activeSymbols.add(symbol);
+    }
   }
 
   return {
@@ -143,7 +151,7 @@ exports.startTrading = async (req, res) => {
       tradingLoopInterval = setInterval(async () => {
         try {
           const strategies = await Strategy.findAll();
-          const assignmentStats = getActiveAssignmentStats(strategies);
+          const assignmentStats = await getActiveAssignmentStats(strategies);
           if (assignmentStats.activeAssignments === 0) return;
 
           await strategyEngine.analyzeAll(
@@ -161,7 +169,7 @@ exports.startTrading = async (req, res) => {
     }
 
     const strategies = await Strategy.findAll();
-    const assignmentStats = getActiveAssignmentStats(strategies);
+    const assignmentStats = await getActiveAssignmentStats(strategies);
 
     res.json({
       success: true,
@@ -216,7 +224,7 @@ exports.getStatus = async (req, res) => {
     let account = null;
     await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
     const strategies = await Strategy.findAll();
-    const assignmentStats = getActiveAssignmentStats(strategies);
+    const assignmentStats = await getActiveAssignmentStats(strategies);
     if (connected) {
       const accountInfo = await mt5Service.getAccountInfo();
       riskStatus = await riskManager.getRiskStatus(accountInfo);

@@ -12,8 +12,14 @@ jest.mock('../src/models/RiskProfile', () => ({
   getActive: jest.fn().mockResolvedValue(null),
 }));
 
+jest.mock('../src/models/StrategyInstance', () => ({
+  upsert: jest.fn(),
+  findByStrategyName: jest.fn().mockResolvedValue([]),
+}));
+
 const strategyController = require('../src/controllers/strategyController');
 const Strategy = require('../src/models/Strategy');
+const StrategyInstance = require('../src/models/StrategyInstance');
 
 function createRes() {
   return {
@@ -33,6 +39,8 @@ function createRes() {
 describe('strategy assignments controller', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    StrategyInstance.findByStrategyName.mockResolvedValue([]);
+    StrategyInstance.upsert.mockResolvedValue({});
   });
 
   test('getAssignments returns a full symbol-strategy matrix', async () => {

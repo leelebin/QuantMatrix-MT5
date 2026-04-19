@@ -5,6 +5,7 @@ const notificationService = require('../services/notificationService');
 const Strategy = require('../models/Strategy');
 const RiskProfile = require('../models/RiskProfile');
 const breakevenService = require('../services/breakevenService');
+const { getStrategyInstance } = require('../services/strategyInstanceService');
 const { getInstrument, getAllSymbols } = require('../config/instruments');
 const {
   DEFAULT_WARMUP_BARS,
@@ -42,6 +43,7 @@ exports.runOptimizer = async (req, res) => {
     if (optimizerService.running) {
       return res.status(409).json({ success: false, message: 'Optimizer is already running' });
     }
+    const strategyInstance = await getStrategyInstance(symbol, strategyType);
 
     // Connect to MT5 if needed
     if (!mt5Service.isConnected()) {
@@ -122,7 +124,7 @@ exports.runOptimizer = async (req, res) => {
         optimizeFor: optimizeFor || 'profitFactor',
         tradeStartTime: start.toISOString(),
         tradeEndTime: rangeEnd.toISOString(),
-        storedStrategyParameters: strategyConfig?.parameters || null,
+        storedStrategyParameters: strategyInstance.parameters,
         breakevenConfig: effectiveBreakeven,
         onProgress: (progress) => {
           websocketService.broadcast('status', 'optimizer_progress', progress);
@@ -136,7 +138,8 @@ exports.runOptimizer = async (req, res) => {
       websocketService.broadcast('status', 'optimizer_error', { error: err.message });
     }
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({ success: false, message: err.message });
   }
 };
 

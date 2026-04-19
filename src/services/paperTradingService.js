@@ -245,6 +245,8 @@ class PaperTradingService {
   async _executePaperTrade(signal) {
     if (signal.signal === 'NONE') return;
 
+    let preflight = null;
+
     try {
       const accountInfo = await mt5Service.getAccountInfo();
       mt5Service.ensurePaperTradingAccount(accountInfo);
@@ -286,7 +288,7 @@ class PaperTradingService {
       // Execute on MT5 demo account
       const brokerComment = buildBrokerComment(signal, 'PT');
       const tradeComment = buildTradeComment(signal, brokerComment);
-      const preflight = await mt5Service.preflightOrder(
+      preflight = await mt5Service.preflightOrder(
         signal.symbol,
         signal.signal,
         riskCheck.lotSize,
@@ -302,7 +304,12 @@ class PaperTradingService {
           codeName: preflight.retcodeName,
           volume: riskCheck.lotSize,
           accountInfo,
-          details: preflight,
+          details: {
+            ...preflight,
+            preflightAllowed: preflight.allowed,
+            preflightRetcode: preflight.retcode,
+            preflightRetcodeName: preflight.retcodeName,
+          },
         });
         auditService.preflightRejected({
           symbol: signal.symbol,
@@ -412,6 +419,10 @@ class PaperTradingService {
           mt5PositionId,
           mt5DealId,
           orderId: result.orderId || null,
+          preflightAllowed: preflight.allowed,
+          preflightRetcode: preflight.retcode,
+          preflightRetcodeName: preflight.retcodeName,
+          sendRetcode: result.retcode ?? null,
         },
       });
 
@@ -436,7 +447,14 @@ class PaperTradingService {
           code: auditCode,
           codeName: auditCodeName,
           accountInfo,
-          details: err.details || { method: err.method || null },
+          details: {
+            ...(err.details || { method: err.method || null }),
+            preflightAllowed: preflight?.allowed ?? null,
+            preflightRetcode: preflight?.retcode ?? null,
+            preflightRetcodeName: preflight?.retcodeName ?? null,
+            sendRetcode: err.details?.retcode ?? err.code ?? null,
+            sendRetcodeName: err.details?.retcodeName ?? err.codeName ?? null,
+          },
         });
         auditService.orderFailed({
           symbol: signal.symbol,
@@ -447,7 +465,14 @@ class PaperTradingService {
           mt5Retcode: typeof auditCode === 'number' ? auditCode : null,
           reasonCode: auditCodeName || `ORDER_FAILED:${auditStage}`,
           reasonText: err.message,
-          details: err.details || { method: err.method || null, stage: auditStage },
+          details: {
+            ...(err.details || { method: err.method || null, stage: auditStage }),
+            preflightAllowed: preflight?.allowed ?? null,
+            preflightRetcode: preflight?.retcode ?? null,
+            preflightRetcodeName: preflight?.retcodeName ?? null,
+            sendRetcode: err.details?.retcode ?? err.code ?? null,
+            sendRetcodeName: err.details?.retcodeName ?? err.codeName ?? null,
+          },
         });
         this._broadcastRejection(signal, err.message, {
           stage: auditStage,

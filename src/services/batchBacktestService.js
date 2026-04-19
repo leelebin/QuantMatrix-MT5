@@ -52,7 +52,7 @@ class BatchBacktestService {
     const { start, endExclusive } = clampDateRangeToNow(normalizedRange.start, normalizedRange.endExclusive);
     const rangeEnd = new Date(endExclusive.getTime() - 1);
 
-    const runModel = params.runModel || 'independent';
+    const runModel = params.runModel || 'shared_portfolio';
     if (!RUN_MODELS.includes(runModel)) {
       const error = new Error(
         `Unsupported runModel: ${runModel}. Expected one of: ${RUN_MODELS.join(', ')}.`
@@ -60,6 +60,8 @@ class BatchBacktestService {
       error.statusCode = 400;
       throw error;
     }
+
+    const ruinThreshold = Math.max(0, Number(params.ruinThreshold) || 0);
 
     const timeframeMode = params.timeframeMode || 'strategy_default';
     if (!['strategy_default', 'forced_timeframe'].includes(timeframeMode)) {
@@ -125,6 +127,7 @@ class BatchBacktestService {
         end: rangeEnd.toISOString(),
       },
       initialBalance: Number(params.initialBalance) || 10000,
+      ruinThreshold,
       strategyScopeMode,
       timeframeMode,
       forcedTimeframe,
@@ -357,6 +360,7 @@ class BatchBacktestService {
       storedParametersByStrategy,
       breakevenByStrategy: effectiveBreakevenByStrategy,
       forcedTimeframe: jobForcedTimeframe,
+      ruinThreshold: job.ruinThreshold,
       onProgress: async (update) => {
         if (update.phase === 'prepare') {
           progress.phase = 'prepare';
@@ -375,6 +379,14 @@ class BatchBacktestService {
           progress.trades = update.trades;
           progress.processedEvents = update.processedEvents;
           progress.totalEvents = update.totalEvents;
+        } else if (update.phase === 'bust') {
+          progress.phase = 'bust';
+          progress.percent = 50 + Math.round((update.percent || 0) * 0.5);
+          progress.balance = update.balance;
+          progress.openPositions = 0;
+          progress.trades = update.trades;
+          progress.processedEvents = update.processedEvents;
+          progress.totalEvents = update.totalEvents;
         }
 
         if (typeof hooks.onProgress === 'function') {
@@ -383,6 +395,7 @@ class BatchBacktestService {
             status: 'running',
             runModel: 'shared_portfolio',
             progress: { ...progress },
+            bust: update.bust || null,
           });
         }
       },
@@ -745,10 +758,11 @@ class BatchBacktestService {
           runModel: summary.portfolioResult.runModel,
           initialBalance: summary.portfolioResult.initialBalance,
           finalBalance: summary.portfolioResult.finalBalance,
-          summary: summary.portfolioResult.summary,
-          combinationsRequested: summary.portfolioResult.combinationsRequested,
-          combinationsUsed: (summary.portfolioResult.combinationsUsed || []).length,
-        };
+        summary: summary.portfolioResult.summary,
+        bust: summary.portfolioResult.bust || null,
+        combinationsRequested: summary.portfolioResult.combinationsRequested,
+        combinationsUsed: (summary.portfolioResult.combinationsUsed || []).length,
+      };
       }
       return {
         ...summary,

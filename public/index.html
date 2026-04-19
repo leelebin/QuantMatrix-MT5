@@ -581,6 +581,10 @@ tr:hover{background:var(--bg3)}
             <label>Initial Balance (USD)</label>
             <input type="number" id="btBatchBalance" value="10000">
           </div>
+          <div class="form-group" id="btBatchRuinThresholdGroup">
+            <label>Ruin Threshold (USD)</label>
+            <input type="number" id="btBatchRuinThreshold" value="0">
+          </div>
           <div class="form-group">
             <label>Strategy Scope</label>
             <select id="btBatchStrategyScopeMode">
@@ -594,12 +598,12 @@ tr:hover{background:var(--bg3)}
             <label>Run Model</label>
             <select id="btBatchRunModel" onchange="updateRunModelHint()">
               <option value="independent">Independent Sleeve Aggregation</option>
-              <option value="shared_portfolio">Shared Portfolio Simulation</option>
+              <option value="shared_portfolio" selected>Shared Portfolio Simulation</option>
             </select>
           </div>
         </div>
         <div class="batch-hint" id="btBatchRunModelHint" style="font-size:12px;color:var(--text2);margin:-4px 0 8px">
-          <strong>Independent Sleeve Aggregation</strong>: each combination trades its own copy of the initial balance; totals are aggregated after the fact (true sums, not averaged percentages).
+          <strong>Shared Portfolio Simulation</strong>: Recommended. One real account, chronological signals, capital compounds or erodes; halts if equity falls to the ruin threshold.
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -2545,6 +2549,10 @@ function switchBacktestMode(mode) {
   document.getElementById('btBatchWorkspace').style.display = backtestMode === 'batch' ? '' : 'none';
   document.getElementById('btModeSingleBtn').className = backtestMode === 'single' ? 'btn-primary btn-sm' : 'btn-outline btn-sm';
   document.getElementById('btModeBatchBtn').className = backtestMode === 'batch' ? 'btn-primary btn-sm' : 'btn-outline btn-sm';
+  if (backtestMode === 'batch') {
+    toggleForcedTimeframeVisibility();
+    updateRunModelHint();
+  }
 }
 
 function renderBacktestResult(data, resultElementId='btResult', canvasId='equityCanvas') {
@@ -2696,12 +2704,20 @@ function renderBatchProgress(progress) {
   box.style.display = '';
   fill.style.width = (progress.percent || 0) + '%';
   let label;
-  if (progress.runModel === 'shared_portfolio' || progress.phase === 'simulate' || progress.phase === 'prepare') {
-    const phaseLabel = progress.phase === 'simulate' ? 'simulating' : progress.phase === 'prepare' ? 'preparing data' : 'queued';
+  if (progress.runModel === 'shared_portfolio' || progress.phase === 'simulate' || progress.phase === 'prepare' || progress.phase === 'bust') {
+    const phaseLabel = progress.phase === 'simulate'
+      ? 'simulating'
+      : progress.phase === 'prepare'
+        ? 'preparing data'
+        : progress.phase === 'bust'
+          ? 'bust triggered'
+          : progress.phase === 'completed'
+            ? 'completed'
+          : 'queued';
     label = '[shared] ' + phaseLabel + ' (' + (progress.percent || 0) + '%)';
     if (progress.phase === 'prepare' && progress.currentSymbol && progress.currentStrategy) {
       label += ' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol;
-    } else if (progress.phase === 'simulate') {
+    } else if (progress.phase === 'simulate' || progress.phase === 'bust') {
       if (typeof progress.balance !== 'undefined') label += ' | balance $' + num(progress.balance);
       if (typeof progress.openPositions !== 'undefined') label += ' | open ' + progress.openPositions;
       if (typeof progress.trades !== 'undefined') label += ' | trades ' + progress.trades;
@@ -2746,11 +2762,12 @@ async function runBatchBacktest() {
   document.getElementById('btBatchReport').innerHTML = '<div class="empty">Waiting for report...</div>';
 
   const timeframeMode = document.getElementById('btBatchTimeframeMode').value;
-  const runModel = document.getElementById('btBatchRunModel').value || 'independent';
+  const runModel = document.getElementById('btBatchRunModel').value || 'shared_portfolio';
   const body = {
     startDate: document.getElementById('btBatchStartDate').value,
     endDate: document.getElementById('btBatchEndDate').value,
     initialBalance: parseInt(document.getElementById('btBatchBalance').value, 10) || 10000,
+    ruinThreshold: Number(document.getElementById('btBatchRuinThreshold').value) || 0,
     strategyScopeMode: document.getElementById('btBatchStrategyScopeMode').value,
     timeframeMode,
     runModel,
@@ -2983,14 +3000,15 @@ function renderBatchPortfolioSummary(job) {
 }
 
 function updateRunModelHint() {
-  const runModel = document.getElementById('btBatchRunModel').value || 'independent';
+  const runModel = document.getElementById('btBatchRunModel').value || 'shared_portfolio';
   const hint = document.getElementById('btBatchRunModelHint');
   if (!hint) return;
   if (runModel === 'shared_portfolio') {
-    hint.innerHTML = '<strong>Shared Portfolio Simulation</strong>: ONE initial balance, ONE equity curve, ONE drawdown. Signals from every combination are processed in chronological order; position sizing uses the CURRENT shared balance at signal time. Portfolio-level concurrency cap applies.';
+    hint.innerHTML = '<strong>Shared Portfolio Simulation</strong>: Recommended. One real account, chronological signals, capital compounds or erodes; halts if equity falls to the ruin threshold.';
   } else {
-    hint.innerHTML = '<strong>Independent Sleeve Aggregation</strong>: each combination trades its own copy of the initial balance; totals are aggregated after the fact (true sums, not averaged percentages).';
+    hint.innerHTML = '<strong>Independent Sleeve Aggregation</strong>: each combination trades its own copy of the initial balance; totals are aggregated after the fact (true sums, not averaged percentages). Each (symbol, strategy) runs as its own isolated account - NOT a realistic shared-account simulation.';
   }
+  applyRunModelVisibility(runModel);
 }
 
 function applyRunModelVisibility(runModel) {
@@ -2998,12 +3016,15 @@ function applyRunModelVisibility(runModel) {
   const sharedCard = document.getElementById('btBatchSharedCard');
   const portfolioTitle = document.getElementById('btBatchPortfolioTitle');
   const portfolioSubtitle = document.getElementById('btBatchPortfolioSubtitle');
+  const ruinThresholdGroup = document.getElementById('btBatchRuinThresholdGroup');
   if (runModel === 'shared_portfolio') {
     if (independentCard) independentCard.style.display = 'none';
     if (sharedCard) sharedCard.style.display = '';
+    if (ruinThresholdGroup) ruinThresholdGroup.style.display = '';
   } else {
     if (independentCard) independentCard.style.display = '';
     if (sharedCard) sharedCard.style.display = 'none';
+    if (ruinThresholdGroup) ruinThresholdGroup.style.display = 'none';
     if (portfolioTitle) portfolioTitle.textContent = 'Portfolio Summary — Independent Sleeve Aggregation';
     if (portfolioSubtitle) portfolioSubtitle.textContent = 'True aggregate math across all scored strategy runs (not averaged percentages). Each sleeve starts with its own copy of the initial balance.';
   }
@@ -3020,6 +3041,7 @@ function renderSharedPortfolioSummary(job) {
     return;
   }
   const s = portfolioResult.summary;
+  const bust = portfolioResult.bust || null;
   const rejected = portfolioResult.rejectedSignals || { noCapacity: 0, zeroSize: 0 };
   const combosUsed = typeof portfolioResult.combinationsUsed === 'number'
     ? portfolioResult.combinationsUsed
@@ -3049,6 +3071,17 @@ function renderSharedPortfolioSummary(job) {
   grid += '</div>';
 
   grid += '<div class="portfolio-note"><strong>Shared Portfolio Simulation</strong>: these numbers describe a real chronological simulation against ONE account — position sizing always uses the current shared balance, not a per-sleeve copy.</div>';
+
+  if (bust && bust.triggered === true) {
+    grid += '<div style="margin-top:12px;font-weight:600">Account bust</div>';
+    grid += '<div class="portfolio-grid" style="margin-top:8px">';
+    grid += portfolioCell('Bust Time', fmtTime(bust.time), 'neg');
+    grid += portfolioCell('Realized Balance', '$' + num(bust.balance), bust.balance > 0 ? '' : 'neg');
+    grid += portfolioCell('Equity At Bust', '$' + num(bust.equityAtBust), bust.equityAtBust > 0 ? '' : 'neg');
+    grid += portfolioCell('Forced Closures', num(bust.forcedCloseCount || 0), bust.forcedCloseCount > 0 ? 'neg' : '');
+    grid += portfolioCell('Skipped Events', num(bust.remainingEventsSkipped || 0), bust.remainingEventsSkipped > 0 ? 'neg' : '');
+    grid += '</div>';
+  }
 
   summaryEl.innerHTML = grid;
 

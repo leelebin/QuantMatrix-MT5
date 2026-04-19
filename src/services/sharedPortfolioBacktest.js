@@ -154,6 +154,10 @@ function markToMarketEquity(state) {
   return eq;
 }
 
+function isEquityBust(state, ruinThreshold) {
+  return markToMarketEquity(state) <= ruinThreshold;
+}
+
 function recordEquityPoint(state, time, equity) {
   state.equityCurve.push({ time, equity: round2(equity) });
   if (equity > state.peakEquity) state.peakEquity = equity;
@@ -180,6 +184,35 @@ function closePositionForCombo(state, comboIdx, exitPrice, reason, exitTime) {
   s.openPosition = null;
   if (state.balance > state.peakBalance) state.peakBalance = state.balance;
   return trade;
+}
+
+function triggerBustAndHalt(state, ruinThreshold, currentCandleTime, eventIndex, totalEvents) {
+  const equityAtBust = round2(markToMarketEquity(state));
+  let forcedCloseCount = 0;
+
+  Array.from(state.openPositionComboIdx).forEach((comboIdx) => {
+    const s = state.combos[comboIdx];
+    const latest = state.latestCandleBySymbol[s.combo.symbol];
+    if (!s.openPosition || !latest) return;
+
+    const exitPrice = s.openPosition.type === 'BUY'
+      ? latest.close - s.spread / 2
+      : latest.close + s.spread / 2;
+    const trade = closePositionForCombo(state, comboIdx, exitPrice, 'BUST', currentCandleTime);
+    if (trade) forcedCloseCount += 1;
+  });
+
+  state.bust = {
+    triggered: true,
+    time: currentCandleTime,
+    balance: round2(state.balance),
+    equityAtBust,
+    forcedCloseCount,
+    remainingEventsSkipped: Math.max(0, totalEvents - (eventIndex + 1)),
+    reason: 'RUIN_EQUITY',
+  };
+
+  recordEquityPoint(state, currentCandleTime, state.balance);
 }
 
 function processEvent(state, comboIdx, barIdx) {
@@ -423,6 +456,7 @@ function buildSummary(state, initialBalance) {
 async function runSharedPortfolioBacktest({
   combinations,
   initialBalance,
+  ruinThreshold = 0,
   start,
   endExclusive,
   fetchCandles,
@@ -440,6 +474,7 @@ async function runSharedPortfolioBacktest({
   }
 
   const safeInitialBalance = Number(initialBalance) || 10000;
+  const safeRuinThreshold = Math.max(0, Number(ruinThreshold) || 0);
   const tradeStartMs = start ? toTimeMs(start) : null;
 
   const state = {
@@ -454,6 +489,15 @@ async function runSharedPortfolioBacktest({
     rejectedSignals: { noCapacity: 0, zeroSize: 0 },
     errors: [],
     combos: [],
+    bust: {
+      triggered: false,
+      time: null,
+      balance: null,
+      equityAtBust: null,
+      forcedCloseCount: 0,
+      remainingEventsSkipped: 0,
+      reason: null,
+    },
     maxConcurrentPositions: Number(maxConcurrentPositions)
       || Math.min(combinations.length, DEFAULT_MAX_CONCURRENT_POSITIONS),
   };
@@ -576,6 +620,23 @@ async function runSharedPortfolioBacktest({
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
     processEvent(state, ev.comboIdx, ev.barIdx);
+    if (isEquityBust(state, safeRuinThreshold)) {
+      const currentCandleTime = state.combos[ev.comboIdx]?.candles?.[ev.barIdx]?.time || null;
+      triggerBustAndHalt(state, safeRuinThreshold, currentCandleTime, i, events.length);
+      if (typeof onProgress === 'function') {
+        onProgress({
+          phase: 'bust',
+          processedEvents: i + 1,
+          totalEvents: events.length,
+          percent: Math.round(((i + 1) / events.length) * 100),
+          balance: state.bust.balance,
+          openPositions: 0,
+          trades: state.trades.length,
+          bust: state.bust,
+        });
+      }
+      break;
+    }
     if (typeof onProgress === 'function' && i % progressEvery === 0) {
       onProgress({
         phase: 'simulate',
@@ -589,18 +650,20 @@ async function runSharedPortfolioBacktest({
     }
   }
 
-  // Close any remaining open positions at their combo's last candle
-  state.openPositionComboIdx.forEach((cIdx) => {
-    const s = state.combos[cIdx];
-    const lastCandle = s.candles[s.candles.length - 1];
-    if (!lastCandle || !s.openPosition) return;
-    const exitPrice = s.openPosition.type === 'BUY'
-      ? lastCandle.close - s.spread / 2
-      : lastCandle.close + s.spread / 2;
-    closePositionForCombo(state, cIdx, exitPrice, 'END_OF_DATA', lastCandle.time);
-  });
-  if (state.openPositionComboIdx.size > 0) state.openPositionComboIdx.clear();
-  recordEquityPoint(state, state.equityCurve[state.equityCurve.length - 1].time, state.balance);
+  if (!state.bust.triggered) {
+    // Close any remaining open positions at their combo's last candle
+    state.openPositionComboIdx.forEach((cIdx) => {
+      const s = state.combos[cIdx];
+      const lastCandle = s.candles[s.candles.length - 1];
+      if (!lastCandle || !s.openPosition) return;
+      const exitPrice = s.openPosition.type === 'BUY'
+        ? lastCandle.close - s.spread / 2
+        : lastCandle.close + s.spread / 2;
+      closePositionForCombo(state, cIdx, exitPrice, 'END_OF_DATA', lastCandle.time);
+    });
+    if (state.openPositionComboIdx.size > 0) state.openPositionComboIdx.clear();
+    recordEquityPoint(state, state.equityCurve[state.equityCurve.length - 1].time, state.balance);
+  }
 
   const summary = buildSummary(state, safeInitialBalance);
   const contributions = buildContributions(state.trades);
@@ -616,6 +679,7 @@ async function runSharedPortfolioBacktest({
     perStrategyContribution: contributions.perStrategy,
     perSymbolContribution: contributions.perSymbol,
     rejectedSignals: state.rejectedSignals,
+    bust: state.bust,
     skipped,
     errors: state.errors,
     combinationsUsed: readiedComboInfo,

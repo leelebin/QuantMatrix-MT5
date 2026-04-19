@@ -13,6 +13,10 @@ jest.mock('../src/services/strategyEngine', () => ({
   getStrategiesInfo: jest.fn(),
 }));
 
+jest.mock('../src/services/sharedPortfolioBacktest', () => ({
+  runSharedPortfolioBacktest: jest.fn(),
+}));
+
 jest.mock('../src/models/Strategy', () => ({
   initDefaults: jest.fn(),
   findAll: jest.fn(),
@@ -67,6 +71,7 @@ jest.mock('../src/config/strategyExecution', () => ({
 const backtestEngine = require('../src/services/backtestEngine');
 const mt5Service = require('../src/services/mt5Service');
 const strategyEngine = require('../src/services/strategyEngine');
+const { runSharedPortfolioBacktest } = require('../src/services/sharedPortfolioBacktest');
 const Strategy = require('../src/models/Strategy');
 const { getAllSymbols } = require('../src/config/instruments');
 const { getStrategyExecutionConfig } = require('../src/config/strategyExecution');
@@ -100,6 +105,54 @@ async function waitForJobCompletion(jobId, timeoutMs = 200) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error('Timed out waiting for batch job completion');
+}
+
+function createSharedPortfolioResult() {
+  return {
+    runModel: 'shared_portfolio',
+    initialBalance: 10000,
+    finalBalance: 10125,
+    summary: {
+      initialBalance: 10000,
+      finalBalance: 10125,
+      netProfitMoney: 125,
+      returnPercent: 1.25,
+      totalTrades: 3,
+      winningTrades: 2,
+      losingTrades: 1,
+      winRate: 0.6667,
+      lossRate: 0.3333,
+      grossProfitMoney: 175,
+      grossLossMoney: 50,
+      profitFactor: 3.5,
+      averageTradeMoney: 41.67,
+      maxDrawdownPercent: 1.1,
+      maxConsecutiveWins: 2,
+      maxConsecutiveLosses: 1,
+      peakBalance: 10125,
+      peakEquity: 10125,
+    },
+    trades: [],
+    equityCurve: [],
+    equityCurvePoints: 0,
+    perStrategyContribution: [],
+    perSymbolContribution: [],
+    rejectedSignals: { noCapacity: 0, zeroSize: 0 },
+    bust: {
+      triggered: false,
+      time: null,
+      balance: null,
+      equityAtBust: null,
+      forcedCloseCount: 0,
+      remainingEventsSkipped: 0,
+      reason: null,
+    },
+    skipped: [],
+    errors: [],
+    combinationsUsed: [{ symbol: 'EURUSD', strategy: 'TrendFollowing' }],
+    combinationsRequested: 1,
+    maxConcurrentPositions: 1,
+  };
 }
 
 describe('batch backtest service', () => {
@@ -147,6 +200,7 @@ describe('batch backtest service', () => {
       parameters: { testParam: 1 },
       parameterSource: { hasStoredParameters: true, hasRuntimeOverrides: false },
     }));
+    runSharedPortfolioBacktest.mockResolvedValue(createSharedPortfolioResult());
   });
 
   test('builds only enabled assigned combinations and reuses candle cache per symbol/timeframe', async () => {
@@ -155,6 +209,7 @@ describe('batch backtest service', () => {
       endDate: '2025-04-10',
       initialBalance: 10000,
       timeframeMode: 'strategy_default',
+      runModel: 'independent',
     });
 
     const completedJob = await waitForJobCompletion(job._id);
@@ -202,6 +257,7 @@ describe('batch backtest service', () => {
       endDate: '2025-04-10',
       initialBalance: 10000,
       timeframeMode: 'strategy_default',
+      runModel: 'independent',
     });
 
     const completedJob = await waitForJobCompletion(job._id);
@@ -242,6 +298,7 @@ describe('batch backtest service', () => {
       endDate: '2025-04-10',
       initialBalance: 10000,
       timeframeMode: 'strategy_default',
+      runModel: 'independent',
     });
 
     const completedJob = await waitForJobCompletion(job._id);
@@ -263,6 +320,25 @@ describe('batch backtest service', () => {
       maxDrawdownPercent: 2.4,
     });
     expect(childDetail).toEqual({ backtestId: 'child-123', equityCurve: [{ equity: 10000 }, { equity: 10520 }] });
+  });
+
+  test('defaults to shared_portfolio and persists ruinThreshold on the job', async () => {
+    const job = await batchBacktestService.startJob({
+      startDate: '2025-04-01',
+      endDate: '2025-04-10',
+      initialBalance: 10000,
+      timeframeMode: 'strategy_default',
+      ruinThreshold: 250,
+    });
+
+    const completedJob = await waitForJobCompletion(job._id);
+
+    expect(job.runModel).toBe('shared_portfolio');
+    expect(job.ruinThreshold).toBe(250);
+    expect(completedJob.status).toBe('completed');
+    expect(runSharedPortfolioBacktest).toHaveBeenCalledWith(expect.objectContaining({
+      ruinThreshold: 250,
+    }));
   });
 
   test('rejects batch jobs when no enabled assignments are available', async () => {

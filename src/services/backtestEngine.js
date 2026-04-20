@@ -7,6 +7,7 @@
 const indicatorService = require('./indicatorService');
 const breakevenService = require('./breakevenService');
 const { getInstrument } = require('../config/instruments');
+const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const { backtestsDb } = require('../config/db');
 const {
   resolveStrategyParameters,
@@ -16,6 +17,7 @@ const MeanReversionStrategy = require('../strategies/MeanReversionStrategy');
 const MultiTimeframeStrategy = require('../strategies/MultiTimeframeStrategy');
 const MomentumStrategy = require('../strategies/MomentumStrategy');
 const BreakoutStrategy = require('../strategies/BreakoutStrategy');
+const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy');
 
 const STRATEGY_MAP = {
   TrendFollowing: TrendFollowingStrategy,
@@ -23,6 +25,8 @@ const STRATEGY_MAP = {
   MultiTimeframe: MultiTimeframeStrategy,
   Momentum: MomentumStrategy,
   Breakout: BreakoutStrategy,
+  // Additive — backtesting support for the new volume hybrid strategy.
+  VolumeFlowHybrid: VolumeFlowHybridStrategy,
 };
 
 class BacktestEngine {
@@ -32,11 +36,21 @@ class BacktestEngine {
     return new StrategyClass();
   }
 
-  _buildTradingInstrument(instrument, resolvedParams) {
+  _buildTradingInstrument(instrument, resolvedParams, strategyType = null, executionConfigOverride = null) {
+    // Additive: layer the strategy's execution config (setup/higher/entry timeframes)
+    // on top of the instrument so per-strategy timeframes (e.g. VolumeFlowHybrid M5/M1/M15)
+    // are honoured by the strategy at backtest time without mutating the base instrument.
+    // When an override is supplied (e.g. batch forced-timeframe mode), we
+    // use it directly instead of the strategy's default execution config so
+    // the strategy sees cohesive primary/higher/entry timeframes.
+    const executionConfig = executionConfigOverride
+      || (strategyType ? getStrategyExecutionConfig(instrument.symbol, strategyType) : null);
+    const merged = executionConfig ? { ...instrument, ...executionConfig } : { ...instrument };
     return {
-      ...instrument,
+      ...merged,
       riskParams: {
         ...instrument.riskParams,
+        ...(executionConfig?.riskParams || {}),
         riskPercent: Number(resolvedParams.riskPercent ?? instrument.riskParams.riskPercent),
         slMultiplier: Number(resolvedParams.slMultiplier ?? instrument.riskParams.slMultiplier),
         tpMultiplier: Number(resolvedParams.tpMultiplier ?? instrument.riskParams.tpMultiplier),
@@ -118,6 +132,7 @@ class BacktestEngine {
       strategyParams = null,
       storedStrategyParameters = null,
       breakevenConfig = null,
+      executionConfigOverride = null,
     } = params;
 
     const instrument = getInstrument(symbol);
@@ -136,7 +151,7 @@ class BacktestEngine {
           baseConfig: breakevenService.DEFAULT_BREAKEVEN_CONFIG,
         })
       : breakevenService.getDefaultBreakevenConfig();
-    const tradingInstrument = this._buildTradingInstrument(instrument, resolvedParams);
+    const tradingInstrument = this._buildTradingInstrument(instrument, resolvedParams, strategyType, executionConfigOverride);
     const strategy = this._createStrategy(strategyType);
     const spread = (spreadPips || instrument.spread) * instrument.pipSize;
     const slippage = slippagePips * instrument.pipSize;
@@ -409,7 +424,8 @@ class BacktestEngine {
     if (trades.length === 0) {
       return {
         totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0,
-        profitFactor: 0, totalProfitPips: 0, totalLossPips: 0, netProfitPips: 0,
+        profitFactor: 0, grossProfitMoney: 0, grossLossMoney: 0,
+        totalProfitPips: 0, totalLossPips: 0, netProfitPips: 0,
         netProfitMoney: 0, returnPercent: 0, averageWinPips: 0, averageLossPips: 0,
         maxConsecutiveWins: 0, maxConsecutiveLosses: 0, maxDrawdownPercent: 0,
         sharpeRatio: 0, averageHoldingPeriodHours: 0,
@@ -472,6 +488,11 @@ class BacktestEngine {
       losingTrades: losers.length,
       winRate: parseFloat((winners.length / trades.length).toFixed(4)),
       profitFactor: totalLossMoney > 0 ? parseFloat((totalProfitMoney / totalLossMoney).toFixed(2)) : totalProfitMoney > 0 ? 999 : 0,
+      // grossProfitMoney/grossLossMoney are kept alongside profitFactor so
+      // portfolio-level aggregation can compute true PF across many runs
+      // without averaging each run's individual PF.
+      grossProfitMoney: parseFloat(totalProfitMoney.toFixed(2)),
+      grossLossMoney: parseFloat(totalLossMoney.toFixed(2)),
       totalProfitPips: parseFloat(totalProfitPips.toFixed(1)),
       totalLossPips: parseFloat(totalLossPips.toFixed(1)),
       netProfitPips: parseFloat((totalProfitPips + totalLossPips).toFixed(1)),

@@ -35,7 +35,7 @@ class WebSocketService {
       this.clients.set(ws, {
         id: clientId,
         ip: clientIp,
-        subscribedTopics: new Set(['positions', 'trades', 'signals', 'account', 'status', 'notifications']),
+        subscribedTopics: new Set(['positions', 'trades', 'signals', 'account', 'status', 'notifications', 'diagnostics']),
         lastPong: Date.now(),
         connectedAt: new Date().toISOString(),
       });
@@ -48,7 +48,7 @@ class WebSocketService {
         data: {
           clientId,
           message: 'Connected to QuantMatrix WebSocket',
-          topics: ['positions', 'trades', 'signals', 'account', 'status', 'notifications'],
+          topics: ['positions', 'trades', 'signals', 'account', 'status', 'notifications', 'diagnostics'],
         },
       });
 

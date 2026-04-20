@@ -125,6 +125,35 @@ const indicatorService = {
   },
 
   /**
+   * Resolve the best available volume scalar on a single candle. Prefers
+   * `real_volume`/`volume` when populated; falls back to `tickVolume`.
+   * Returns 0 when neither is available so downstream math stays safe.
+   *
+   * This helper is additive — it does not change any existing indicator
+   * calls. Strategies that care about volume (e.g. VolumeFlowHybrid) can
+   * opt into it; other strategies keep their current behaviour.
+   */
+  candleVolume(candle) {
+    if (!candle) return 0;
+    const real = Number(candle.volume ?? candle.real_volume);
+    if (Number.isFinite(real) && real > 0) return real;
+    const tick = Number(candle.tickVolume ?? candle.tick_volume);
+    if (Number.isFinite(tick) && tick > 0) return tick;
+    return 0;
+  },
+
+  /**
+   * Return the moving average of volume over the last `period` candles.
+   * Uses `candleVolume()` so real/tick volume fallback stays centralized.
+   */
+  averageVolume(candles, period = 20) {
+    if (!Array.isArray(candles) || candles.length < period) return null;
+    const slice = candles.slice(-period);
+    const sum = slice.reduce((acc, candle) => acc + this.candleVolume(candle), 0);
+    return sum / period;
+  },
+
+  /**
    * Get the latest value from an indicator array
    * @param {Array} values - Indicator values array
    * @param {number} offset - Offset from end (0 = latest)

@@ -50,6 +50,7 @@ function enrichStrategy(strategy, activeProfile = null) {
       storedParameters: strategy.parameters || null,
     }),
     effectiveBreakeven: breakevenService.resolveEffectiveBreakeven(activeProfile, strategy),
+    effectiveExitPlan: breakevenService.resolveEffectiveExitPlan(activeProfile, strategy, null),
   };
 }
 
@@ -211,6 +212,23 @@ exports.toggleStrategy = async (req, res) => {
       success: true,
       message: `Strategy ${strategy.enabled ? 'enabled' : 'disabled'}`,
       data: enrichStrategy(strategy, activeProfile),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Reset all strategy symbol assignments to defaults
+// @route   POST /api/strategies/assignments/reset
+exports.resetAssignments = async (req, res) => {
+  try {
+    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+    await Strategy.resetToDefaults();
+    const strategies = await Strategy.findAll();
+    res.json({
+      success: true,
+      message: 'Strategy symbol assignments reset to defaults',
+      data: buildAssignmentsPayload(strategies),
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

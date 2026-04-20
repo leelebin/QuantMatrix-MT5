@@ -14,8 +14,14 @@ const optimizerRoutes = require('./routes/optimizerRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const paperTradingRoutes = require('./routes/paperTradingRoutes');
 const riskSettingsRoutes = require('./routes/riskSettingsRoutes');
+const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const websocketService = require('./services/websocketService');
 const notificationService = require('./services/notificationService');
+const fileLogger = require('./services/fileLogger');
+
+// Install persistent file logging (console.log/warn/error -> logs/system.log,
+// logs/error.log). Console output is preserved.
+fileLogger.install();
 
 // Load env vars
 const path = require('path');
@@ -101,6 +107,7 @@ app.use('/api/optimizer', optimizerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/paper-trading', paperTradingRoutes);
 app.use('/api/risk-settings', riskSettingsRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
 
 // WebSocket status endpoint
 app.get('/api/ws/status', (req, res) => {

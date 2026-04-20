@@ -66,6 +66,11 @@ const batchBacktestJobsDb = Datastore.create({
   autoload: true,
 });
 
+const decisionAuditDb = Datastore.create({
+  filename: path.join(DATA_DIR, 'decision_audit.db'),
+  autoload: true,
+});
+
 // Ensure indexes
 usersDb.ensureIndex({ fieldName: 'email', unique: true });
 strategiesDb.ensureIndex({ fieldName: 'name', unique: true });
@@ -92,6 +97,14 @@ executionAuditDb.ensureIndex({ fieldName: 'createdAt' });
 batchBacktestJobsDb.ensureIndex({ fieldName: 'status' });
 batchBacktestJobsDb.ensureIndex({ fieldName: 'createdAt' });
 batchBacktestJobsDb.ensureIndex({ fieldName: 'completedAt' });
+decisionAuditDb.ensureIndex({ fieldName: 'symbol' });
+decisionAuditDb.ensureIndex({ fieldName: 'strategy' });
+decisionAuditDb.ensureIndex({ fieldName: 'stage' });
+decisionAuditDb.ensureIndex({ fieldName: 'status' });
+decisionAuditDb.ensureIndex({ fieldName: 'reasonCode' });
+decisionAuditDb.ensureIndex({ fieldName: 'module' });
+decisionAuditDb.ensureIndex({ fieldName: 'timestamp' });
+decisionAuditDb.ensureIndex({ fieldName: 'createdAt' });
 
 const connectDB = async () => {
   try {
@@ -106,6 +119,7 @@ const connectDB = async () => {
     await riskProfilesDb.count({});
     await executionAuditDb.count({});
     await batchBacktestJobsDb.count({});
+    await decisionAuditDb.count({});
     console.log('Database Connected: NeDB (local file storage)');
     console.log(`Data directory: ${DATA_DIR}`);
   } catch (error) {
@@ -126,3 +140,4 @@ module.exports.riskStateDb = riskStateDb;
 module.exports.riskProfilesDb = riskProfilesDb;
 module.exports.executionAuditDb = executionAuditDb;
 module.exports.batchBacktestJobsDb = batchBacktestJobsDb;
+module.exports.decisionAuditDb = decisionAuditDb;

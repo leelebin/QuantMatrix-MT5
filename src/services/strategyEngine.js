@@ -16,6 +16,8 @@ const MeanReversionStrategy = require('../strategies/MeanReversionStrategy');
 const MultiTimeframeStrategy = require('../strategies/MultiTimeframeStrategy');
 const MomentumStrategy = require('../strategies/MomentumStrategy');
 const BreakoutStrategy = require('../strategies/BreakoutStrategy');
+const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy');
+const auditService = require('./auditService');
 
 class StrategyEngine {
   constructor() {
@@ -34,6 +36,9 @@ class StrategyEngine {
     this.strategies[STRATEGY_TYPES.MULTI_TIMEFRAME] = new MultiTimeframeStrategy();
     this.strategies[STRATEGY_TYPES.MOMENTUM] = new MomentumStrategy();
     this.strategies[STRATEGY_TYPES.BREAKOUT] = new BreakoutStrategy();
+    // Additive: volume/order-flow hybrid strategy for metals + oil. Keeps
+    // the rest of the map intact so existing strategies continue working.
+    this.strategies[STRATEGY_TYPES.VOLUME_FLOW_HYBRID] = new VolumeFlowHybridStrategy();
   }
 
   _getExecutionConfig(symbol, strategyType) {
@@ -234,7 +239,8 @@ class StrategyEngine {
     return signalRecord;
   }
 
-  async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null) {
+  async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null, options = {}) {
+    const scope = options.scope || 'live';
     const symbolsToAnalyze = enabledSymbols || Object.keys(instruments);
     const strategyRecords = await Strategy.findAll();
     const parametersByStrategy = new Map(
@@ -260,6 +266,15 @@ class StrategyEngine {
         const candles = await fetchCachedCandles(executionConfig.timeframe);
         if (!candles || candles.length < 50) {
           console.log(`[Engine] Insufficient data for ${symbol}: ${candles ? candles.length : 0} candles`);
+          auditService.noSetup({
+            symbol,
+            strategy: strategyType,
+            module: 'strategyEngine',
+            scope,
+            signal: 'NONE',
+            reasonCode: 'INSUFFICIENT_CANDLES',
+            reasonText: `Only ${candles ? candles.length : 0} candles (need ≥50)`,
+          });
           continue;
         }
 
@@ -282,13 +297,83 @@ class StrategyEngine {
           parametersByStrategy.get(strategyType) || null
         );
 
+        this._auditAnalysisResult(result, { scope });
+
         if (result.signal !== 'NONE' && onSignalFn) {
           await onSignalFn(result);
         }
       } catch (err) {
-        console.error(`[Engine] Error analyzing ${symbol}:`, err.message);
+        console.error(`[Engine] Error analyzing ${task.symbol}:`, err.message);
+        auditService.noSetup({
+          symbol: task.symbol,
+          strategy: task.strategyType,
+          module: 'strategyEngine',
+          scope,
+          signal: 'NONE',
+          status: 'WARN',
+          reasonCode: 'ANALYSIS_ERROR',
+          reasonText: err.message,
+        });
       }
     }
+  }
+
+  _auditAnalysisResult(result, { scope = 'live' } = {}) {
+    if (!result || !result.symbol) return;
+
+    const base = {
+      symbol: result.symbol,
+      strategy: result.strategy,
+      module: 'strategyEngine',
+      scope,
+      signal: result.signal,
+      confidence: typeof result.confidence === 'number' ? result.confidence : null,
+      setupDirection: result.setupDirection || null,
+      setupActive: result.setupActive === true,
+      filterReason: result.filterReason || null,
+      triggerReason: result.triggerReason || null,
+      setupTimeframe: result.setupTimeframe || null,
+      entryTimeframe: result.entryTimeframe || null,
+      setupCandleTime: result.setupCandleTime || null,
+      entryCandleTime: result.entryCandleTime || null,
+      sl: typeof result.sl === 'number' ? result.sl : null,
+      tp: typeof result.tp === 'number' ? result.tp : null,
+      marketQualityScore:
+        typeof result.marketQualityScore === 'number' ? result.marketQualityScore : null,
+      marketQualityThreshold:
+        typeof result.marketQualityThreshold === 'number' ? result.marketQualityThreshold : null,
+      indicatorsSnapshot: result.indicatorsSnapshot || null,
+      reasonText: result.reason || '',
+      timestamp: result.timestamp || null,
+    };
+
+    const status = result.status || (result.signal !== 'NONE' ? 'TRIGGERED' : 'NO_SETUP');
+
+    if (status === 'DUPLICATE') {
+      auditService.duplicate({ ...base, reasonText: result.reason });
+      return;
+    }
+    if (status === 'TRIGGERED' || result.signal !== 'NONE') {
+      auditService.triggered(base);
+      return;
+    }
+    if (status === 'FILTERED' || base.filterReason) {
+      auditService.filtered({
+        ...base,
+        reasonCode: base.filterReason || 'FILTERED',
+        reasonText: base.filterReason || base.reasonText,
+      });
+      return;
+    }
+    if (base.setupActive) {
+      auditService.setupFound(base);
+      return;
+    }
+    auditService.noSetup({
+      ...base,
+      reasonCode: base.reasonText ? 'NO_SETUP' : 'NO_SETUP',
+      reasonText: base.reasonText || 'No setup on current candles',
+    });
   }
 
   getRecentSignals(symbol = null, limit = 50) {

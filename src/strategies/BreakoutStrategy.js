@@ -26,6 +26,80 @@ class BreakoutStrategy extends BaseStrategy {
     this.marketQualityMaxScore = 3;
   }
 
+  buildExitPlan(/* instrument, signal, indicators, context */) {
+    // Breakouts target 5x ATR TP — let winners run. Wider trail + partial TP1
+    // at 1x ATR to bank some profit before the trail engages.
+    return {
+      breakeven: {
+        enabled: true,
+        triggerAtrMultiple: 1.0,
+        includeSpreadCompensation: true,
+        extraBufferPips: 0,
+      },
+      trailing: {
+        enabled: true,
+        startAtrMultiple: 2.5,
+        distanceAtrMultiple: 1.5,
+        mode: 'chandelier',
+      },
+      partials: [
+        { atProfitAtr: 1.5, closeFraction: 0.4, label: 'breakout_tp1' },
+      ],
+      timeExit: null,
+      adaptiveEvaluator: 'Breakout',
+    };
+  }
+
+  /**
+   * Adaptive exit for breakouts.
+   *   ① ATR compression vs entry (<= 0.7x) — breakout is losing steam,
+   *      tighten trailing to protect profit.
+   *   ② Price snapped back through the structure level (tracked in
+   *      position.structureAnchor) — force aggressive trail.
+   */
+  evaluateExit(position, context = {}) {
+    const { indicators, candles } = context;
+    if (!indicators || !candles) return null;
+    const currentAtr = this.latest(indicators.atr);
+    const atrAtEntry = Number(position?.atrAtEntry);
+    const price = this.latestCandle(candles)?.close;
+    if (!currentAtr || !Number.isFinite(atrAtEntry) || atrAtEntry <= 0 || !Number.isFinite(price)) {
+      return null;
+    }
+
+    if (currentAtr <= atrAtEntry * 0.7) {
+      return {
+        trailing: {
+          enabled: true,
+          startAtrMultiple: 1.5,
+          distanceAtrMultiple: 1.0,
+          mode: 'atr',
+        },
+      };
+    }
+
+    const structureAnchor = Number(position?.structureAnchor);
+    if (Number.isFinite(structureAnchor) && structureAnchor > 0) {
+      const direction = position?.type;
+      const snappedBack = direction === 'BUY'
+        ? price < structureAnchor
+        : price > structureAnchor;
+      if (snappedBack) {
+        return {
+          breakeven: { triggerAtrMultiple: 0.5 },
+          trailing: {
+            enabled: true,
+            startAtrMultiple: 0.8,
+            distanceAtrMultiple: 0.6,
+            mode: 'atr',
+          },
+        };
+      }
+    }
+
+    return null;
+  }
+
   analyze(candles, indicators, instrument, context = {}) {
     const { rsi, atr } = indicators;
     const strategyParams = this.getStrategyParameters(context);
@@ -185,6 +259,9 @@ class BreakoutStrategy extends BaseStrategy {
         slopeAligned,
       },
       indicatorsSnapshot: snapshot,
+      exitPlan: this.buildExitPlan(instrument, direction, indicators, {
+        structureLevel,
+      }),
     };
   }
 

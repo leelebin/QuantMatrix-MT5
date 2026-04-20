@@ -9,6 +9,12 @@ const INSTRUMENT_CATEGORIES = {
   METALS: 'metals',
   INDICES: 'indices',
   ENERGY: 'energy',
+  // ─── Additive: crypto basket ─────────────────────────────────────────────
+  // Category for spot-style crypto CFDs (BTCUSD, ETHUSD, ...). Treated as
+  // its own risk bucket so the category correlation limit in riskManager
+  // does not mix crypto exposure with forex/metals. Existing categories are
+  // unchanged.
+  CRYPTO: 'crypto',
 };
 
 const STRATEGY_TYPES = {
@@ -17,6 +23,67 @@ const STRATEGY_TYPES = {
   MULTI_TIMEFRAME: 'MultiTimeframe',
   MOMENTUM: 'Momentum',
   BREAKOUT: 'Breakout',
+  // ─── Additive: volume / order-flow driven hybrid for metals + oil ───
+  // Added as a separate strategy type so it can be toggled independently
+  // of the existing strategies. Existing instrument strategyType mappings
+  // are unchanged; the default symbols for this strategy are tracked via
+  // VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS below.
+  VOLUME_FLOW_HYBRID: 'VolumeFlowHybrid',
+};
+
+/**
+ * Default symbol assignments for the additive VolumeFlowHybrid strategy.
+ * These are the symbols the strategy is registered to cover at startup
+ * (new enabled-by-default list). They are intentionally the metals + oil
+ * basket the strategy is tuned for. Indices are optional and opt-in —
+ * they can be enabled from the Strategies page.
+ */
+const VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS = ['XAUUSD', 'XAGUSD', 'XTIUSD', 'XBRUSD'];
+const VOLUME_FLOW_HYBRID_OPTIONAL_SYMBOLS = ['US30', 'NAS100', 'SPX500'];
+
+/**
+ * Default symbols for the crypto basket. These appear in the Strategies
+ * grid, backtest selectors, batch-backtest scope, and diagnostics filters
+ * automatically (all symbol lists are derived from `instruments` below).
+ *
+ * Conservative strategy assignment — mean reversion is avoided for crypto.
+ *   - BTCUSD / ETHUSD         → Breakout (strongest trending majors)
+ *   - SOLUSD / XRPUSD / DOGEUSD → Breakout (event/momentum driven)
+ *   - LTCUSD / BCHUSD / ADAUSD → Momentum (cleaner intraday swings)
+ */
+const CRYPTO_DEFAULT_SYMBOLS = [
+  'BTCUSD', 'ETHUSD', 'LTCUSD', 'XRPUSD',
+  'BCHUSD', 'SOLUSD', 'ADAUSD', 'DOGEUSD',
+];
+
+/**
+ * Broker-symbol alias resolution map.
+ *
+ * Keys are canonical, stable-for-UI names used everywhere in the app and
+ * database (strategies/positions/backtests). Values are ordered lists of
+ * possible broker-side names to try at MT5 connect time. The first name
+ * that MT5 returns a `symbol_info` for is cached as the resolved broker
+ * name for that canonical key. If nothing matches the symbol is marked
+ * unresolved and any live/paper call that would hit MT5 is blocked by the
+ * symbol resolver rather than reaching the bridge (see symbolResolver).
+ *
+ * How to override for a specific broker (recommended — do not edit this
+ * file): set environment variable QM_SYMBOL_ALIAS_BTCUSD to a comma-
+ * separated list, e.g.
+ *
+ *   QM_SYMBOL_ALIAS_BTCUSD=BTCUSD.a,BTCUSDT,BTCUSD
+ *
+ * The resolver prepends env-override candidates to the built-in list.
+ */
+const CRYPTO_SYMBOL_ALIASES = {
+  BTCUSD: ['BTCUSD', 'BTCUSDm', 'BTCUSD.a', 'BTCUSD.r', 'BTCUSDT', 'BTCUSD.', 'BTC/USD'],
+  ETHUSD: ['ETHUSD', 'ETHUSDm', 'ETHUSD.a', 'ETHUSD.r', 'ETHUSDT', 'ETHUSD.', 'ETH/USD'],
+  LTCUSD: ['LTCUSD', 'LTCUSDm', 'LTCUSD.a', 'LTCUSD.r', 'LTCUSDT', 'LTCUSD.', 'LTC/USD'],
+  XRPUSD: ['XRPUSD', 'XRPUSDm', 'XRPUSD.a', 'XRPUSD.r', 'XRPUSDT', 'XRPUSD.', 'XRP/USD'],
+  BCHUSD: ['BCHUSD', 'BCHUSDm', 'BCHUSD.a', 'BCHUSD.r', 'BCHUSDT', 'BCHUSD.', 'BCH/USD'],
+  SOLUSD: ['SOLUSD', 'SOLUSDm', 'SOLUSD.a', 'SOLUSD.r', 'SOLUSDT', 'SOLUSD.', 'SOL/USD'],
+  ADAUSD: ['ADAUSD', 'ADAUSDm', 'ADAUSD.a', 'ADAUSD.r', 'ADAUSDT', 'ADAUSD.', 'ADA/USD'],
+  DOGEUSD: ['DOGEUSD', 'DOGEUSDm', 'DOGEUSD.a', 'DOGEUSD.r', 'DOGEUSDT', 'DOGEUSD.', 'DOGE/USD'],
 };
 
 const instruments = {
@@ -274,6 +341,126 @@ const instruments = {
     timeframe: '1h',
     riskParams: { riskPercent: 0.01, slMultiplier: 2, tpMultiplier: 5 },
   },
+
+  // ─── Crypto (Breakout / Momentum) ──────────────────────────────────────
+  //
+  // All crypto instruments assume 1 standard lot = 1 unit of the base
+  // coin. Brokers vary (some use 100 BTC or 1000 coins per lot); if the
+  // user's broker differs, pipValue/contractSize should be overridden.
+  // Conservative defaults:
+  //   - riskPercent 0.008 (slightly below the forex 0.01 default)
+  //   - slMultiplier 2.5, tpMultiplier 4 (wider stops, asymmetric RR)
+  //   - spread in pips = ceil(typical broker spread / pipSize)
+  // timeframe 1h with a 15m entry trigger keeps crypto on the same cycle
+  // as forex majors so existing indicator buffers and loop cadence work
+  // unchanged. See src/config/strategyExecution.js for per-strategy TFs.
+  BTCUSD: {
+    symbol: 'BTCUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.BREAKOUT,
+    pipSize: 0.01,
+    pipValue: 0.01,     // $0.01 per 1-lot (1 BTC) per 1-pip (0.01 USD) move
+    contractSize: 1,    // 1 lot = 1 BTC (verify with broker)
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 5000,       // ~$50 in pips of 0.01
+    timeframe: '1h',
+    entryTimeframe: '15m',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
+  ETHUSD: {
+    symbol: 'ETHUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.BREAKOUT,
+    pipSize: 0.01,
+    pipValue: 0.01,
+    contractSize: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 300,        // ~$3
+    timeframe: '1h',
+    entryTimeframe: '15m',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
+  LTCUSD: {
+    symbol: 'LTCUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.MOMENTUM,
+    pipSize: 0.01,
+    pipValue: 0.01,
+    contractSize: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 50,         // ~$0.50
+    timeframe: '1h',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
+  XRPUSD: {
+    symbol: 'XRPUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.BREAKOUT,
+    pipSize: 0.00001,
+    pipValue: 0.00001,
+    contractSize: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 300,        // ~$0.003
+    timeframe: '1h',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
+  BCHUSD: {
+    symbol: 'BCHUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.MOMENTUM,
+    pipSize: 0.01,
+    pipValue: 0.01,
+    contractSize: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 150,        // ~$1.50
+    timeframe: '1h',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
+  SOLUSD: {
+    symbol: 'SOLUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.BREAKOUT,
+    pipSize: 0.01,
+    pipValue: 0.01,
+    contractSize: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 30,         // ~$0.30
+    timeframe: '1h',
+    entryTimeframe: '15m',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
+  ADAUSD: {
+    symbol: 'ADAUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.MOMENTUM,
+    pipSize: 0.00001,
+    pipValue: 0.00001,
+    contractSize: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 200,        // ~$0.002
+    timeframe: '1h',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
+  DOGEUSD: {
+    symbol: 'DOGEUSD',
+    category: INSTRUMENT_CATEGORIES.CRYPTO,
+    strategyType: STRATEGY_TYPES.BREAKOUT,
+    pipSize: 0.00001,
+    pipValue: 0.00001,
+    contractSize: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    spread: 200,        // ~$0.002
+    timeframe: '1h',
+    riskParams: { riskPercent: 0.008, slMultiplier: 2.5, tpMultiplier: 4 },
+  },
 };
 
 function getInstrumentsByCategory(category) {
@@ -281,6 +468,14 @@ function getInstrumentsByCategory(category) {
 }
 
 function getInstrumentsByStrategy(strategyType) {
+  // The VolumeFlowHybrid strategy is additive — it is not assigned via each
+  // instrument's primary `strategyType` field, so resolve it against the
+  // dedicated default list instead.
+  if (strategyType === STRATEGY_TYPES.VOLUME_FLOW_HYBRID) {
+    return VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS
+      .map((symbol) => instruments[symbol])
+      .filter(Boolean);
+  }
   return Object.values(instruments).filter((i) => i.strategyType === strategyType);
 }
 
@@ -296,6 +491,10 @@ module.exports = {
   instruments,
   INSTRUMENT_CATEGORIES,
   STRATEGY_TYPES,
+  VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS,
+  VOLUME_FLOW_HYBRID_OPTIONAL_SYMBOLS,
+  CRYPTO_DEFAULT_SYMBOLS,
+  CRYPTO_SYMBOL_ALIASES,
   getInstrumentsByCategory,
   getInstrumentsByStrategy,
   getInstrument,

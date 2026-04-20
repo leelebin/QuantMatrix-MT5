@@ -199,6 +199,117 @@ const STRATEGY_PARAMETER_REGISTRY = {
       optimize: { enabled: false },
     },
   },
+  VolumeFlowHybrid: {
+    // ─── Core volume-flow thresholds ───
+    rvol_continuation: {
+      label: 'RVOL Continuation (x avg)',
+      inputType: 'number',
+      defaultValue: 1.8,
+      optimize: { enabled: true, min: 1.4, max: 2.4, step: 0.2 },
+    },
+    rvol_reversal: {
+      label: 'RVOL Reversal (x avg)',
+      inputType: 'number',
+      defaultValue: 2.2,
+      optimize: { enabled: true, min: 1.8, max: 2.8, step: 0.2 },
+    },
+    volume_avg_period: {
+      label: 'Volume MA Period',
+      inputType: 'number',
+      defaultValue: 20,
+      optimize: { enabled: true, min: 10, max: 40, step: 10 },
+    },
+    breakout_lookback: {
+      label: 'Breakout Lookback Bars',
+      inputType: 'number',
+      defaultValue: 12,
+      optimize: { enabled: true, min: 8, max: 20, step: 2 },
+    },
+    body_atr_threshold: {
+      label: 'Body vs ATR (continuation)',
+      inputType: 'number',
+      defaultValue: 0.6,
+      optimize: { enabled: true, min: 0.3, max: 0.9, step: 0.1 },
+    },
+    wick_ratio_threshold: {
+      label: 'Wick/Body Ratio (reversal)',
+      inputType: 'number',
+      defaultValue: 1.8,
+      optimize: { enabled: true, min: 1.2, max: 2.6, step: 0.2 },
+    },
+    vwap_reclaim_tolerance_atr: {
+      label: 'VWAP Reclaim Tolerance (ATR)',
+      inputType: 'number',
+      defaultValue: 0.35,
+      optimize: { enabled: true, min: 0.15, max: 0.6, step: 0.05 },
+    },
+    cumulative_delta_smoothing: {
+      label: 'Cumulative Delta Smoothing',
+      inputType: 'number',
+      defaultValue: 8,
+      optimize: { enabled: false },
+    },
+    ema_fast: {
+      label: 'Fast Trend EMA',
+      inputType: 'number',
+      defaultValue: 20,
+      optimize: { enabled: false },
+    },
+    ema_slow: {
+      label: 'Slow Trend EMA',
+      inputType: 'number',
+      defaultValue: 50,
+      optimize: { enabled: false },
+    },
+    atr_period: {
+      label: 'ATR Period',
+      inputType: 'number',
+      defaultValue: 14,
+      optimize: { enabled: false },
+    },
+    slMultiplier: {
+      label: 'SL Multiplier (ATR)',
+      inputType: 'number',
+      defaultValue: 1.2,
+      optimize: { enabled: true, min: 0.8, max: 1.6, step: 0.1 },
+    },
+    tpMultiplier: {
+      label: 'TP Multiplier (ATR)',
+      inputType: 'number',
+      defaultValue: 2.0,
+      optimize: { enabled: true, min: 1.2, max: 2.4, step: 0.2 },
+    },
+    reversal_sl_atr: {
+      label: 'Reversal SL (ATR)',
+      inputType: 'number',
+      defaultValue: 1.0,
+      optimize: { enabled: true, min: 0.8, max: 1.3, step: 0.1 },
+    },
+    reversal_tp_atr: {
+      label: 'Reversal TP (ATR)',
+      inputType: 'number',
+      defaultValue: 1.5,
+      optimize: { enabled: true, min: 1.2, max: 1.8, step: 0.1 },
+    },
+    min_confidence: {
+      label: 'Min Confidence',
+      inputType: 'number',
+      defaultValue: 0.55,
+      optimize: { enabled: false },
+    },
+    riskPercent: {
+      label: 'Risk Percent',
+      inputType: 'number',
+      defaultValue: 0.0075,
+      optimize: { enabled: false },
+    },
+    small_account_profile: {
+      label: 'Small-Account Profile (0/1)',
+      inputType: 'number',
+      defaultValue: 0,
+      optimize: { enabled: false },
+    },
+  },
   MultiTimeframe: {
     ema_trend: {
       label: 'Trend EMA',

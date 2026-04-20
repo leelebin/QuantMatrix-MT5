@@ -26,6 +26,57 @@ class MomentumStrategy extends BaseStrategy {
     this.marketQualityMaxScore = 3;
   }
 
+  buildExitPlan(/* instrument, signal, indicators, context */) {
+    return {
+      breakeven: {
+        enabled: true,
+        triggerAtrMultiple: 0.8,
+        includeSpreadCompensation: true,
+        extraBufferPips: 0,
+      },
+      trailing: {
+        enabled: true,
+        startAtrMultiple: 1.5,
+        distanceAtrMultiple: 1.0,
+        mode: 'atr',
+      },
+      partials: [],
+      timeExit: null,
+      adaptiveEvaluator: 'Momentum',
+    };
+  }
+
+  /**
+   * Adaptive exit for momentum.
+   *   ① MACD histogram flipped against the position — momentum is dying.
+   *      Tighten BE and engage an aggressive trail so we exit gracefully.
+   */
+  evaluateExit(position, context = {}) {
+    const { indicators } = context;
+    if (!indicators) return null;
+
+    const currentMacd = this.latest(indicators.macd);
+    if (!currentMacd || typeof currentMacd.histogram !== 'number') return null;
+
+    const direction = position?.type;
+    const histAgainst = direction === 'BUY'
+      ? currentMacd.histogram <= 0
+      : currentMacd.histogram >= 0;
+    if (histAgainst) {
+      return {
+        breakeven: { triggerAtrMultiple: 0.4 },
+        trailing: {
+          enabled: true,
+          startAtrMultiple: 0.6,
+          distanceAtrMultiple: 0.6,
+          mode: 'atr',
+        },
+      };
+    }
+
+    return null;
+  }
+
   analyze(candles, indicators, instrument) {
     const { ema50, rsi, macd, atr } = indicators;
 
@@ -156,6 +207,7 @@ class MomentumStrategy extends BaseStrategy {
         atrRegimeOk,
       },
       indicatorsSnapshot: snapshot,
+      exitPlan: this.buildExitPlan(instrument, direction, indicators),
     };
   }
 

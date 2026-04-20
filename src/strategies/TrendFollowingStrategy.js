@@ -23,6 +23,73 @@ class TrendFollowingStrategy extends BaseStrategy {
     super('TrendFollowing', 'EMA crossover trend following for Forex majors');
   }
 
+  buildExitPlan(/* instrument, signal, indicators, context */) {
+    return {
+      breakeven: {
+        enabled: true,
+        triggerAtrMultiple: 0.8,
+        includeSpreadCompensation: true,
+        extraBufferPips: 0,
+      },
+      trailing: {
+        enabled: true,
+        startAtrMultiple: 1.5,
+        distanceAtrMultiple: 1.0,
+        mode: 'atr',
+      },
+      partials: [],
+      timeExit: null,
+      adaptiveEvaluator: 'TrendFollowing',
+    };
+  }
+
+  /**
+   * Adaptive exit for trend following.
+   *   ① Price crossed back under EMA50 (trend broken) → tighten trail to
+   *      lock profit aggressively.
+   *   ② ATR expansion vs entry → widen trail so we don't get whipsawed.
+   */
+  evaluateExit(position, context = {}) {
+    const { indicators, candles } = context;
+    if (!indicators || !candles) return null;
+
+    const ema50 = this.latest(indicators.ema50);
+    const currentAtr = this.latest(indicators.atr);
+    const price = this.latestCandle(candles)?.close;
+    const atrAtEntry = Number(position?.atrAtEntry);
+
+    if (!ema50 || !currentAtr || !Number.isFinite(price) || !Number.isFinite(atrAtEntry) || atrAtEntry <= 0) {
+      return null;
+    }
+
+    const direction = position?.type;
+    const trendBroken = direction === 'BUY' ? price < ema50 : price > ema50;
+    if (trendBroken) {
+      return {
+        breakeven: { triggerAtrMultiple: 0.5 },
+        trailing: {
+          enabled: true,
+          startAtrMultiple: 0.8,
+          distanceAtrMultiple: 0.6,
+          mode: 'atr',
+        },
+      };
+    }
+
+    if (currentAtr >= atrAtEntry * 1.5) {
+      return {
+        trailing: {
+          enabled: true,
+          startAtrMultiple: 1.5,
+          distanceAtrMultiple: 1.5,
+          mode: 'atr',
+        },
+      };
+    }
+
+    return null;
+  }
+
   analyze(candles, indicators, instrument, context = {}) {
     const setup = this._buildSetup(candles, indicators, instrument);
     if (!setup) {
@@ -237,6 +304,7 @@ class TrendFollowingStrategy extends BaseStrategy {
       tp: parseFloat(setup.tp.toFixed(instrument.pipSize < 0.001 ? 5 : 3)),
       reason: setup.reason,
       indicatorsSnapshot: snapshot,
+      exitPlan: this.buildExitPlan(instrument, setup.direction, null),
       setupTimeframe: instrument.timeframe || '1h',
       entryTimeframe: instrument.entryTimeframe || null,
       triggerReason: extra.triggerReason || '',

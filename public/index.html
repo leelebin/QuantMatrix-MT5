@@ -61,6 +61,17 @@ tr:hover{background:var(--bg3)}
 .tag-buy{background:rgba(16,185,129,.15);color:var(--green)}
 .tag-sell{background:rgba(239,68,68,.15);color:var(--red)}
 .tag-active{background:rgba(59,130,246,.15);color:var(--blue)}
+.tag-paper{background:rgba(139,92,246,.15);color:var(--purple)}
+.tag-live{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-green{background:rgba(16,185,129,.15);color:var(--green)}
+.tag-red{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+.tag-neutral{background:rgba(148,163,184,.15);color:var(--text2)}
+.tag-none{background:rgba(148,163,184,.15);color:var(--text2)}
+.paper-banner{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.35);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.paper-banner strong{color:var(--purple)}
+.section-subtitle{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;font-weight:600}
+.section-subtitle:first-child{margin-top:0}
 
 /* Forms */
 .form-group{margin-bottom:12px}
@@ -100,6 +111,14 @@ tr:hover{background:var(--bg3)}
 .batch-group-table{padding:0 16px 16px}
 .batch-table-note{font-size:11px;color:var(--text2);margin-top:6px}
 .batch-results-pagination{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap}
+.portfolio-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+.portfolio-cell{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.portfolio-cell .label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-weight:600}
+.portfolio-cell .value{font-size:18px;font-weight:700;color:var(--text)}
+.portfolio-cell .value.pos{color:var(--green)}
+.portfolio-cell .value.neg{color:var(--red)}
+.portfolio-cell .sub{font-size:11px;color:var(--text2);margin-top:4px}
+.portfolio-note{font-size:11px;color:var(--text2);line-height:1.6;margin-top:8px;padding:8px 12px;background:var(--bg);border-left:3px solid var(--blue);border-radius:4px}
 
 /* Equity curve canvas */
 .equity-canvas{width:100%;height:200px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
@@ -174,9 +193,11 @@ tr:hover{background:var(--bg3)}
     <button class="active" data-page="dashboard">Dashboard</button>
     <button data-page="positions">Positions</button>
     <button data-page="trades">Trades</button>
+    <button data-page="paper-trading">Paper Trading</button>
     <button data-page="strategies">Strategies</button>
     <button data-page="backtest">Backtest</button>
     <button data-page="optimizer">Optimizer</button>
+    <button data-page="diagnostics">Diagnostics</button>
     <button data-page="settings">Settings</button>
   </nav>
   <div class="ws-status">
@@ -211,18 +232,20 @@ tr:hover{background:var(--bg3)}
   <div class="grid grid-2">
     <div class="card">
       <div class="card-header">
-        <span class="card-title">Trading Status</span>
-        <button class="btn-success btn-sm" id="tradingToggle" onclick="toggleTrading()">Start Trading</button>
+        <span class="card-title"><span class="tag tag-live" style="margin-right:6px">LIVE</span>Live Trading Status</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn-success btn-sm" id="tradingToggle" onclick="toggleTrading()">Start Live Trading</button>
+        </div>
       </div>
       <table>
         <tr><td style="color:var(--text2)">MT5 Connection</td><td id="dMt5Status">--</td></tr>
         <tr><td style="color:var(--text2)">Account Mode</td><td id="dAccountMode">--</td></tr>
-        <tr><td style="color:var(--text2)">Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
         <tr><td style="color:var(--text2)">Risk Profile</td><td id="dRiskProfile">--</td></tr>
-        <tr><td style="color:var(--text2)">Trading Loop</td><td id="dTradingLoop">--</td></tr>
-        <tr><td style="color:var(--text2)">Position Monitor</td><td id="dMonitor">--</td></tr>
-        <tr><td style="color:var(--text2)">Active Assignments</td><td id="dActiveAssignments">--</td></tr>
-        <tr><td style="color:var(--text2)">Active Symbols</td><td id="dActiveSymbols">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Trading Loop</td><td id="dTradingLoop">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Position Monitor</td><td id="dMonitor">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Active Assignments</td><td id="dActiveAssignments">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Active Symbols</td><td id="dActiveSymbols">--</td></tr>
         <tr><td style="color:var(--text2)">Daily Loss</td><td id="dDailyLoss">--</td></tr>
         <tr><td style="color:var(--text2)">Max Drawdown</td><td id="dDrawdown">--</td></tr>
         <tr><td style="color:var(--text2)">WS Clients</td><td id="dWsClients">0</td></tr>
@@ -230,11 +253,33 @@ tr:hover{background:var(--bg3)}
     </div>
     <div class="card">
       <div class="card-header">
-        <span class="card-title">Recent Signals</span>
+        <span class="card-title"><span class="tag tag-paper" style="margin-right:6px">PAPER</span>Paper Trading Status</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary btn-sm" id="paperTradingToggle" onclick="togglePaperTrading()">Start Paper Trading</button>
+        </div>
       </div>
-      <div id="recentSignals" style="max-height:260px;overflow-y:auto">
-        <div class="empty">No signals yet</div>
+      <table>
+        <tr><td style="color:var(--text2)">Status</td><td id="dPaperStatus">--</td></tr>
+        <tr><td style="color:var(--text2)">Runtime</td><td id="dPaperRuntime">--</td></tr>
+        <tr><td style="color:var(--text2)">Open Paper Positions</td><td id="dPaperOpen">--</td></tr>
+        <tr><td style="color:var(--text2)">Today Paper Trades</td><td id="dPaperTodayTrades">--</td></tr>
+        <tr><td style="color:var(--text2)">All-Time Trades</td><td id="dPaperTotalTrades">--</td></tr>
+        <tr><td style="color:var(--text2)">All-Time Win Rate</td><td id="dPaperWinRate">--</td></tr>
+        <tr><td style="color:var(--text2)">All-Time Profit</td><td id="dPaperTotalProfit">--</td></tr>
+        <tr><td style="color:var(--text2)">Daily Report Scheduler</td><td id="dPaperDailyReport">--</td></tr>
+      </table>
+      <div style="margin-top:12px">
+        <button class="btn-outline btn-sm" onclick="goToPaperTradingPage()">Open Paper Trading Workspace</button>
       </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Recent Signals</span>
+    </div>
+    <div id="recentSignals" style="max-height:260px;overflow-y:auto">
+      <div class="empty">No signals yet</div>
     </div>
   </div>
 </div>
@@ -282,6 +327,7 @@ tr:hover{background:var(--bg3)}
           <option value="Momentum">Momentum</option>
           <option value="Breakout">Breakout</option>
           <option value="MultiTimeframe">Multi-Timeframe</option>
+          <option value="VolumeFlowHybrid">Volume Flow Hybrid</option>
         </select>
       </div>
       <div class="form-group">
@@ -323,6 +369,89 @@ tr:hover{background:var(--bg3)}
     </div>
     <div id="executionAuditTable">
       <div class="empty">No execution events yet</div>
+    </div>
+  </div>
+</div>
+
+<!-- Paper Trading Page -->
+<div class="page" id="page-paper-trading">
+  <div class="paper-banner">
+    <span class="tag tag-paper">PAPER</span>
+    <span><strong>Paper / demo workspace.</strong> All positions, trades and stats on this page are paper records only. Live trading data is on the other pages.</span>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Paper Trading Control</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-outline btn-sm" onclick="loadPaperTrading()">Refresh</button>
+          <button class="btn-primary btn-sm" id="paperTradingToggle2" onclick="togglePaperTrading()">Start Paper Trading</button>
+        </div>
+      </div>
+      <table>
+        <tr><td style="color:var(--text2)">Status</td><td id="ptStatus">--</td></tr>
+        <tr><td style="color:var(--text2)">Started At</td><td id="ptStartedAt">--</td></tr>
+        <tr><td style="color:var(--text2)">Runtime</td><td id="ptRuntime">--</td></tr>
+        <tr><td style="color:var(--text2)">Open Paper Positions</td><td id="ptOpen">--</td></tr>
+        <tr><td style="color:var(--text2)">Today Paper Trades</td><td id="ptTodayTrades">--</td></tr>
+        <tr><td style="color:var(--text2)">Daily Report Scheduler</td><td id="ptDailyReport">--</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Paper Trading Report</span>
+      </div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Manually generate and send the paper-trading daily report (uses the configured Telegram channel if available).</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Report Date (optional)</label>
+          <input type="date" id="ptReportDate">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" onclick="generatePaperReport()" id="ptReportBtn">Generate Paper Report</button>
+        <button class="btn-outline btn-sm" onclick="document.getElementById('ptReportDate').value=''">Clear Date</button>
+      </div>
+      <div id="ptReportResult" style="margin-top:12px;font-size:13px"></div>
+      <pre id="ptReportPreview" style="display:none;margin-top:12px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--text);max-height:260px;overflow:auto"></pre>
+    </div>
+  </div>
+
+  <div class="grid grid-4" style="margin-top:16px">
+    <div class="card stat-card"><div class="stat-label">Paper Trades</div><div class="stat-value" id="ptsTotalTrades">0</div></div>
+    <div class="card stat-card"><div class="stat-label">Paper Win Rate</div><div class="stat-value" id="ptsWinRate">--</div></div>
+    <div class="card stat-card"><div class="stat-label">Paper Profit</div><div class="stat-value" id="ptsTotalProfit">--</div></div>
+    <div class="card stat-card"><div class="stat-label">Paper Avg P/L</div><div class="stat-value" id="ptsAvgProfit">--</div></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title"><span class="tag tag-paper" style="margin-right:6px">PAPER</span>Open Paper Positions</span>
+      <button class="btn-outline btn-sm" onclick="loadPaperPositions()">Refresh</button>
+    </div>
+    <div id="paperPositionsTable">
+      <div class="empty">No open paper positions</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title"><span class="tag tag-paper" style="margin-right:6px">PAPER</span>Paper Trade Log</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="ptTradeFilterStatus" style="width:auto">
+          <option value="">All Statuses</option>
+          <option value="OPEN">Open</option>
+          <option value="CLOSED">Closed</option>
+        </select>
+        <input type="text" id="ptTradeFilterSymbol" placeholder="Symbol..." style="width:140px">
+        <button class="btn-primary btn-sm" onclick="loadPaperTradeLog()">Apply</button>
+        <button class="btn-outline btn-sm" onclick="resetPaperTradeLogFilters()">Reset</button>
+      </div>
+    </div>
+    <div id="paperTradeLogTable">
+      <div class="empty">No paper trades yet</div>
     </div>
   </div>
 </div>
@@ -379,11 +508,13 @@ tr:hover{background:var(--bg3)}
           <div class="form-group">
             <label>Strategy</label>
             <select id="btStrategy" onchange="loadBacktestParams()">
+              <option value="ALL">All Strategies (compare)</option>
               <option value="TrendFollowing">Trend Following</option>
               <option value="MeanReversion">Mean Reversion</option>
               <option value="Momentum">Momentum</option>
               <option value="Breakout">Breakout</option>
               <option value="MultiTimeframe">Multi-Timeframe</option>
+              <option value="VolumeFlowHybrid">Volume Flow Hybrid</option>
             </select>
           </div>
         </div>
@@ -451,11 +582,46 @@ tr:hover{background:var(--bg3)}
             <input type="number" id="btBatchBalance" value="10000">
           </div>
           <div class="form-group">
-            <label>Timeframe Mode</label>
-            <select id="btBatchTimeframeMode">
-              <option value="strategy_default">Use Strategy Default</option>
+            <label>Strategy Scope</label>
+            <select id="btBatchStrategyScopeMode">
+              <option value="enabled_assigned_only">Enabled + Assigned Only</option>
+              <option value="all_strategies">All Strategies × All Symbols</option>
             </select>
           </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1 1 100%">
+            <label>Run Model</label>
+            <select id="btBatchRunModel" onchange="updateRunModelHint()">
+              <option value="independent">Independent Sleeve Aggregation</option>
+              <option value="shared_portfolio">Shared Portfolio Simulation</option>
+            </select>
+          </div>
+        </div>
+        <div class="batch-hint" id="btBatchRunModelHint" style="font-size:12px;color:var(--text2);margin:-4px 0 8px">
+          <strong>Independent Sleeve Aggregation</strong>: each combination trades its own copy of the initial balance; totals are aggregated after the fact (true sums, not averaged percentages).
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Timeframe Mode</label>
+            <select id="btBatchTimeframeMode" onchange="toggleForcedTimeframeVisibility()">
+              <option value="strategy_default">Use Strategy Default</option>
+              <option value="forced_timeframe">Forced Timeframe</option>
+            </select>
+          </div>
+          <div class="form-group" id="btBatchForcedTimeframeGroup" style="display:none">
+            <label>Forced Timeframe</label>
+            <select id="btBatchForcedTimeframe">
+              <option value="1m">1m</option>
+              <option value="5m">5m</option>
+              <option value="15m" selected>15m</option>
+              <option value="1h">1h</option>
+              <option value="4h">4h</option>
+            </select>
+          </div>
+        </div>
+        <div class="batch-hint" id="btBatchForcedTimeframeNote" style="display:none;font-size:12px;color:var(--text2);margin:4px 0 8px">
+          Forced timeframe overrides every strategy's primary TF. Higher / entry TFs are derived one step up / down where applicable; strategies that require an entry or higher TF that cannot be derived (e.g. sub-1m) have that role disabled for this run.
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
           <button class="btn-primary" onclick="runBatchBacktest()" id="btBatchRunBtn">Run Batch Backtest</button>
@@ -470,6 +636,23 @@ tr:hover{background:var(--bg3)}
         <div class="card-header"><span class="card-title">Job Overview</span></div>
         <div id="btBatchOverview"><div class="empty">Run a batch job to see overview data</div></div>
       </div>
+    </div>
+
+    <div class="card" id="btBatchPortfolioCard" style="margin-top:16px">
+      <div class="card-header">
+        <span class="card-title" id="btBatchPortfolioTitle">Portfolio Summary — Independent Sleeve Aggregation</span>
+        <span class="section-subtitle" id="btBatchPortfolioSubtitle">True aggregate math across all scored strategy runs (not averaged percentages). Each sleeve starts with its own copy of the initial balance.</span>
+      </div>
+      <div id="btBatchPortfolioSummary"><div class="empty">Run a batch job to see the portfolio summary</div></div>
+    </div>
+
+    <div class="card" id="btBatchSharedCard" style="margin-top:16px;display:none">
+      <div class="card-header">
+        <span class="card-title">Shared Portfolio Simulation</span>
+        <span class="section-subtitle">Real shared-capital simulation — ONE balance, ONE equity curve, ONE drawdown. All combinations compete for capacity in chronological order.</span>
+      </div>
+      <div id="btBatchSharedSummary"><div class="empty">Run a shared-portfolio job to see the simulation summary</div></div>
+      <div id="btBatchSharedContributions" style="margin-top:12px"></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -490,6 +673,7 @@ tr:hover{background:var(--bg3)}
             <option value="Momentum">Momentum</option>
             <option value="Breakout">Breakout</option>
             <option value="MultiTimeframe">Multi-Timeframe</option>
+            <option value="VolumeFlowHybrid">Volume Flow Hybrid</option>
           </select>
         </div>
         <div class="form-group">
@@ -586,6 +770,7 @@ tr:hover{background:var(--bg3)}
             <option value="Momentum">Momentum</option>
             <option value="Breakout">Breakout</option>
             <option value="MultiTimeframe">Multi-Timeframe</option>
+            <option value="VolumeFlowHybrid">Volume Flow Hybrid</option>
           </select>
         </div>
       </div>
@@ -632,14 +817,160 @@ tr:hover{background:var(--bg3)}
   </div>
 </div>
 
+<!-- Diagnostics Page -->
+<div class="page" id="page-diagnostics">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Decision Audit — Diagnostics</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-outline btn-sm" onclick="loadDiagnostics()">Refresh</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)">
+          <input type="checkbox" id="diagAutoStream" checked> Live stream
+        </label>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+      Every signal scan, risk check, preflight, order open, position adjustment and close is recorded here with a reason code. Use the filters to understand why a trade did or didn't fire.
+    </div>
+    <div class="grid grid-4" id="diagStatsCards" style="margin-bottom:12px">
+      <div class="stat-card"><div class="stat-label">Total events</div><div class="stat-value" id="diagStatTotal">—</div></div>
+      <div class="stat-card"><div class="stat-label">Triggered</div><div class="stat-value" id="diagStatTriggered" style="color:var(--green)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Rejected (risk/preflight)</div><div class="stat-value" id="diagStatRejected" style="color:var(--red)">—</div></div>
+      <div class="stat-card"><div class="stat-label">Orders opened</div><div class="stat-value" id="diagStatOpened">—</div></div>
+    </div>
+    <div class="grid grid-3" style="gap:12px;margin-bottom:12px">
+      <div class="card" style="padding:10px">
+        <div class="card-title" style="font-size:13px;margin-bottom:6px">Top NO_SETUP reasons</div>
+        <div id="diagTopNoSetup" style="font-size:12px"></div>
+      </div>
+      <div class="card" style="padding:10px">
+        <div class="card-title" style="font-size:13px;margin-bottom:6px">Top FILTERED reasons</div>
+        <div id="diagTopFiltered" style="font-size:12px"></div>
+      </div>
+      <div class="card" style="padding:10px">
+        <div class="card-title" style="font-size:13px;margin-bottom:6px">Top RISK / EXEC rejections</div>
+        <div id="diagTopRejections" style="font-size:12px"></div>
+      </div>
+    </div>
+    <div class="grid grid-4" style="gap:8px;margin-bottom:10px">
+      <div class="form-group"><label>Symbol</label><input id="diagFilterSymbol" placeholder="e.g. EURUSD" /></div>
+      <div class="form-group"><label>Strategy</label><input id="diagFilterStrategy" placeholder="e.g. MeanReversion" /></div>
+      <div class="form-group"><label>Stage</label>
+        <select id="diagFilterStage">
+          <option value="">All</option>
+          <option value="NO_SETUP">NO_SETUP</option>
+          <option value="SETUP_FOUND">SETUP_FOUND</option>
+          <option value="FILTERED">FILTERED</option>
+          <option value="TRIGGERED">TRIGGERED</option>
+          <option value="DUPLICATE">DUPLICATE</option>
+          <option value="RISK_REJECTED">RISK_REJECTED</option>
+          <option value="PREFLIGHT_REJECTED">PREFLIGHT_REJECTED</option>
+          <option value="ORDER_OPENED">ORDER_OPENED</option>
+          <option value="ORDER_FAILED">ORDER_FAILED</option>
+          <option value="POSITION_MANAGED">POSITION_MANAGED</option>
+          <option value="ORDER_CLOSED">ORDER_CLOSED</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="diagFilterStatus">
+          <option value="">All</option>
+          <option value="OK">OK</option>
+          <option value="INFO">INFO</option>
+          <option value="WARN">WARN</option>
+          <option value="REJECTED">REJECTED</option>
+          <option value="FAILED">FAILED</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Scope</label>
+        <select id="diagFilterScope">
+          <option value="">All</option>
+          <option value="live">Live</option>
+          <option value="paper">Paper</option>
+          <option value="backtest">Backtest</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Start Date</label><input type="datetime-local" id="diagFilterStart" /></div>
+      <div class="form-group"><label>End Date</label><input type="datetime-local" id="diagFilterEnd" /></div>
+      <div class="form-group"><label>Search</label><input id="diagFilterSearch" placeholder="reasonCode / reasonText" /></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn-primary btn-sm" onclick="loadDiagnostics()">Apply Filters</button>
+      <button class="btn-outline btn-sm" onclick="clearDiagnosticsFilters()">Clear</button>
+      <span id="diagCount" style="font-size:12px;color:var(--text2);align-self:center"></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Symbol</th>
+            <th>Strategy</th>
+            <th>Module</th>
+            <th>Stage</th>
+            <th>Status</th>
+            <th>Signal</th>
+            <th>Conf</th>
+            <th>Reason Code</th>
+            <th>Reason Text</th>
+            <th>Scope</th>
+          </tr>
+        </thead>
+        <tbody id="diagRows"><tr><td colspan="11" class="empty">No diagnostic events yet. Start live or paper trading to populate.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="card-header">
+      <span class="card-title">Broker Symbol Resolution</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="loadSymbolResolution()">Refresh</button>
+        <button class="btn-outline btn-sm" onclick="rediscoverSymbols()">Re-discover</button>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px">
+      Maps each canonical app symbol (e.g. BTCUSD) to the broker's actual name (BTCUSDm, BTCUSD.a, etc.). Discovery runs automatically when MT5 connects. Set <code>QM_SYMBOL_ALIAS_BTCUSD=BTCUSDm</code> etc. in <code>.env</code> to force a specific broker name.
+    </div>
+    <div id="symbolResolutionSummary" style="font-size:12px;color:var(--text2);margin-bottom:8px"></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Canonical</th>
+            <th>Category</th>
+            <th>Strategy Type</th>
+            <th>Broker Name</th>
+            <th>Status</th>
+            <th>Candidates tried</th>
+          </tr>
+        </thead>
+        <tbody id="symbolResolutionRows"><tr><td colspan="6" class="empty">Click Refresh to load symbol resolution status.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- Settings Page -->
 <div class="page" id="page-settings">
   <div class="grid grid-2">
     <div class="card">
       <div class="card-header"><span class="card-title">Telegram Notifications</span></div>
       <div id="notifyStatus" style="margin-bottom:12px"></div>
-      <button class="btn-primary btn-sm" onclick="testNotification()">Send Test Notification</button>
-      <div id="notifyResult" style="margin-top:8px;font-size:13px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn-outline btn-sm" onclick="testNotification()">Send Test Notification</button>
+      </div>
+      <div id="notifyResult" style="margin-top:4px;font-size:13px;margin-bottom:12px"></div>
+      <div class="section-subtitle">Send Custom Notification</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Manual outbound notification tool. The text below will be sent via Telegram using the configured bot.</div>
+      <div class="form-group">
+        <label>Message</label>
+        <textarea id="notifyCustomMessage" rows="4" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;font-family:inherit" placeholder="Type the message to send to Telegram..."></textarea>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" onclick="sendCustomNotification()" id="notifySendBtn">Send Notification</button>
+        <button class="btn-outline btn-sm" onclick="document.getElementById('notifyCustomMessage').value=''">Clear</button>
+      </div>
+      <div id="notifySendResult" style="margin-top:8px;font-size:13px"></div>
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">WebSocket Connection Log</span></div>
@@ -751,6 +1082,73 @@ tr:hover{background:var(--bg3)}
     <div class="card-header"><span class="card-title">Account Info</span></div>
     <div id="accountInfo"><div class="empty">Not connected</div></div>
   </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title"><span class="tag tag-live" style="margin-right:6px">LIVE</span>Live Test Order</span>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+      Diagnostic tool. Places a protected order on the connected MT5 broker using the configured risk profile, then immediately closes it to verify order placement, preflight, and broker-side validation. This sends a real order to the broker — use carefully.
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Symbol</label>
+        <select id="testOrderSymbol"></select>
+      </div>
+      <div class="form-group">
+        <label>Direction</label>
+        <select id="testOrderType">
+          <option value="BUY">BUY</option>
+          <option value="SELL">SELL</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-primary btn-sm" onclick="runTestOrder()" id="testOrderBtn">Run Test Order</button>
+    </div>
+    <div id="testOrderResult" style="margin-top:12px;font-size:13px"></div>
+  </div>
+</div>
+
+<!-- Strategy Signals Modal -->
+<div class="modal-overlay" id="strategySignalsModal" onclick="handleStrategySignalsBackdrop(event)">
+  <div class="modal" style="width:960px;max-width:95vw">
+    <div class="modal-header">
+      <div>
+        <h3 id="strategySignalsTitle">Recent Signals</h3>
+        <div class="modal-meta" id="strategySignalsMeta">Showing latest signals emitted by this strategy.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="refreshStrategySignals()">Refresh</button>
+        <button class="btn-outline btn-sm" onclick="closeStrategySignalsModal()">Close</button>
+      </div>
+    </div>
+    <div id="strategySignalsBody" style="margin-top:16px"><div class="empty">Loading signals...</div></div>
+    <div class="modal-actions">
+      <button class="btn-outline btn-sm" onclick="closeStrategySignalsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Optimizer Full Results Modal -->
+<div class="modal-overlay" id="optimizerFullResultsModal" onclick="handleOptimizerFullResultsBackdrop(event)">
+  <div class="modal" style="width:1100px;max-width:98vw">
+    <div class="modal-header">
+      <div>
+        <h3>Full Optimizer Results</h3>
+        <div class="modal-meta" id="optimizerFullResultsMeta">Complete list of parameter combinations evaluated by the optimizer.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" onclick="reloadOptimizerFullResults()">Reload</button>
+        <button class="btn-outline btn-sm" onclick="closeOptimizerFullResultsModal()">Close</button>
+      </div>
+    </div>
+    <div id="optimizerFullResultsBody" style="margin-top:16px"><div class="empty">Loading full results...</div></div>
+    <div id="optimizerFullResultsPagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap"></div>
+    <div class="modal-actions">
+      <button class="btn-outline btn-sm" onclick="closeOptimizerFullResultsModal()">Close</button>
+    </div>
+  </div>
 </div>
 </main>
 <script>
@@ -803,7 +1201,7 @@ function setAvailableSymbols(symbols) {
 }
 
 function populateSymbolSelects() {
-  ['btSymbol','optSymbol','btBatchFilterSymbol'].forEach(id => {
+  ['btSymbol','optSymbol','btBatchFilterSymbol','testOrderSymbol'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const currentValue = sel.value;
@@ -870,6 +1268,7 @@ function setupNav() {
 function onPageSwitch(page) {
   if (page === 'positions') loadPositions();
   else if (page === 'trades') { refreshTradesView({ mode: 'incremental', silent: true }); }
+  else if (page === 'paper-trading') loadPaperTrading();
   else if (page === 'strategies') loadStrategies();
   else if (page === 'backtest') {
     switchBacktestMode(backtestMode);
@@ -881,6 +1280,7 @@ function onPageSwitch(page) {
     }
   }
   else if (page === 'optimizer') loadOptRanges();
+  else if (page === 'diagnostics') { loadDiagnostics(); loadSymbolResolution(); }
   else if (page === 'settings') { loadNotifyStatus(); loadAccountInfo(); loadRiskSettings(); }
   else if (page === 'dashboard') loadDashboard();
 }
@@ -1131,6 +1531,9 @@ function handleWsMessage(msg) {
       wsLog('info', 'Execution audit: ' + (msg.data.stage || 'execution') + ' - ' + msg.data.message);
       if (document.getElementById('page-trades').classList.contains('active')) loadExecutionAudits();
       break;
+    case 'decision_audit':
+      if (typeof handleDiagnosticsWsEvent === 'function') handleDiagnosticsWsEvent(msg);
+      break;
     case 'optimizer_progress':
       if (msg.data) {
         document.getElementById('optProgress').style.display = 'block';
@@ -1228,16 +1631,287 @@ async function loadDashboard() {
 
     // Recent signals
     if (d.recentSignals && d.recentSignals.length > 0) {
-      let html = '<table><tr><th>Time</th><th>Symbol</th><th>Signal</th><th>Strategy</th><th>Confidence</th></tr>';
+      const statusTag = (s) => {
+        const v = String(s || '').toUpperCase();
+        if (v === 'TRIGGERED') return 'tag-green';
+        if (v === 'FILTERED' || v === 'DUPLICATE') return 'tag-neutral';
+        if (v === 'NO_SETUP') return 'tag-neutral';
+        return 'tag-neutral';
+      };
+      let html = '<table><tr><th>Time</th><th>Symbol</th><th>Strategy</th><th>Signal</th><th>Status</th><th>Confidence</th><th>Filter / Reason</th></tr>';
       d.recentSignals.forEach(s => {
-        html += '<tr><td>' + fmtTime(s.timestamp) + '</td><td>' + s.symbol + '</td>';
-        html += '<td><span class="tag tag-' + s.signal.toLowerCase() + '">' + s.signal + '</span></td>';
-        html += '<td>' + s.strategy + '</td><td>' + (s.confidence*100).toFixed(0) + '%</td></tr>';
+        const conf = (typeof s.confidence === 'number') ? (s.confidence*100).toFixed(0) + '%' : '--';
+        const status = s.status || (s.signal !== 'NONE' ? 'TRIGGERED' : 'NO_SETUP');
+        const filterOrReason = s.filterReason || s.triggerReason || s.reason || '';
+        html += '<tr><td>' + fmtTime(s.timestamp) + '</td>';
+        html += '<td>' + escapeHtml(s.symbol || '--') + '</td>';
+        html += '<td>' + escapeHtml(s.strategy || '--') + '</td>';
+        html += '<td><span class="tag tag-' + String(s.signal || 'none').toLowerCase() + '">' + escapeHtml(s.signal || '--') + '</span></td>';
+        html += '<td><span class="tag ' + statusTag(status) + '">' + escapeHtml(status) + '</span></td>';
+        html += '<td>' + conf + '</td>';
+        html += '<td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'
+             + escapeHtml(filterOrReason) + '">' + escapeHtml(filterOrReason || '--') + '</td></tr>';
       });
       html += '</table>';
       document.getElementById('recentSignals').innerHTML = html;
     }
   } catch (e) {}
+  // Paper trading status is served by its own endpoint
+  loadPaperTradingStatus();
+}
+
+async function loadPaperTradingStatus() {
+  const btn = document.getElementById('paperTradingToggle');
+  const btn2 = document.getElementById('paperTradingToggle2');
+
+  const setButtons = (running) => {
+    [btn, btn2].forEach((b) => {
+      if (!b) return;
+      b.textContent = running ? 'Stop Paper Trading' : 'Start Paper Trading';
+      b.className = running ? 'btn-danger btn-sm' : 'btn-primary btn-sm';
+    });
+  };
+
+  try {
+    const r = await api('/api/paper-trading/status');
+    if (!r.success) {
+      setPaperTradingDashboard(null);
+      setPaperTradingWorkspace(null);
+      setButtons(false);
+      return null;
+    }
+    const d = r.data || {};
+    setPaperTradingDashboard(d);
+    setPaperTradingWorkspace(d);
+    setButtons(Boolean(d.running));
+    return d;
+  } catch (e) {
+    setPaperTradingDashboard(null);
+    setPaperTradingWorkspace(null);
+    setButtons(false);
+    return null;
+  }
+}
+
+function setPaperTradingDashboard(d) {
+  const statusEl = document.getElementById('dPaperStatus');
+  if (!statusEl) return;
+  if (!d) {
+    statusEl.textContent = '--';
+    ['dPaperRuntime','dPaperOpen','dPaperTodayTrades','dPaperTotalTrades','dPaperWinRate','dPaperTotalProfit','dPaperDailyReport'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '--';
+    });
+    return;
+  }
+
+  statusEl.innerHTML = d.running
+    ? '<span style="color:var(--green)">Running</span>'
+    : '<span style="color:var(--red)">Stopped</span>';
+  document.getElementById('dPaperRuntime').textContent = d.runtime || '--';
+  document.getElementById('dPaperOpen').textContent = d.openPositions != null ? d.openPositions : '--';
+  document.getElementById('dPaperTodayTrades').textContent = d.todayTrades != null ? d.todayTrades : '--';
+
+  const stats = d.allTimeStats || {};
+  document.getElementById('dPaperTotalTrades').textContent = stats.totalTrades != null ? stats.totalTrades : '--';
+  document.getElementById('dPaperWinRate').textContent = stats.winRate != null ? (stats.winRate * 100).toFixed(1) + '%' : '--';
+  document.getElementById('dPaperTotalProfit').textContent = stats.totalProfit != null ? '$' + num(stats.totalProfit) : '--';
+
+  const dailyReport = d.dailyReport;
+  document.getElementById('dPaperDailyReport').textContent = dailyReport
+    ? (dailyReport.running ? 'Running' : 'Stopped')
+    : '--';
+}
+
+function setPaperTradingWorkspace(d) {
+  const statusEl = document.getElementById('ptStatus');
+  if (!statusEl) return;
+  if (!d) {
+    statusEl.textContent = '--';
+    ['ptStartedAt','ptRuntime','ptOpen','ptTodayTrades','ptDailyReport'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '--';
+    });
+    return;
+  }
+  statusEl.innerHTML = d.running
+    ? '<span style="color:var(--green)">Running</span>'
+    : '<span style="color:var(--red)">Stopped</span>';
+  document.getElementById('ptStartedAt').textContent = d.startedAt ? fmtTime(d.startedAt) : '--';
+  document.getElementById('ptRuntime').textContent = d.runtime || '--';
+  document.getElementById('ptOpen').textContent = d.openPositions != null ? d.openPositions : '--';
+  document.getElementById('ptTodayTrades').textContent = d.todayTrades != null ? d.todayTrades : '--';
+  const dailyReport = d.dailyReport;
+  document.getElementById('ptDailyReport').textContent = dailyReport
+    ? (dailyReport.running ? 'Running' : 'Stopped')
+    : '--';
+}
+
+function goToPaperTradingPage() {
+  const navBtn = document.querySelector('.nav button[data-page="paper-trading"]');
+  if (navBtn) navBtn.click();
+}
+
+async function loadPaperTrading() {
+  await loadPaperTradingStatus();
+  await Promise.all([
+    loadPaperPositions(),
+    loadPaperTradeLog(),
+    loadPaperStats(),
+  ]);
+}
+
+async function loadPaperPositions() {
+  const el = document.getElementById('paperPositionsTable');
+  if (!el) return;
+  try {
+    const r = await api('/api/paper-trading/positions');
+    if (!r.success) throw new Error(r.message || 'Failed to load paper positions');
+    const positions = Array.isArray(r.data) ? r.data : [];
+    if (positions.length === 0) {
+      el.innerHTML = '<div class="empty">No open paper positions</div>';
+      return;
+    }
+    let html = '<table><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>SL</th><th>TP</th><th>Lot</th><th>Strategy</th><th>Opened</th><th>Unrealized P/L</th><th>Action</th></tr>';
+    positions.forEach((p) => {
+      const pl = p.unrealizedPl || 0;
+      const typeTag = (p.type || '').toLowerCase();
+      html += '<tr><td><strong>' + escapeHtml(p.symbol || '--') + '</strong> <span class="tag tag-paper">PAPER</span></td>';
+      html += '<td><span class="tag tag-' + typeTag + '">' + escapeHtml(p.type || '--') + '</span></td>';
+      html += '<td>' + fmtPrice(p.entryPrice) + '</td><td>' + fmtPrice(p.currentSl) + '</td><td>' + fmtPrice(p.currentTp) + '</td>';
+      html += '<td>' + (p.lotSize != null ? p.lotSize : '--') + '</td>';
+      html += '<td>' + escapeHtml(p.strategy || '--') + '</td>';
+      html += '<td>' + fmtTime(p.openedAt) + '</td>';
+      html += '<td style="color:' + (pl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (pl >= 0 ? '+' : '') + pl.toFixed(2) + '</td>';
+      html += '<td><button class="btn-danger btn-sm" onclick="closePaperPosition(\'' + p._id + '\', \'' + escapeJsString(p.symbol || '') + '\')">Close</button></td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function closePaperPosition(id, symbol) {
+  if (!confirm('Close paper position' + (symbol ? ' for ' + symbol : '') + '?')) return;
+  try {
+    const r = await api('/api/paper-trading/positions/' + id + '/close', 'POST', { reason: 'MANUAL' });
+    if (!r.success) throw new Error(r.message || 'Failed to close paper position');
+    wsLog('success', 'Paper position closed' + (symbol ? ': ' + symbol : ''));
+    await loadPaperTrading();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function loadPaperTradeLog() {
+  const el = document.getElementById('paperTradeLogTable');
+  if (!el) return;
+  try {
+    const params = new URLSearchParams();
+    const status = document.getElementById('ptTradeFilterStatus')?.value || '';
+    const symbol = (document.getElementById('ptTradeFilterSymbol')?.value || '').trim();
+    if (status) params.set('status', status);
+    if (symbol) params.set('symbol', symbol);
+    params.set('limit', '200');
+    const r = await api('/api/paper-trading/trade-log?' + params.toString());
+    if (!r.success) throw new Error(r.message || 'Failed to load paper trade log');
+    const trades = Array.isArray(r.data) ? r.data : [];
+    if (trades.length === 0) {
+      el.innerHTML = '<div class="empty">No paper trades match the current filters</div>';
+      return;
+    }
+    let html = '<table><tr><th>Opened</th><th>Closed</th><th>Symbol</th><th>Type</th><th>Strategy</th><th>Lot</th><th>Entry</th><th>Exit</th><th>P/L</th><th>Pips</th><th>Status</th><th>Reason</th></tr>';
+    trades.forEach((t) => {
+      const pl = t.profitLoss != null ? t.profitLoss : 0;
+      const typeTag = (t.type || '').toLowerCase();
+      html += '<tr><td>' + fmtTime(t.openedAt) + '</td>';
+      html += '<td>' + (t.closedAt ? fmtTime(t.closedAt) : '--') + '</td>';
+      html += '<td><strong>' + escapeHtml(t.symbol || '--') + '</strong> <span class="tag tag-paper">PAPER</span></td>';
+      html += '<td><span class="tag tag-' + typeTag + '">' + escapeHtml(t.type || '--') + '</span></td>';
+      html += '<td>' + escapeHtml(t.strategy || '--') + '</td>';
+      html += '<td>' + (t.lotSize != null ? t.lotSize : '--') + '</td>';
+      html += '<td>' + fmtPrice(t.entryPrice) + '</td>';
+      html += '<td>' + fmtPrice(t.exitPrice) + '</td>';
+      html += '<td style="color:' + (pl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (t.profitLoss != null ? ((pl >= 0 ? '+' : '') + pl.toFixed(2)) : '--') + '</td>';
+      html += '<td>' + (t.profitPips != null ? t.profitPips.toFixed(1) : '--') + '</td>';
+      html += '<td>' + badge(t.status || '--', t.status === 'OPEN' ? 'var(--blue)' : (pl >= 0 ? 'var(--green)' : 'var(--red)')) + '</td>';
+      html += '<td>' + escapeHtml(t.exitReason || t.signalReason || '--') + '</td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function resetPaperTradeLogFilters() {
+  const statusSel = document.getElementById('ptTradeFilterStatus');
+  const symbolInput = document.getElementById('ptTradeFilterSymbol');
+  if (statusSel) statusSel.value = '';
+  if (symbolInput) symbolInput.value = '';
+  loadPaperTradeLog();
+}
+
+async function loadPaperStats() {
+  try {
+    const r = await api('/api/paper-trading/stats');
+    if (!r.success) throw new Error(r.message || 'Failed to load paper stats');
+    const s = r.data || {};
+    const totalTradesEl = document.getElementById('ptsTotalTrades');
+    const winRateEl = document.getElementById('ptsWinRate');
+    const totalProfitEl = document.getElementById('ptsTotalProfit');
+    const avgProfitEl = document.getElementById('ptsAvgProfit');
+    if (totalTradesEl) totalTradesEl.textContent = s.totalTrades != null ? s.totalTrades : '0';
+    if (winRateEl) {
+      winRateEl.textContent = s.winRate != null ? (s.winRate * 100).toFixed(1) + '%' : '--';
+      winRateEl.className = 'stat-value ' + (s.winRate != null && s.winRate >= 0.5 ? 'positive' : (s.winRate != null ? 'negative' : ''));
+    }
+    if (totalProfitEl) {
+      totalProfitEl.textContent = s.totalProfit != null ? '$' + num(s.totalProfit) : '--';
+      totalProfitEl.className = 'stat-value ' + (s.totalProfit != null && s.totalProfit >= 0 ? 'positive' : (s.totalProfit != null ? 'negative' : ''));
+    }
+    if (avgProfitEl) {
+      avgProfitEl.textContent = s.averageProfit != null ? '$' + num(s.averageProfit) : '--';
+      avgProfitEl.className = 'stat-value ' + (s.averageProfit != null && s.averageProfit >= 0 ? 'positive' : (s.averageProfit != null ? 'negative' : ''));
+    }
+  } catch (e) {
+    ['ptsTotalTrades','ptsWinRate','ptsTotalProfit','ptsAvgProfit'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = '--'; el.className = 'stat-value'; }
+    });
+  }
+}
+
+async function generatePaperReport() {
+  const btn = document.getElementById('ptReportBtn');
+  const resultEl = document.getElementById('ptReportResult');
+  const previewEl = document.getElementById('ptReportPreview');
+  const dateInput = document.getElementById('ptReportDate');
+  const body = {};
+  if (dateInput && dateInput.value) body.date = dateInput.value;
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Generating...';
+  if (resultEl) resultEl.innerHTML = '';
+  if (previewEl) { previewEl.style.display = 'none'; previewEl.textContent = ''; }
+
+  try {
+    const r = await api('/api/paper-trading/report', 'POST', body);
+    if (!r.success) throw new Error(r.message || 'Failed to generate paper report');
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--green)">' + escapeHtml(r.message || 'Report sent') + '</span>';
+    if (previewEl && r.preview) {
+      previewEl.textContent = typeof r.preview === 'string' ? r.preview : JSON.stringify(r.preview, null, 2);
+      previewEl.style.display = 'block';
+    }
+    wsLog('success', 'Paper trading report generated');
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(e.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
 
 async function toggleTrading() {
@@ -1250,6 +1924,25 @@ async function toggleTrading() {
     setTimeout(loadDashboard, 500);
   } catch (e) { alert(e.message); }
   finally { btn.disabled = false; }
+}
+
+async function togglePaperTrading() {
+  const btn = document.getElementById('paperTradingToggle');
+  const isRunning = btn.textContent === 'Stop Paper Trading';
+  try {
+    btn.disabled = true;
+    const r = isRunning
+      ? await api('/api/paper-trading/stop', 'POST')
+      : await api('/api/paper-trading/start', 'POST');
+    if (!r.success) {
+      alert(r.message || (isRunning ? 'Failed to stop paper trading' : 'Failed to start paper trading'));
+    }
+    setTimeout(loadPaperTradingStatus, 500);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ─── Positions ───
@@ -1568,10 +2261,13 @@ function renderStrategyCards(data) {
     const effectiveBreakeven = getNormalizedBreakeven(s.effectiveBreakeven);
     const overrideActive = Boolean(s.tradeManagement && s.tradeManagement.breakevenOverride);
     html += '<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;background:var(--bg3)">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px;flex-wrap:wrap">';
     html += '<div><strong>' + (s.displayName||s.name) + '</strong>';
     html += ' <span class="tag ' + (s.enabled?'tag-active':'') + '">' + (s.enabled?'Enabled':'Disabled') + '</span></div>';
+    html += '<div style="display:flex;gap:8px;align-items:center">';
+    html += '<button class="btn-outline btn-sm" onclick="openStrategySignals(\'' + s._id + '\', \'' + escapeJsString(s.displayName || s.name) + '\')">View Signals</button>';
     html += '<label class="toggle"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleStrategy(\'' + s._id + '\')"><span class="slider"></span></label>';
+    html += '</div>';
     html += '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + (s.description||'') + '</div>';
     html += '<div style="font-size:12px;color:var(--text2)">Symbols: ' + (s.symbols && s.symbols.length ? s.symbols.join(', ') : 'None') + '</div>';
@@ -1728,9 +2424,15 @@ async function saveStrategyBreakevenOverride(strategyId) {
 }
 
 async function loadBacktestParams() {
+  const selectedStrategy = document.getElementById('btStrategy').value;
+  if (selectedStrategy === 'ALL') {
+    document.getElementById('btParams').innerHTML =
+      '<div class="empty">Each strategy runs with its saved parameters. To tune parameters, pick a single strategy.</div>';
+    return;
+  }
   try {
     await fetchStrategyConfigs();
-    const strategy = getStrategyConfigByName(document.getElementById('btStrategy').value);
+    const strategy = getStrategyConfigByName(selectedStrategy);
     if (!strategy) {
       document.getElementById('btParams').innerHTML = '<div class="empty">No strategy configuration found</div>';
       return;
@@ -1748,23 +2450,93 @@ async function loadBacktestParams() {
 
 async function runBacktest() {
   const btn = document.getElementById('btRunBtn');
-  btn.disabled = true; btn.textContent = 'Running...';
+  const strategyType = document.getElementById('btStrategy').value;
+  const isAll = strategyType === 'ALL';
+  btn.disabled = true; btn.textContent = isAll ? 'Running all strategies...' : 'Running...';
   try {
-    const r = await api('/api/backtest/run', 'POST', {
-      symbol: document.getElementById('btSymbol').value,
-      strategyType: document.getElementById('btStrategy').value,
-      timeframe: document.getElementById('btTimeframe').value || undefined,
-      startDate: document.getElementById('btStartDate').value,
-      endDate: document.getElementById('btEndDate').value,
-      initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
-      strategyParams: collectParameterInputs('btparam'),
-    });
-    if (r.success) {
-      renderBacktestResult(r.data);
-      loadBacktestHistory();
-    } else { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>'; }
+    if (isAll) {
+      const r = await api('/api/backtest/run-all-strategies', 'POST', {
+        symbol: document.getElementById('btSymbol').value,
+        timeframe: document.getElementById('btTimeframe').value || undefined,
+        startDate: document.getElementById('btStartDate').value,
+        endDate: document.getElementById('btEndDate').value,
+        initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
+      });
+      if (r.success) {
+        renderAllStrategiesResult(r.data);
+        loadBacktestHistory();
+      } else {
+        document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>';
+      }
+    } else {
+      const r = await api('/api/backtest/run', 'POST', {
+        symbol: document.getElementById('btSymbol').value,
+        strategyType,
+        timeframe: document.getElementById('btTimeframe').value || undefined,
+        startDate: document.getElementById('btStartDate').value,
+        endDate: document.getElementById('btEndDate').value,
+        initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
+        strategyParams: collectParameterInputs('btparam'),
+      });
+      if (r.success) {
+        renderBacktestResult(r.data);
+        loadBacktestHistory();
+      } else { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>'; }
+    }
   } catch (e) { document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + e.message + '</div>'; }
   finally { btn.disabled = false; btn.textContent = 'Run Backtest'; }
+}
+
+function renderAllStrategiesResult(data) {
+  const rows = Array.isArray(data.results) ? data.results : [];
+  if (rows.length === 0) {
+    document.getElementById('btResult').innerHTML = '<div class="empty">No strategies produced results</div>';
+    return;
+  }
+  const green = 'var(--green)';
+  const red = 'var(--red)';
+  const muted = 'var(--text2)';
+  let html = '<div style="font-size:12px;color:' + muted + ';margin-bottom:8px">';
+  html += 'Symbol <strong>' + escapeHtml(data.symbol) + '</strong> · ';
+  html += new Date(data.startDate).toISOString().slice(0, 10) + ' → ' + new Date(data.endDate).toISOString().slice(0, 10);
+  html += ' · each strategy uses its saved parameters';
+  html += '</div>';
+  html += '<table><thead><tr>';
+  html += '<th>Strategy</th><th>TF</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Net P/L</th><th>Return</th>';
+  html += '</tr></thead><tbody>';
+  rows.forEach((row) => {
+    const label = escapeHtml(row.displayName || row.strategyType);
+    const tf = escapeHtml(row.timeframe || '--');
+    if (row.error) {
+      html += '<tr><td>' + label + '</td><td>' + tf + '</td><td colspan="5" style="color:' + red + '">' + escapeHtml(row.error) + '</td></tr>';
+      return;
+    }
+    const s = row.summary || {};
+    const wr = typeof s.winRate === 'number' ? (s.winRate * 100).toFixed(1) + '%' : '--';
+    const wrColor = typeof s.winRate === 'number' && s.winRate >= 0.5 ? green : red;
+    const pf = (s.profitFactor !== undefined && s.profitFactor !== null) ? s.profitFactor : '--';
+    const pfColor = typeof s.profitFactor === 'number' && s.profitFactor >= 1 ? green : red;
+    const net = typeof s.netProfitMoney === 'number' ? '$' + num(s.netProfitMoney) : '--';
+    const netColor = typeof s.netProfitMoney === 'number' && s.netProfitMoney >= 0 ? green : red;
+    const ret = (s.returnPercent !== undefined && s.returnPercent !== null) ? s.returnPercent + '%' : '--';
+    const retColor = typeof s.returnPercent === 'number' && s.returnPercent >= 0 ? green : red;
+    html += '<tr>';
+    html += '<td>' + label + '</td>';
+    html += '<td>' + tf + '</td>';
+    html += '<td>' + (s.totalTrades !== undefined ? s.totalTrades : '--') + '</td>';
+    html += '<td style="color:' + wrColor + '">' + wr + '</td>';
+    html += '<td style="color:' + pfColor + '">' + pf + '</td>';
+    html += '<td style="color:' + netColor + '">' + net + '</td>';
+    html += '<td style="color:' + retColor + '">' + ret + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('btResult').innerHTML = html;
+  const canvas = document.getElementById('equityCanvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
 function switchBacktestMode(mode) {
@@ -1888,18 +2660,31 @@ async function loadBacktestHistory() {
     if (!r.success) return;
     const el = document.getElementById('btHistory');
     if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No previous backtests</div>'; return; }
-    let html = '<table><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th></tr>';
+    let html = '<table><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th><th>Action</th></tr>';
     r.data.forEach(b => {
       const s = b.summary;
       html += '<tr><td>' + fmtTime(b.createdAt) + '</td><td>' + b.symbol + '</td><td>' + b.strategy + '</td>';
       html += '<td>' + s.totalTrades + '</td>';
       html += '<td>' + (s.winRate*100).toFixed(1) + '%</td>';
       html += '<td>' + s.profitFactor + '</td>';
-      html += '<td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td></tr>';
+      html += '<td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td>';
+      html += '<td><button class="btn-danger btn-sm" onclick="deleteBacktestResult(\'' + b._id + '\', \'' + escapeJsString(b.symbol + ' / ' + b.strategy) + '\')">Delete</button></td></tr>';
     });
     html += '</table>';
     el.innerHTML = html;
   } catch (e) {}
+}
+
+async function deleteBacktestResult(id, label) {
+  if (!confirm('Delete backtest result' + (label ? ' for ' + label : '') + '? This cannot be undone.')) return;
+  try {
+    const r = await api('/api/backtest/results/' + id, 'DELETE');
+    if (!r.success) throw new Error(r.message || 'Failed to delete backtest result');
+    wsLog('success', 'Backtest result deleted');
+    await loadBacktestHistory();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 // ─── Optimizer ───
@@ -1910,8 +2695,31 @@ function renderBatchProgress(progress) {
   if (!box || !fill || !text) return;
   box.style.display = '';
   fill.style.width = (progress.percent || 0) + '%';
-  text.textContent = (progress.current || 0) + '/' + (progress.total || 0) + ' (' + (progress.percent || 0) + '%)'
-    + ((progress.currentStrategy && progress.currentSymbol) ? (' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol) : '');
+  let label;
+  if (progress.runModel === 'shared_portfolio' || progress.phase === 'simulate' || progress.phase === 'prepare') {
+    const phaseLabel = progress.phase === 'simulate' ? 'simulating' : progress.phase === 'prepare' ? 'preparing data' : 'queued';
+    label = '[shared] ' + phaseLabel + ' (' + (progress.percent || 0) + '%)';
+    if (progress.phase === 'prepare' && progress.currentSymbol && progress.currentStrategy) {
+      label += ' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol;
+    } else if (progress.phase === 'simulate') {
+      if (typeof progress.balance !== 'undefined') label += ' | balance $' + num(progress.balance);
+      if (typeof progress.openPositions !== 'undefined') label += ' | open ' + progress.openPositions;
+      if (typeof progress.trades !== 'undefined') label += ' | trades ' + progress.trades;
+    }
+  } else {
+    label = (progress.current || 0) + '/' + (progress.total || 0) + ' (' + (progress.percent || 0) + '%)'
+      + ((progress.currentStrategy && progress.currentSymbol) ? (' - ' + progress.currentStrategy + ' @ ' + progress.currentSymbol) : '');
+  }
+  text.textContent = label;
+}
+
+function toggleForcedTimeframeVisibility() {
+  const mode = document.getElementById('btBatchTimeframeMode').value;
+  const group = document.getElementById('btBatchForcedTimeframeGroup');
+  const note = document.getElementById('btBatchForcedTimeframeNote');
+  const show = mode === 'forced_timeframe';
+  if (group) group.style.display = show ? '' : 'none';
+  if (note) note.style.display = show ? '' : 'none';
 }
 
 function resetBatchResultFilters() {
@@ -1930,18 +2738,30 @@ async function runBatchBacktest() {
   activeBatchResultItemsById = {};
   closeBatchChildModal();
   document.getElementById('btBatchOverview').innerHTML = '<div class="empty">Batch job is starting...</div>';
+  const portfolioEl = document.getElementById('btBatchPortfolioSummary');
+  if (portfolioEl) portfolioEl.innerHTML = '<div class="empty">Waiting for portfolio summary...</div>';
   document.getElementById('btBatchResults').innerHTML = '<div class="empty">Waiting for results...</div>';
   document.getElementById('btBatchStrategyAgg').innerHTML = '<div class="empty">Waiting for strategy summary...</div>';
   document.getElementById('btBatchSymbolAgg').innerHTML = '<div class="empty">Waiting for symbol summary...</div>';
   document.getElementById('btBatchReport').innerHTML = '<div class="empty">Waiting for report...</div>';
 
+  const timeframeMode = document.getElementById('btBatchTimeframeMode').value;
+  const runModel = document.getElementById('btBatchRunModel').value || 'independent';
+  const body = {
+    startDate: document.getElementById('btBatchStartDate').value,
+    endDate: document.getElementById('btBatchEndDate').value,
+    initialBalance: parseInt(document.getElementById('btBatchBalance').value, 10) || 10000,
+    strategyScopeMode: document.getElementById('btBatchStrategyScopeMode').value,
+    timeframeMode,
+    runModel,
+  };
+  if (timeframeMode === 'forced_timeframe') {
+    body.forcedTimeframe = document.getElementById('btBatchForcedTimeframe').value;
+  }
+  applyRunModelVisibility(runModel);
+
   try {
-    const response = await api('/api/backtest/batch/run', 'POST', {
-      startDate: document.getElementById('btBatchStartDate').value,
-      endDate: document.getElementById('btBatchEndDate').value,
-      initialBalance: parseInt(document.getElementById('btBatchBalance').value, 10) || 10000,
-      timeframeMode: document.getElementById('btBatchTimeframeMode').value,
-    });
+    const response = await api('/api/backtest/batch/run', 'POST', body);
 
     if (!response.success) {
       document.getElementById('btBatchOverview').innerHTML = '<div class="empty" style="color:var(--red)">' + (response.message || 'Failed to start batch backtest') + '</div>';
@@ -1971,6 +2791,7 @@ function scheduleBatchJobPoll(jobId) {
       if (!response.success) return;
       const job = response.data;
       renderBatchOverview(job);
+      renderBatchPortfolioSummary(job);
       if (job.progress) renderBatchProgress(job.progress);
       renderBatchAggregateTable('btBatchStrategyAgg', job.aggregate && job.aggregate.byStrategy ? job.aggregate.byStrategy : [], 'strategy');
       renderBatchAggregateTable('btBatchSymbolAgg', job.aggregate && job.aggregate.bySymbol ? job.aggregate.bySymbol : [], 'symbol');
@@ -1996,6 +2817,7 @@ async function loadBatchJob(jobId) {
     const job = response.data;
 
     renderBatchOverview(job);
+    renderBatchPortfolioSummary(job);
     if (job.progress) renderBatchProgress(job.progress);
     renderBatchAggregateTable('btBatchStrategyAgg', job.aggregate && job.aggregate.byStrategy ? job.aggregate.byStrategy : [], 'strategy');
     renderBatchAggregateTable('btBatchSymbolAgg', job.aggregate && job.aggregate.bySymbol ? job.aggregate.bySymbol : [], 'symbol');
@@ -2029,20 +2851,53 @@ async function loadBatchJobHistory() {
       return;
     }
 
-    let html = '<table><tr><th>Date</th><th>Status</th><th>Scope</th><th>Runs</th><th>Profitables</th><th>Action</th></tr>';
+    let html = '<table><tr><th>Date</th><th>Status</th><th>Run Model</th><th>Scope Mode</th><th>TF Mode</th><th>Coverage</th><th>Runs</th><th>Profitables</th><th>Return %</th><th>Action</th></tr>';
     response.data.forEach((job) => {
       const totalRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.totalRuns : (job.progress ? job.progress.total : '--');
       const profitableRuns = job.aggregate && job.aggregate.totals ? job.aggregate.totals.profitableRuns : '--';
+      let returnPct = '--';
+      let returnTone = 'var(--text)';
+      if (job.runModel === 'shared_portfolio' && job.portfolioResult && job.portfolioResult.summary) {
+        returnPct = num(job.portfolioResult.summary.returnPercent) + '%';
+        returnTone = job.portfolioResult.summary.returnPercent >= 0 ? 'var(--green)' : 'var(--red)';
+      } else {
+        const portfolio = job.aggregate && job.aggregate.portfolio ? job.aggregate.portfolio : null;
+        if (portfolio && portfolio.scoredRuns > 0) {
+          returnPct = num(portfolio.returnPercent) + '%';
+          returnTone = portfolio.returnPercent >= 0 ? 'var(--green)' : 'var(--red)';
+        }
+      }
       html += '<tr><td>' + fmtTime(job.createdAt) + '</td>';
       html += '<td>' + batchStatusBadge(job.status) + '</td>';
-      html += '<td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols x ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td>';
+      html += '<td>' + escapeHtml(formatRunModelLabel(job.runModel)) + '</td>';
+      html += '<td>' + escapeHtml(formatScopeModeLabel(job.strategyScopeMode)) + '</td>';
+      html += '<td>' + escapeHtml(formatTimeframeModeLabel(job)) + '</td>';
+      html += '<td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' × ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0)) + '</td>';
       html += '<td>' + totalRuns + '</td>';
       html += '<td>' + profitableRuns + '</td>';
+      html += '<td style="color:' + returnTone + '">' + returnPct + '</td>';
       html += '<td><button class="btn-outline btn-sm" onclick="switchBacktestMode(\'batch\'); loadBatchJob(\'' + job.jobId + '\')">Open</button></td></tr>';
     });
     html += '</table>';
     el.innerHTML = html;
   } catch (e) {}
+}
+
+function formatScopeModeLabel(mode) {
+  if (mode === 'all_strategies') return 'All Strategies × All Symbols';
+  return 'Enabled + Assigned Only';
+}
+
+function formatRunModelLabel(runModel) {
+  if (runModel === 'shared_portfolio') return 'Shared Portfolio Simulation';
+  return 'Independent Sleeve Aggregation';
+}
+
+function formatTimeframeModeLabel(job) {
+  if (job && job.timeframeMode === 'forced_timeframe') {
+    return 'Forced (' + (job.forcedTimeframe || '?') + ')';
+  }
+  return 'Strategy Default';
 }
 
 function renderBatchOverview(job) {
@@ -2051,10 +2906,12 @@ function renderBatchOverview(job) {
   let html = '<table>';
   html += '<tr><td style="color:var(--text2)">Job ID</td><td>' + job.jobId + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Status</td><td>' + batchStatusBadge(job.status) + '</td></tr>';
-  html += '<tr><td style="color:var(--text2)">Run Model</td><td>' + (job.runModel || '--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Run Model</td><td>' + escapeHtml(formatRunModelLabel(job.runModel)) + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Period</td><td>' + fmtTime(job.period && job.period.start) + ' -> ' + fmtTime(job.period && job.period.end) + '</td></tr>';
-  html += '<tr><td style="color:var(--text2)">Initial Balance</td><td>$' + num(job.initialBalance) + '</td></tr>';
-  html += '<tr><td style="color:var(--text2)">Scope</td><td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols x ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Initial Balance / Run</td><td>$' + num(job.initialBalance) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Strategy Scope</td><td>' + escapeHtml(formatScopeModeLabel(job.strategyScopeMode)) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Timeframe Mode</td><td>' + escapeHtml(formatTimeframeModeLabel(job)) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Coverage</td><td>' + ((job.scope && job.scope.symbols ? job.scope.symbols.length : 0) + ' symbols × ' + (job.scope && job.scope.strategies ? job.scope.strategies.length : 0) + ' strategies') + '</td></tr>';
   if (job.progress) {
     html += '<tr><td style="color:var(--text2)">Progress</td><td>' + job.progress.current + '/' + job.progress.total + ' (' + job.progress.percent + '%)</td></tr>';
   }
@@ -2070,6 +2927,173 @@ function renderBatchOverview(job) {
   }
   html += '</table>';
   el.innerHTML = html;
+}
+
+function portfolioCell(label, value, tone, sub) {
+  const toneClass = tone === 'pos' ? ' pos' : tone === 'neg' ? ' neg' : '';
+  let html = '<div class="portfolio-cell">';
+  html += '<div class="label">' + escapeHtml(label) + '</div>';
+  html += '<div class="value' + toneClass + '">' + value + '</div>';
+  if (sub) html += '<div class="sub">' + sub + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderBatchPortfolioSummary(job) {
+  const runModel = (job && job.runModel) || 'independent';
+  applyRunModelVisibility(runModel);
+
+  if (runModel === 'shared_portfolio') {
+    renderSharedPortfolioSummary(job);
+    return;
+  }
+
+  const el = document.getElementById('btBatchPortfolioSummary');
+  if (!el) return;
+  const portfolio = job && job.aggregate && job.aggregate.portfolio ? job.aggregate.portfolio : null;
+  if (!portfolio || portfolio.scoredRuns === 0) {
+    el.innerHTML = '<div class="empty">' + (portfolio ? 'No scored strategy runs yet — portfolio summary will appear when at least one child completes with trades.' : 'Run a batch job to see the portfolio summary.') + '</div>';
+    return;
+  }
+
+  const winPct = (portfolio.winRate * 100).toFixed(2);
+  const lossPct = (portfolio.lossRate * 100).toFixed(2);
+  const returnTone = portfolio.returnPercent > 0 ? 'pos' : portfolio.returnPercent < 0 ? 'neg' : '';
+  const netTone = portfolio.netProfitMoney > 0 ? 'pos' : portfolio.netProfitMoney < 0 ? 'neg' : '';
+  const pfTone = portfolio.profitFactor >= 1 ? 'pos' : portfolio.profitFactor > 0 ? 'neg' : '';
+
+  let grid = '<div class="portfolio-grid">';
+  grid += portfolioCell('Starting Capital', '$' + num(portfolio.totalStartingBalance), '', '$' + num(portfolio.initialBalancePerRun) + ' × ' + portfolio.scoredRuns + ' runs');
+  grid += portfolioCell('Ending Capital', '$' + num(portfolio.totalEndingBalance), netTone);
+  grid += portfolioCell('Net P/L', '$' + num(portfolio.netProfitMoney), netTone);
+  grid += portfolioCell('Return %', num(portfolio.returnPercent) + '%', returnTone);
+  grid += portfolioCell('Total Trades', num(portfolio.totalTrades), '', portfolio.winningTrades + ' W / ' + portfolio.losingTrades + ' L');
+  grid += portfolioCell('Win Rate', winPct + '%', '', 'Aggregate (wins / total trades)');
+  grid += portfolioCell('Loss Rate', lossPct + '%', '', 'Aggregate (losses / total trades)');
+  grid += portfolioCell('Profit Factor', num(portfolio.profitFactor), pfTone, '$' + num(portfolio.grossProfitMoney) + ' / $' + num(portfolio.grossLossMoney));
+  grid += portfolioCell('Avg Trade', '$' + num(portfolio.avgTradeMoney), portfolio.avgTradeMoney >= 0 ? 'pos' : 'neg');
+  grid += portfolioCell('Avg Max DD', num(portfolio.avgMaxDrawdownPercent) + '%', '', 'Mean per-run max drawdown');
+  grid += portfolioCell('Worst Run DD', num(portfolio.worstRunMaxDrawdownPercent) + '%', portfolio.worstRunMaxDrawdownPercent >= 25 ? 'neg' : '', 'Worst single strategy sleeve');
+  grid += portfolioCell('Profitable Runs', portfolio.profitableRuns + ' / ' + portfolio.scoredRuns, portfolio.profitableRuns > 0 ? 'pos' : '', portfolio.losingRuns + ' losing · ' + portfolio.noTradeRuns + ' no trades');
+  grid += '</div>';
+
+  grid += '<div class="portfolio-note">Portfolio math uses <strong>total wins / total trades</strong> for win rate, <strong>aggregated gross profit / gross loss</strong> for profit factor, and <strong>combined capital</strong> for return %. Max drawdown is reported as a worst-sleeve value plus the mean across sleeves (upper-bound portfolio DD assuming simultaneous drawdowns).</div>';
+
+  el.innerHTML = grid;
+}
+
+function updateRunModelHint() {
+  const runModel = document.getElementById('btBatchRunModel').value || 'independent';
+  const hint = document.getElementById('btBatchRunModelHint');
+  if (!hint) return;
+  if (runModel === 'shared_portfolio') {
+    hint.innerHTML = '<strong>Shared Portfolio Simulation</strong>: ONE initial balance, ONE equity curve, ONE drawdown. Signals from every combination are processed in chronological order; position sizing uses the CURRENT shared balance at signal time. Portfolio-level concurrency cap applies.';
+  } else {
+    hint.innerHTML = '<strong>Independent Sleeve Aggregation</strong>: each combination trades its own copy of the initial balance; totals are aggregated after the fact (true sums, not averaged percentages).';
+  }
+}
+
+function applyRunModelVisibility(runModel) {
+  const independentCard = document.getElementById('btBatchPortfolioCard');
+  const sharedCard = document.getElementById('btBatchSharedCard');
+  const portfolioTitle = document.getElementById('btBatchPortfolioTitle');
+  const portfolioSubtitle = document.getElementById('btBatchPortfolioSubtitle');
+  if (runModel === 'shared_portfolio') {
+    if (independentCard) independentCard.style.display = 'none';
+    if (sharedCard) sharedCard.style.display = '';
+  } else {
+    if (independentCard) independentCard.style.display = '';
+    if (sharedCard) sharedCard.style.display = 'none';
+    if (portfolioTitle) portfolioTitle.textContent = 'Portfolio Summary — Independent Sleeve Aggregation';
+    if (portfolioSubtitle) portfolioSubtitle.textContent = 'True aggregate math across all scored strategy runs (not averaged percentages). Each sleeve starts with its own copy of the initial balance.';
+  }
+}
+
+function renderSharedPortfolioSummary(job) {
+  const summaryEl = document.getElementById('btBatchSharedSummary');
+  const contribEl = document.getElementById('btBatchSharedContributions');
+  if (!summaryEl || !contribEl) return;
+  const portfolioResult = job && job.portfolioResult ? job.portfolioResult : null;
+  if (!portfolioResult || !portfolioResult.summary) {
+    summaryEl.innerHTML = '<div class="empty">Shared portfolio simulation is still running — the summary will appear once the event walker finishes.</div>';
+    contribEl.innerHTML = '';
+    return;
+  }
+  const s = portfolioResult.summary;
+  const rejected = portfolioResult.rejectedSignals || { noCapacity: 0, zeroSize: 0 };
+  const combosUsed = typeof portfolioResult.combinationsUsed === 'number'
+    ? portfolioResult.combinationsUsed
+    : (Array.isArray(portfolioResult.combinationsUsed) ? portfolioResult.combinationsUsed.length : 0);
+  const netTone = s.netProfitMoney > 0 ? 'pos' : s.netProfitMoney < 0 ? 'neg' : '';
+  const returnTone = s.returnPercent > 0 ? 'pos' : s.returnPercent < 0 ? 'neg' : '';
+  const pfTone = s.profitFactor >= 1 ? 'pos' : s.profitFactor > 0 ? 'neg' : '';
+  const ddTone = s.maxDrawdownPercent >= 25 ? 'neg' : '';
+
+  let grid = '<div class="portfolio-grid">';
+  grid += portfolioCell('Initial Balance', '$' + num(s.initialBalance), '', 'Shared across the entire portfolio');
+  grid += portfolioCell('Final Balance', '$' + num(s.finalBalance), netTone);
+  grid += portfolioCell('Net P/L', '$' + num(s.netProfitMoney), netTone);
+  grid += portfolioCell('Return %', num(s.returnPercent) + '%', returnTone);
+  grid += portfolioCell('Total Trades', num(s.totalTrades), '', s.winningTrades + ' W / ' + s.losingTrades + ' L');
+  grid += portfolioCell('Win Rate', (s.winRate * 100).toFixed(2) + '%', '', 'Wins / total trades');
+  grid += portfolioCell('Loss Rate', (s.lossRate * 100).toFixed(2) + '%', '', 'Losses / total trades');
+  grid += portfolioCell('Profit Factor', num(s.profitFactor), pfTone, '$' + num(s.grossProfitMoney) + ' / $' + num(s.grossLossMoney));
+  grid += portfolioCell('Avg Trade', '$' + num(s.averageTradeMoney), s.averageTradeMoney >= 0 ? 'pos' : 'neg');
+  grid += portfolioCell('Max Drawdown', num(s.maxDrawdownPercent) + '%', ddTone, 'Real portfolio-level peak-to-trough');
+  grid += portfolioCell('Max Cons Wins', num(s.maxConsecutiveWins));
+  grid += portfolioCell('Max Cons Losses', num(s.maxConsecutiveLosses));
+  grid += portfolioCell('Concurrency Cap', num(portfolioResult.maxConcurrentPositions || 0), '', 'Max simultaneous open positions');
+  grid += portfolioCell('Rejected (No Capacity)', num(rejected.noCapacity || 0), rejected.noCapacity > 0 ? 'neg' : '', 'Signals denied because all slots were full');
+  grid += portfolioCell('Rejected (Zero Size)', num(rejected.zeroSize || 0), rejected.zeroSize > 0 ? 'neg' : '', 'Signals sized to 0 lots at the shared balance');
+  grid += portfolioCell('Combinations Used', combosUsed + ' / ' + (portfolioResult.combinationsRequested || 0), '', 'Only those with sufficient data');
+  grid += '</div>';
+
+  grid += '<div class="portfolio-note"><strong>Shared Portfolio Simulation</strong>: these numbers describe a real chronological simulation against ONE account — position sizing always uses the current shared balance, not a per-sleeve copy.</div>';
+
+  summaryEl.innerHTML = grid;
+
+  let contribHtml = '';
+  const perStrategy = portfolioResult.perStrategyContribution || [];
+  const perSymbol = portfolioResult.perSymbolContribution || [];
+  if (perStrategy.length > 0 || perSymbol.length > 0) {
+    contribHtml += '<div class="grid grid-2" style="margin-top:12px">';
+    contribHtml += '<div>';
+    contribHtml += '<div style="font-weight:600;margin-bottom:6px">Per-Strategy Contribution</div>';
+    if (perStrategy.length === 0) {
+      contribHtml += '<div class="empty">No strategy contributed trades.</div>';
+    } else {
+      contribHtml += '<table><tr><th>Strategy</th><th>Trades</th><th>Win %</th><th>Net P/L</th><th>PF</th></tr>';
+      perStrategy.forEach((item) => {
+        const tone = item.netMoney > 0 ? 'var(--green)' : item.netMoney < 0 ? 'var(--red)' : 'var(--text)';
+        contribHtml += '<tr><td>' + escapeHtml(item.strategy) + '</td>';
+        contribHtml += '<td>' + num(item.trades) + '</td>';
+        contribHtml += '<td>' + (item.winRate * 100).toFixed(2) + '%</td>';
+        contribHtml += '<td style="color:' + tone + '">$' + num(item.netMoney) + '</td>';
+        contribHtml += '<td>' + num(item.profitFactor) + '</td></tr>';
+      });
+      contribHtml += '</table>';
+    }
+    contribHtml += '</div>';
+    contribHtml += '<div>';
+    contribHtml += '<div style="font-weight:600;margin-bottom:6px">Per-Symbol Contribution</div>';
+    if (perSymbol.length === 0) {
+      contribHtml += '<div class="empty">No symbol contributed trades.</div>';
+    } else {
+      contribHtml += '<table><tr><th>Symbol</th><th>Trades</th><th>Win %</th><th>Net P/L</th><th>PF</th></tr>';
+      perSymbol.forEach((item) => {
+        const tone = item.netMoney > 0 ? 'var(--green)' : item.netMoney < 0 ? 'var(--red)' : 'var(--text)';
+        contribHtml += '<tr><td>' + escapeHtml(item.symbol) + '</td>';
+        contribHtml += '<td>' + num(item.trades) + '</td>';
+        contribHtml += '<td>' + (item.winRate * 100).toFixed(2) + '%</td>';
+        contribHtml += '<td style="color:' + tone + '">$' + num(item.netMoney) + '</td>';
+        contribHtml += '<td>' + num(item.profitFactor) + '</td></tr>';
+      });
+      contribHtml += '</table>';
+    }
+    contribHtml += '</div>';
+    contribHtml += '</div>';
+  }
+  contribEl.innerHTML = contribHtml;
 }
 
 async function loadBatchJobResults(jobId, page=1) {
@@ -2467,6 +3491,7 @@ function renderOptResult(data) {
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
   html += '<button class="btn-primary btn-sm" onclick="applyBestOptimizerParams()">Apply Best Params</button>';
   html += '<button class="btn-outline btn-sm" onclick="rerunBestOptimizerBacktest()">Run Backtest With Best Params</button>';
+  html += '<button class="btn-outline btn-sm" onclick="openOptimizerFullResultsModal()">View All Results</button>';
   html += '</div>';
   html += '</div>';
 
@@ -2865,6 +3890,279 @@ async function deleteRiskProfile(id) {
   }
 }
 
+// ─── Diagnostics Page ───
+const DIAG_STATE = { rows: [], autoStream: true };
+
+function clearDiagnosticsFilters() {
+  ['diagFilterSymbol','diagFilterStrategy','diagFilterStage','diagFilterStatus','diagFilterScope','diagFilterStart','diagFilterEnd','diagFilterSearch']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  loadDiagnostics();
+}
+
+function getDiagnosticsFilters() {
+  const filters = {};
+  const val = (id) => {
+    const el = document.getElementById(id);
+    return el && el.value ? String(el.value).trim() : '';
+  };
+  const s = val('diagFilterSymbol');
+  if (s) filters.symbol = s;
+  const strat = val('diagFilterStrategy');
+  if (strat) filters.strategy = strat;
+  const stage = val('diagFilterStage');
+  if (stage) filters.stage = stage;
+  const status = val('diagFilterStatus');
+  if (status) filters.status = status;
+  const scope = val('diagFilterScope');
+  if (scope) filters.scope = scope;
+  const start = val('diagFilterStart');
+  if (start) filters.startDate = new Date(start).toISOString();
+  const end = val('diagFilterEnd');
+  if (end) filters.endDate = new Date(end).toISOString();
+  const q = val('diagFilterSearch');
+  if (q) filters.q = q;
+  return filters;
+}
+
+function buildDiagQueryString(filters) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([k, v]) => { if (v !== '' && v != null) params.append(k, v); });
+  const s = params.toString();
+  return s ? ('?' + s) : '';
+}
+
+async function loadDiagnostics() {
+  const rowsEl = document.getElementById('diagRows');
+  const countEl = document.getElementById('diagCount');
+  if (!rowsEl) return;
+  rowsEl.innerHTML = '<tr><td colspan="11" class="empty">Loading...</td></tr>';
+
+  const filters = getDiagnosticsFilters();
+  const qs = buildDiagQueryString({ ...filters, limit: 200 });
+
+  try {
+    const [auditsResp, statsResp] = await Promise.all([
+      api('/api/diagnostics/audits' + qs),
+      api('/api/diagnostics/stats' + buildDiagQueryString({ ...filters, limit: 5000 })),
+    ]);
+
+    if (auditsResp && auditsResp.success) {
+      DIAG_STATE.rows = auditsResp.data || [];
+      renderDiagnosticsRows(DIAG_STATE.rows);
+      if (countEl) {
+        const pag = auditsResp.pagination || {};
+        countEl.textContent = `Showing ${DIAG_STATE.rows.length} of ${pag.total ?? DIAG_STATE.rows.length} events`;
+      }
+    } else {
+      rowsEl.innerHTML = '<tr><td colspan="11" class="empty" style="color:var(--red)">'
+        + escapeHtml((auditsResp && auditsResp.message) || 'Failed to load audits') + '</td></tr>';
+    }
+
+    if (statsResp && statsResp.success) {
+      renderDiagnosticsStats(statsResp.data);
+    }
+  } catch (e) {
+    rowsEl.innerHTML = '<tr><td colspan="11" class="empty" style="color:var(--red)">'
+      + escapeHtml(e.message) + '</td></tr>';
+  }
+
+  const autoEl = document.getElementById('diagAutoStream');
+  if (autoEl) DIAG_STATE.autoStream = autoEl.checked;
+}
+
+function renderDiagnosticsRows(rows) {
+  const rowsEl = document.getElementById('diagRows');
+  if (!rowsEl) return;
+  if (!rows || rows.length === 0) {
+    rowsEl.innerHTML = '<tr><td colspan="11" class="empty">No events match the current filters.</td></tr>';
+    return;
+  }
+
+  const stageTag = (stage) => {
+    const s = String(stage || '').toUpperCase();
+    if (s === 'TRIGGERED' || s === 'ORDER_OPENED') return 'tag-green';
+    if (s === 'FILTERED' || s === 'DUPLICATE' || s === 'NO_SETUP' || s === 'SETUP_FOUND') return 'tag-neutral';
+    if (s === 'RISK_REJECTED' || s === 'PREFLIGHT_REJECTED' || s === 'ORDER_FAILED') return 'tag-red';
+    if (s === 'ORDER_CLOSED') return 'tag-blue';
+    if (s === 'POSITION_MANAGED') return 'tag-neutral';
+    return '';
+  };
+
+  const statusColor = (status) => {
+    const s = String(status || '').toUpperCase();
+    if (s === 'OK') return 'var(--green)';
+    if (s === 'REJECTED' || s === 'FAILED') return 'var(--red)';
+    if (s === 'WARN') return 'var(--yellow)';
+    return 'var(--text2)';
+  };
+
+  let html = '';
+  rows.forEach((r, idx) => {
+    const time = r.timestamp ? new Date(r.timestamp).toLocaleString() : '--';
+    const conf = (typeof r.confidence === 'number' && isFinite(r.confidence))
+      ? (r.confidence > 1 ? r.confidence.toFixed(0) : (r.confidence * 100).toFixed(0)) + '%'
+      : '—';
+    html += '<tr style="cursor:pointer" onclick="openDiagnosticsDetail(' + idx + ')">';
+    html += '<td>' + escapeHtml(time) + '</td>';
+    html += '<td><strong>' + escapeHtml(r.symbol || '--') + '</strong></td>';
+    html += '<td>' + escapeHtml(r.strategy || '--') + '</td>';
+    html += '<td>' + escapeHtml(r.module || '--') + '</td>';
+    html += '<td><span class="tag ' + stageTag(r.stage) + '">' + escapeHtml(r.stage || '--') + '</span></td>';
+    html += '<td style="color:' + statusColor(r.status) + '">' + escapeHtml(r.status || '--') + '</td>';
+    html += '<td>' + escapeHtml(r.signal || '--') + '</td>';
+    html += '<td>' + conf + '</td>';
+    html += '<td>' + escapeHtml(r.reasonCode || '--') + '</td>';
+    html += '<td style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+         + escapeHtml(r.reasonText || r.filterReason || '--') + '</td>';
+    html += '<td>' + escapeHtml(r.scope || '--') + '</td>';
+    html += '</tr>';
+  });
+  rowsEl.innerHTML = html;
+}
+
+function renderDiagnosticsStats(stats) {
+  if (!stats) return;
+  const byStage = {};
+  (stats.byStage || []).forEach(x => { byStage[x.key] = x.count; });
+
+  const totalEl = document.getElementById('diagStatTotal');
+  if (totalEl) totalEl.textContent = stats.total ?? 0;
+  const triggeredEl = document.getElementById('diagStatTriggered');
+  if (triggeredEl) triggeredEl.textContent = byStage.TRIGGERED || 0;
+  const rejectedEl = document.getElementById('diagStatRejected');
+  if (rejectedEl) rejectedEl.textContent = (byStage.RISK_REJECTED || 0) + (byStage.PREFLIGHT_REJECTED || 0) + (byStage.ORDER_FAILED || 0);
+  const openedEl = document.getElementById('diagStatOpened');
+  if (openedEl) openedEl.textContent = byStage.ORDER_OPENED || 0;
+
+  const renderList = (id, items) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!items || items.length === 0) {
+      el.innerHTML = '<div class="empty" style="padding:4px;font-size:12px">None</div>';
+      return;
+    }
+    el.innerHTML = items.slice(0, 8).map(it =>
+      '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border)">'
+      + '<span>' + escapeHtml(it.key) + '</span>'
+      + '<span style="color:var(--text2)">' + it.count + '</span>'
+      + '</div>'
+    ).join('');
+  };
+  renderList('diagTopNoSetup', stats.topNoSetup);
+  renderList('diagTopFiltered', stats.topFiltered);
+  const merged = [...(stats.topRiskReject || []), ...(stats.topExecReject || [])]
+    .sort((a, b) => b.count - a.count);
+  renderList('diagTopRejections', merged);
+}
+
+function openDiagnosticsDetail(idx) {
+  const row = DIAG_STATE.rows[idx];
+  if (!row) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay show';
+  overlay.style.display = 'flex';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const formatted = JSON.stringify(row, null, 2);
+  overlay.innerHTML =
+    '<div class="modal" style="max-width:720px;max-height:80vh;overflow:auto">'
+    + '<div class="card-header"><span class="card-title">Decision Audit Detail</span>'
+    + '<button class="btn-outline btn-sm" onclick="this.closest(\'.modal-overlay\').remove()">Close</button></div>'
+    + '<div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px">'
+    + '<span><strong>Stage:</strong> ' + escapeHtml(row.stage || '--') + '</span>'
+    + '<span><strong>Status:</strong> ' + escapeHtml(row.status || '--') + '</span>'
+    + '<span><strong>Symbol:</strong> ' + escapeHtml(row.symbol || '--') + '</span>'
+    + '<span><strong>Strategy:</strong> ' + escapeHtml(row.strategy || '--') + '</span>'
+    + '<span><strong>Scope:</strong> ' + escapeHtml(row.scope || '--') + '</span>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'
+    + escapeHtml(row.reasonText || '') + '</div>'
+    + '<pre style="background:var(--bg3);padding:12px;border-radius:6px;font-size:12px;overflow:auto;max-height:55vh">'
+    + escapeHtml(formatted) + '</pre>'
+    + '</div>';
+  document.body.appendChild(overlay);
+}
+
+function handleDiagnosticsWsEvent(msg) {
+  if (!DIAG_STATE.autoStream) return;
+  const page = document.getElementById('page-diagnostics');
+  if (!page || !page.classList.contains('active')) return;
+  if (!msg || !msg.data) return;
+  DIAG_STATE.rows = [msg.data, ...DIAG_STATE.rows].slice(0, 200);
+  renderDiagnosticsRows(DIAG_STATE.rows);
+}
+window.loadDiagnostics = loadDiagnostics;
+window.clearDiagnosticsFilters = clearDiagnosticsFilters;
+window.openDiagnosticsDetail = openDiagnosticsDetail;
+
+async function loadSymbolResolution() {
+  const summary = document.getElementById('symbolResolutionSummary');
+  const rows = document.getElementById('symbolResolutionRows');
+  if (!rows) return;
+  rows.innerHTML = '<tr><td colspan="6" class="empty">Loading...</td></tr>';
+  try {
+    const r = await api('/api/trading/symbols');
+    if (!r.success || !r.data) {
+      rows.innerHTML = '<tr><td colspan="6" class="empty">Failed to load</td></tr>';
+      return;
+    }
+    const list = r.data.symbols || [];
+    const okCount = list.filter((s) => s.resolutionStatus === 'ok').length;
+    const missingCount = list.filter((s) => s.resolutionStatus === 'missing').length;
+    const unknownCount = list.filter((s) => s.resolutionStatus === 'unknown').length;
+    const errorCount = list.filter((s) => s.resolutionStatus === 'error').length;
+    const mt5Note = r.data.mt5Connected ? '' : ' <span style="color:var(--text2)">(MT5 not connected — resolution not yet run)</span>';
+    if (summary) {
+      summary.innerHTML =
+        '<strong>' + list.length + '</strong> symbols · ' +
+        '<span style="color:var(--green)">' + okCount + ' ok</span> · ' +
+        '<span style="color:var(--red)">' + missingCount + ' missing</span> · ' +
+        '<span style="color:var(--text2)">' + unknownCount + ' untested</span>' +
+        (errorCount ? ' · <span style="color:var(--orange,#e9a84c)">' + errorCount + ' errors</span>' : '') +
+        mt5Note;
+    }
+    if (list.length === 0) {
+      rows.innerHTML = '<tr><td colspan="6" class="empty">No symbols configured</td></tr>';
+      return;
+    }
+    const statusColor = (s) => (
+      s === 'ok' ? 'var(--green)' :
+      s === 'missing' ? 'var(--red)' :
+      s === 'error' ? 'var(--orange,#e9a84c)' : 'var(--text2)'
+    );
+    rows.innerHTML = list.map((s) => (
+      '<tr>' +
+      '<td><strong>' + s.canonical + '</strong></td>' +
+      '<td>' + (s.category || '--') + '</td>' +
+      '<td>' + (s.strategyType || '--') + '</td>' +
+      '<td>' + (s.broker || '<span style="color:var(--text2)">—</span>') + '</td>' +
+      '<td><span style="color:' + statusColor(s.resolutionStatus) + '">' + s.resolutionStatus + '</span></td>' +
+      '<td style="font-size:11px;color:var(--text2)">' + (s.candidates || []).join(', ') + '</td>' +
+      '</tr>'
+    )).join('');
+  } catch (err) {
+    rows.innerHTML = '<tr><td colspan="6" class="empty">Error: ' + (err.message || err) + '</td></tr>';
+  }
+}
+
+async function rediscoverSymbols() {
+  try {
+    const r = await api('/api/trading/symbols/rediscover', 'POST');
+    if (!r.success) {
+      alert(r.message || 'Discovery failed');
+      return;
+    }
+    const d = r.data || {};
+    alert('Symbol discovery: ' + d.resolved + '/' + d.total + ' resolved, ' + (d.missing?.length || 0) + ' missing');
+    loadSymbolResolution();
+  } catch (err) {
+    alert('Error: ' + (err.message || err));
+  }
+}
+
+window.loadSymbolResolution = loadSymbolResolution;
+window.rediscoverSymbols = rediscoverSymbols;
+
 async function loadNotifyStatus() {
   try {
     const r = await api('/api/notifications/status');
@@ -2938,9 +4236,243 @@ function auditStatusColor(status) {
   return 'var(--green)';
 }
 function fmtTime(t) { if (!t) return '--'; const d = new Date(t); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
+function escapeJsString(value) {
+  return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\r?\n/g, ' ');
+}
+
+// ─── Strategy Signals Modal ───
+let activeStrategySignals = { id: null, name: null };
+
+async function openStrategySignals(strategyId, strategyName) {
+  activeStrategySignals = { id: strategyId, name: strategyName || 'Strategy' };
+  const overlay = document.getElementById('strategySignalsModal');
+  const titleEl = document.getElementById('strategySignalsTitle');
+  const metaEl = document.getElementById('strategySignalsMeta');
+  const bodyEl = document.getElementById('strategySignalsBody');
+  if (titleEl) titleEl.textContent = 'Recent Signals - ' + (strategyName || 'Strategy');
+  if (metaEl) metaEl.textContent = 'Loading recent signals for this strategy...';
+  if (bodyEl) bodyEl.innerHTML = '<div class="empty">Loading signals...</div>';
+  overlay.classList.add('show');
+  await refreshStrategySignals();
+}
+
+function closeStrategySignalsModal() {
+  const overlay = document.getElementById('strategySignalsModal');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function handleStrategySignalsBackdrop(event) {
+  if (event && event.target && event.target.id === 'strategySignalsModal') closeStrategySignalsModal();
+}
+
+async function refreshStrategySignals() {
+  if (!activeStrategySignals.id) return;
+  const bodyEl = document.getElementById('strategySignalsBody');
+  const metaEl = document.getElementById('strategySignalsMeta');
+  try {
+    const r = await api('/api/strategies/' + activeStrategySignals.id + '/signals?limit=50');
+    if (!r.success) throw new Error(r.message || 'Failed to load signals');
+    const signals = Array.isArray(r.data) ? r.data : [];
+    if (metaEl) metaEl.textContent = 'Showing ' + signals.length + ' most recent signal record' + (signals.length === 1 ? '' : 's') + '.';
+    if (!signals.length) {
+      bodyEl.innerHTML = '<div class="empty">No signals recorded for this strategy yet</div>';
+      return;
+    }
+    let html = '<table><tr><th>Time</th><th>Symbol</th><th>Signal</th><th>Confidence</th><th>Status</th><th>Reason</th><th>Trigger Reason</th></tr>';
+    signals.forEach((s) => {
+      const sig = (s.signal || '--').toUpperCase();
+      const sigTag = sig === 'BUY' || sig === 'SELL' ? 'tag-' + sig.toLowerCase() : '';
+      html += '<tr><td>' + fmtTime(s.timestamp || s.candleTime) + '</td>';
+      html += '<td>' + escapeHtml(s.symbol || '--') + '</td>';
+      html += '<td>' + (sigTag ? '<span class="tag ' + sigTag + '">' + sig + '</span>' : sig) + '</td>';
+      html += '<td>' + (s.confidence != null ? (s.confidence * 100).toFixed(0) + '%' : '--') + '</td>';
+      html += '<td>' + badge(s.status || '--', 'var(--blue)') + '</td>';
+      html += '<td>' + escapeHtml(s.reason || '--') + '</td>';
+      html += '<td>' + escapeHtml(s.triggerReason || s.filterReason || '--') + '</td></tr>';
+    });
+    html += '</table>';
+    bodyEl.innerHTML = html;
+  } catch (e) {
+    bodyEl.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// ─── Optimizer Full Results Modal ───
+let optimizerFullResultsCache = null;
+let optimizerFullResultsPage = 1;
+const OPTIMIZER_FULL_PAGE_SIZE = 50;
+
+function openOptimizerFullResultsModal() {
+  const overlay = document.getElementById('optimizerFullResultsModal');
+  if (!overlay) return;
+  overlay.classList.add('show');
+  optimizerFullResultsPage = 1;
+  reloadOptimizerFullResults();
+}
+
+function closeOptimizerFullResultsModal() {
+  const overlay = document.getElementById('optimizerFullResultsModal');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function handleOptimizerFullResultsBackdrop(event) {
+  if (event && event.target && event.target.id === 'optimizerFullResultsModal') closeOptimizerFullResultsModal();
+}
+
+async function reloadOptimizerFullResults() {
+  const bodyEl = document.getElementById('optimizerFullResultsBody');
+  const metaEl = document.getElementById('optimizerFullResultsMeta');
+  const paginationEl = document.getElementById('optimizerFullResultsPagination');
+  if (bodyEl) bodyEl.innerHTML = '<div class="empty">Loading full results...</div>';
+  if (paginationEl) paginationEl.innerHTML = '';
+  try {
+    const r = await api('/api/optimizer/result/full');
+    if (!r.success) throw new Error(r.message || 'Failed to load full optimizer result');
+    optimizerFullResultsCache = r.data || null;
+    renderOptimizerFullResults();
+  } catch (e) {
+    if (bodyEl) bodyEl.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message) + '</div>';
+    if (metaEl) metaEl.textContent = 'Unable to load full optimizer result.';
+  }
+}
+
+function renderOptimizerFullResults() {
+  const bodyEl = document.getElementById('optimizerFullResultsBody');
+  const metaEl = document.getElementById('optimizerFullResultsMeta');
+  const paginationEl = document.getElementById('optimizerFullResultsPagination');
+  if (!bodyEl || !optimizerFullResultsCache) return;
+  const data = optimizerFullResultsCache;
+  const all = Array.isArray(data.allResults) ? data.allResults : [];
+
+  if (metaEl) {
+    metaEl.textContent =
+      (data.symbol || '--') + ' · ' + (data.strategy || '--')
+      + ' · Optimized for ' + (data.optimizeFor || '--')
+      + ' · ' + (data.totalCombinations || all.length || 0) + ' combinations'
+      + ' · ' + (data.validResults || all.length || 0) + ' valid';
+  }
+
+  if (!all.length) {
+    bodyEl.innerHTML = '<div class="empty">No individual result rows available</div>';
+    if (paginationEl) paginationEl.innerHTML = '';
+    return;
+  }
+
+  const paramKeys = data.bestResult && data.bestResult.parameters
+    ? Object.keys(data.bestResult.parameters)
+    : Object.keys(all[0].parameters || {});
+
+  const totalPages = Math.max(1, Math.ceil(all.length / OPTIMIZER_FULL_PAGE_SIZE));
+  if (optimizerFullResultsPage > totalPages) optimizerFullResultsPage = totalPages;
+  const start = (optimizerFullResultsPage - 1) * OPTIMIZER_FULL_PAGE_SIZE;
+  const pageRows = all.slice(start, start + OPTIMIZER_FULL_PAGE_SIZE);
+
+  let html = '<div style="overflow-x:auto"><table><tr><th>#</th>';
+  paramKeys.forEach((k) => { html += '<th>' + escapeHtml(k) + '</th>'; });
+  html += '<th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th><th>DD</th><th>Sharpe</th></tr>';
+  pageRows.forEach((row, idx) => {
+    const globalIdx = start + idx + 1;
+    const s = row.summary || {};
+    html += '<tr><td>' + globalIdx + '</td>';
+    paramKeys.forEach((k) => {
+      const v = row.parameters ? row.parameters[k] : undefined;
+      html += '<td>' + escapeHtml(v != null ? String(v) : '--') + '</td>';
+    });
+    html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
+    html += '<td>' + (s.winRate != null ? (s.winRate * 100).toFixed(1) + '%' : '--') + '</td>';
+    html += '<td>' + (s.profitFactor != null ? s.profitFactor : '--') + '</td>';
+    html += '<td style="color:' + ((s.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? s.returnPercent + '%' : '--') + '</td>';
+    html += '<td>' + (s.maxDrawdownPercent != null ? s.maxDrawdownPercent + '%' : '--') + '</td>';
+    html += '<td>' + (s.sharpeRatio != null ? s.sharpeRatio : '--') + '</td></tr>';
+  });
+  html += '</table></div>';
+  bodyEl.innerHTML = html;
+
+  if (paginationEl) {
+    paginationEl.innerHTML = '<div style="font-size:12px;color:var(--text2)">Page ' + optimizerFullResultsPage + ' / ' + totalPages + ' · Showing ' + pageRows.length + ' of ' + all.length + ' rows</div>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button class="btn-outline btn-sm" ' + (optimizerFullResultsPage <= 1 ? 'disabled' : '') + ' onclick="changeOptimizerFullResultsPage(-1)">Prev</button>'
+      + '<button class="btn-outline btn-sm" ' + (optimizerFullResultsPage >= totalPages ? 'disabled' : '') + ' onclick="changeOptimizerFullResultsPage(1)">Next</button>'
+      + '</div>';
+  }
+}
+
+function changeOptimizerFullResultsPage(delta) {
+  optimizerFullResultsPage = Math.max(1, optimizerFullResultsPage + delta);
+  renderOptimizerFullResults();
+}
+
+// ─── Custom Notification Send ───
+async function sendCustomNotification() {
+  const input = document.getElementById('notifyCustomMessage');
+  const resultEl = document.getElementById('notifySendResult');
+  const btn = document.getElementById('notifySendBtn');
+  if (!input) return;
+  const message = (input.value || '').trim();
+  if (!message) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">Message is required</span>';
+    return;
+  }
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Sending...';
+  if (resultEl) resultEl.innerHTML = '';
+  try {
+    const r = await api('/api/notifications/send', 'POST', { message });
+    if (!r.success) throw new Error(r.message || 'Failed to send notification');
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--green)">' + escapeHtml(r.message || 'Notification sent') + '</span>';
+    input.value = '';
+    wsLog('success', 'Custom notification sent');
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(e.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+// ─── Live Test Order ───
+async function runTestOrder() {
+  const btn = document.getElementById('testOrderBtn');
+  const resultEl = document.getElementById('testOrderResult');
+  const symbol = document.getElementById('testOrderSymbol')?.value;
+  const type = document.getElementById('testOrderType')?.value || 'BUY';
+  if (!symbol) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">Please select a symbol</span>';
+    return;
+  }
+  if (!confirm('Run a real live test order for ' + symbol + ' (' + type + ')? The order will be opened with protective SL/TP and auto-closed.')) return;
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Running...';
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--text2)">Submitting test order...</span>';
+  try {
+    const r = await api('/api/trading/test-order', 'POST', { symbol, type });
+    if (!r.success) throw new Error(r.message || 'Test order failed');
+    let html = '<span style="color:var(--green)">' + escapeHtml(r.message || 'Test order completed') + '</span>';
+    if (r.data) {
+      html += '<pre style="margin-top:8px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;max-height:300px;overflow:auto">'
+        + escapeHtml(JSON.stringify(r.data, null, 2))
+        + '</pre>';
+    }
+    if (resultEl) resultEl.innerHTML = html;
+    wsLog('success', 'Live test order completed: ' + symbol + ' ' + type);
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(e.message) + '</span>';
+    wsLog('error', 'Live test order failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closeBatchChildModal();
+  if (event.key === 'Escape') {
+    closeBatchChildModal();
+    closeStrategySignalsModal();
+    closeOptimizerFullResultsModal();
+  }
 });
 
 // Auto-refresh dashboard every 30s

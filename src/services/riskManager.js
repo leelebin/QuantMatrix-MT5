@@ -6,6 +6,7 @@
 const { getInstrument } = require('../config/instruments');
 const { positionsDb, paperPositionsDb, riskStateDb } = require('../config/db');
 const RiskProfile = require('../models/RiskProfile');
+const auditService = require('./auditService');
 
 class RiskManager {
   constructor() {
@@ -239,70 +240,111 @@ class RiskManager {
     const state = await this.syncAccountState(accountInfo, scope);
     const settings = await this.getActiveRiskSettings();
     const instrument = getInstrument(signal.symbol);
+
+    const auditBase = {
+      symbol: signal?.symbol || null,
+      strategy: signal?.strategy || null,
+      module: 'riskManager',
+      scope,
+      signal: signal?.signal || null,
+      confidence: typeof signal?.confidence === 'number' ? signal.confidence : null,
+      sl: typeof signal?.sl === 'number' ? signal.sl : null,
+      tp: typeof signal?.tp === 'number' ? signal.tp : null,
+      setupTimeframe: signal?.setupTimeframe || null,
+      entryTimeframe: signal?.entryTimeframe || null,
+    };
+
+    const emitReject = (reasonCode, reasonText, extras = {}) => {
+      auditService.riskRejected({
+        ...auditBase,
+        reasonCode,
+        reasonText,
+        riskCheck: { reasonCode, reasonText, ...extras },
+        details: extras,
+      });
+    };
+
     if (!instrument) {
-      return { allowed: false, reason: `Unknown instrument: ${signal.symbol}`, lotSize: 0 };
+      const reasonText = `Unknown instrument: ${signal.symbol}`;
+      emitReject(auditService.REASON.UNKNOWN_INSTRUMENT, reasonText);
+      return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.UNKNOWN_INSTRUMENT, lotSize: 0 };
     }
 
     const positionsStore = this._getPositionsStore(scope, options.positionsStore);
     const { balance, equity } = accountInfo;
 
     if (!this._isTradingEnabled(scope, options.tradingEnabled)) {
-      const message = scope === 'paper'
+      const reasonText = scope === 'paper'
         ? 'Paper trading is disabled'
         : 'Trading is disabled (TRADING_ENABLED=false)';
-      return { allowed: false, reason: message, lotSize: 0 };
+      emitReject(auditService.REASON.TRADING_DISABLED, reasonText);
+      return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.TRADING_DISABLED, lotSize: 0 };
     }
 
     const todayLoss = this._getTodayLossSync(scope);
     if (todayLoss >= balance * settings.maxDailyLoss) {
-      return {
-        allowed: false,
-        reason: `Daily loss limit reached: ${todayLoss.toFixed(2)} >= ${(balance * settings.maxDailyLoss).toFixed(2)}`,
-        lotSize: 0,
-      };
+      const reasonText = `Daily loss limit reached: ${todayLoss.toFixed(2)} >= ${(balance * settings.maxDailyLoss).toFixed(2)}`;
+      emitReject(auditService.REASON.DAILY_LOSS_LIMIT, reasonText, {
+        todayLoss,
+        limit: balance * settings.maxDailyLoss,
+      });
+      return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.DAILY_LOSS_LIMIT, lotSize: 0 };
     }
 
     const currentDrawdown = this._getCurrentDrawdown(state.peakEquity, equity);
     if (currentDrawdown >= settings.maxDrawdown) {
-      return {
-        allowed: false,
-        reason: `Max drawdown reached: ${(currentDrawdown * 100).toFixed(1)}% >= ${(settings.maxDrawdown * 100).toFixed(1)}%`,
-        lotSize: 0,
-      };
+      const reasonText = `Max drawdown reached: ${(currentDrawdown * 100).toFixed(1)}% >= ${(settings.maxDrawdown * 100).toFixed(1)}%`;
+      emitReject(auditService.REASON.MAX_DRAWDOWN, reasonText, {
+        currentDrawdown,
+        limit: settings.maxDrawdown,
+      });
+      return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.MAX_DRAWDOWN, lotSize: 0 };
     }
 
     const openPositions = await positionsStore.count({});
     if (openPositions >= settings.maxConcurrentPositions) {
-      return {
-        allowed: false,
-        reason: `Max positions reached: ${openPositions} >= ${settings.maxConcurrentPositions}`,
-        lotSize: 0,
-      };
+      const reasonText = `Max positions reached: ${openPositions} >= ${settings.maxConcurrentPositions}`;
+      emitReject(auditService.REASON.MAX_POSITIONS_REACHED, reasonText, {
+        openPositions,
+        maxConcurrentPositions: settings.maxConcurrentPositions,
+      });
+      return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.MAX_POSITIONS_REACHED, lotSize: 0 };
     }
 
     const symbolPositions = await positionsStore.count({ symbol: signal.symbol });
     if (symbolPositions >= settings.maxPositionsPerSymbol) {
-      return {
-        allowed: false,
-        reason: `Max positions for ${signal.symbol} reached: ${symbolPositions} >= ${settings.maxPositionsPerSymbol}`,
-        lotSize: 0,
-      };
+      const reasonText = `Max positions for ${signal.symbol} reached: ${symbolPositions} >= ${settings.maxPositionsPerSymbol}`;
+      emitReject(auditService.REASON.SYMBOL_EXPOSURE_LIMIT, reasonText, {
+        symbolPositions,
+        maxPositionsPerSymbol: settings.maxPositionsPerSymbol,
+      });
+      return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.SYMBOL_EXPOSURE_LIMIT, lotSize: 0 };
     }
 
     const categoryPositions = await this._getCategoryPositionCount(instrument.category, positionsStore);
     if (categoryPositions >= 3) {
-      return {
-        allowed: false,
-        reason: `Max correlated positions for ${instrument.category}: ${categoryPositions} >= 3`,
-        lotSize: 0,
-      };
+      const reasonText = `Max correlated positions for ${instrument.category}: ${categoryPositions} >= 3`;
+      emitReject(auditService.REASON.CATEGORY_EXPOSURE_LIMIT, reasonText, {
+        category: instrument.category,
+        categoryPositions,
+      });
+      return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.CATEGORY_EXPOSURE_LIMIT, lotSize: 0 };
     }
 
     const sizing = this.calculateLotSizeDetails(signal, instrument, balance, settings);
     if (!sizing.allowed) {
+      const reasonCode = /below minimum/i.test(sizing.reason)
+        ? auditService.REASON.LOT_BELOW_MIN
+        : auditService.REASON.INVALID_SL;
+      emitReject(reasonCode, sizing.reason, {
+        theoreticalLotSize: sizing.theoreticalLotSize,
+        minLot: instrument.minLot,
+        effectiveRiskPercent: sizing.effectiveRiskPercent,
+      });
       return {
         allowed: false,
         reason: sizing.reason,
+        reasonCode,
         lotSize: 0,
         theoreticalLotSize: sizing.theoreticalLotSize,
         effectiveRiskPercent: sizing.effectiveRiskPercent,
@@ -316,17 +358,19 @@ class RiskManager {
       const slDistance = Math.abs(entryPrice - signal.sl);
       const minSlDistance = instrument.spread * instrument.pipSize * 3;
       if (slDistance < minSlDistance) {
-        return {
-          allowed: false,
-          reason: `SL too close: ${slDistance.toFixed(5)} < ${minSlDistance.toFixed(5)} (3x spread)`,
-          lotSize: 0,
-        };
+        const reasonText = `SL too close: ${slDistance.toFixed(5)} < ${minSlDistance.toFixed(5)} (3x spread)`;
+        emitReject(auditService.REASON.SL_TOO_CLOSE, reasonText, {
+          slDistance,
+          minSlDistance,
+        });
+        return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.SL_TOO_CLOSE, lotSize: 0 };
       }
     }
 
     return {
       allowed: true,
       reason: sizing.reason,
+      reasonCode: 'RISK_OK',
       lotSize: sizing.finalLotSize,
       theoreticalLotSize: sizing.theoreticalLotSize,
       effectiveRiskPercent: sizing.effectiveRiskPercent,

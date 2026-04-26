@@ -1,10 +1,36 @@
 const { tradesDb } = require('../config/db');
 const { normalizeDateStart, normalizeDateEnd } = require('../utils/tradeExport');
+const { normalizeStrategyName, getStrategyNameAliases } = require('../utils/tradeComment');
 
 const UNKNOWN_STRATEGY = 'Unknown';
 
 function normalizeStrategy(strategy) {
-  return String(strategy || '').trim() || UNKNOWN_STRATEGY;
+  const normalized = normalizeStrategyName(strategy);
+  return String(normalized || '').trim() || UNKNOWN_STRATEGY;
+}
+
+function normalizeTradeRecord(trade = null) {
+  if (!trade) return trade;
+  const strategy = String(trade.strategy || '').trim();
+  if (!strategy) return trade;
+  return {
+    ...trade,
+    strategy: normalizeStrategy(strategy),
+  };
+}
+
+function normalizeTradeWriteFields(fields = {}) {
+  if (!fields || !Object.prototype.hasOwnProperty.call(fields, 'strategy')) {
+    return fields;
+  }
+
+  const strategy = String(fields.strategy || '').trim();
+  if (!strategy) return fields;
+
+  return {
+    ...fields,
+    strategy: normalizeStrategy(strategy),
+  };
 }
 
 function getLatestTimestamp(trade = null) {
@@ -24,7 +50,10 @@ const Trade = {
     const query = {};
 
     if (filters.symbol) query.symbol = filters.symbol;
-    if (filters.strategy) query.strategy = filters.strategy;
+    if (filters.strategy) {
+      const aliases = getStrategyNameAliases(filters.strategy);
+      query.strategy = aliases.length > 1 ? { $in: aliases } : aliases[0];
+    }
     if (filters.status) query.status = filters.status;
 
     const startDate = normalizeDateStart(filters.startDate);
@@ -40,29 +69,33 @@ const Trade = {
   },
 
   async findAll(query = {}, limit = 100) {
-    return await tradesDb.find(query).sort({ openedAt: -1 }).limit(limit);
+    const trades = await tradesDb.find(query).sort({ openedAt: -1 }).limit(limit);
+    return trades.map((trade) => normalizeTradeRecord(trade));
   },
 
   async findByFilters(filters = {}, limit = 100) {
     const query = Trade.buildQuery(filters);
-    return await tradesDb.find(query).sort({ openedAt: -1 }).limit(limit);
+    const trades = await tradesDb.find(query).sort({ openedAt: -1 }).limit(limit);
+    return trades.map((trade) => normalizeTradeRecord(trade));
   },
 
   async findForExport(filters = {}) {
     const query = Trade.buildQuery(filters);
-    return await tradesDb.find(query).sort({ openedAt: -1 });
+    const trades = await tradesDb.find(query).sort({ openedAt: -1 });
+    return trades.map((trade) => normalizeTradeRecord(trade));
   },
 
   async findById(id) {
-    return await tradesDb.findOne({ _id: id });
+    const trade = await tradesDb.findOne({ _id: id });
+    return normalizeTradeRecord(trade);
   },
 
   async create(trade) {
-    return await tradesDb.insert(trade);
+    return await tradesDb.insert(normalizeTradeWriteFields(trade));
   },
 
   async updateById(id, fields) {
-    await tradesDb.update({ _id: id }, { $set: fields });
+    await tradesDb.update({ _id: id }, { $set: normalizeTradeWriteFields(fields) });
     return await Trade.findById(id);
   },
 
@@ -78,7 +111,8 @@ const Trade = {
 
     if (filters.symbol) query.symbol = filters.symbol;
 
-    return await tradesDb.find(query);
+    const trades = await tradesDb.find(query);
+    return trades.map((trade) => normalizeTradeRecord(trade));
   },
 
   async findLatestBrokerTrade(filters = {}) {
@@ -105,7 +139,7 @@ const Trade = {
 
     for (const candidate of candidates) {
       const trade = await tradesDb.findOne(candidate);
-      if (trade) return trade;
+      if (trade) return normalizeTradeRecord(trade);
     }
 
     return null;

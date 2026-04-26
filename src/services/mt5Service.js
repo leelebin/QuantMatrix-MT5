@@ -421,6 +421,22 @@ class MT5Service {
     return await this._sendCommand('getSymbolInfo', { symbol });
   }
 
+  async getResolvedSymbolInfo(symbol) {
+    this._ensureConnected();
+    return await this._sendCommand('getSymbolInfo', { symbol: this._resolveSymbol(symbol) });
+  }
+
+  async calculateOrderProfit(symbol, type, volume, openPrice, closePrice) {
+    this._ensureConnected();
+    return await this._sendCommand('calculateOrderProfit', {
+      symbol: this._resolveSymbol(symbol),
+      type,
+      volume,
+      openPrice,
+      closePrice,
+    });
+  }
+
   /**
    * List broker symbols, optionally filtered by MT5 group pattern
    * (e.g. "*BTC*,*ETH*"). Used by the alias resolver discovery fallback.
@@ -531,7 +547,7 @@ class MT5Service {
   getPreflightMessage(preflight = {}) {
     if (preflight.allowed === false) {
       if (preflight.retcode === 0 && preflight.comment === 'Done') {
-        return 'preflight inconsistent';
+        return 'preflight inconsistent (retcode=0/Done but allowed=false)';
       }
 
       if (preflight.retcodeName === 'MARKET_CLOSED') {

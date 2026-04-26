@@ -10,24 +10,51 @@ const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
 const trailingStopService = require('./trailingStopService');
+const breakevenService = require('./breakevenService');
+const economicCalendarService = require('./economicCalendarService');
 const TradeLog = require('../models/TradeLog');
 const ExecutionAudit = require('../models/ExecutionAudit');
 const RiskProfile = require('../models/RiskProfile');
 const { paperPositionsDb } = require('../config/db');
-const breakevenService = require('./breakevenService');
 const { getInstrument } = require('../config/instruments');
 const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
+const {
+  appendManagementEvent,
+  buildManagedPositionState,
+  createManagerAction,
+} = require('../utils/positionExitState');
 const auditService = require('./auditService');
+const strategyDailyStopService = require('./strategyDailyStopService');
+const { getStrategyInstance } = require('./strategyInstanceService');
+const {
+  buildSignalScanBucketStatus,
+  CadenceScheduler,
+  buildAssignmentStats,
+  getPositionCadenceProfile,
+  getScanReason,
+  listActiveAssignments,
+  resolveCategoryContext,
+  toIsoOrNull,
+} = require('./assignmentRuntimeService');
+
+const BASE_MONITOR_TICK_MS = 15 * 1000;
+const JUST_OPENED_WINDOW_MS = 5 * 60 * 1000;
 
 class PaperTradingService {
   constructor() {
     this.running = false;
-    this.tradingLoopInterval = null;
+    this.scheduler = null;
     this.monitorInterval = null;
-    this.analysisIntervalMs = 5 * 60 * 1000;  // 5 minutes
-    this.monitorIntervalMs = 30 * 1000;        // 30 seconds
+    this.monitorIntervalMs = BASE_MONITOR_TICK_MS;
+    this.monitorBaseTickMs = BASE_MONITOR_TICK_MS;
+    this.monitorProcessing = false;
+    this.pendingMonitorSyncReason = null;
+    this.lastLightScanAt = new Map();
+    this.lastHeavyScanAt = new Map();
+    this.knownPositionKeys = new Set();
+    this.monitorStatus = this._buildEmptyMonitorStatus();
     this.startedAt = null;
   }
 
@@ -67,6 +94,274 @@ class PaperTradingService {
     });
   }
 
+  async _getActiveAssignments(activeProfile = null) {
+    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+    return listActiveAssignments({ activeProfile });
+  }
+
+  _buildEmptyMonitorStatus() {
+    return {
+      running: false,
+      intervalMs: 0,
+      baseTickMs: this.monitorBaseTickMs,
+      lightCadenceMs: 0,
+      heavyCadenceMs: 0,
+      lightDuePositions: [],
+      heavyDuePositions: [],
+      fastModePositions: [],
+      lastScanAt: null,
+      lastForcedSyncAt: null,
+    };
+  }
+
+  _getPositionKey(position) {
+    return String(position?._id || position?.mt5PositionId || `${position?.symbol || 'unknown'}:${position?.strategy || 'unknown'}`);
+  }
+
+  _cleanupMonitorMaps(positions) {
+    const activeKeys = new Set(positions.map((position) => this._getPositionKey(position)));
+    for (const key of [...this.lastLightScanAt.keys()]) {
+      if (!activeKeys.has(key)) this.lastLightScanAt.delete(key);
+    }
+    for (const key of [...this.lastHeavyScanAt.keys()]) {
+      if (!activeKeys.has(key)) this.lastHeavyScanAt.delete(key);
+    }
+  }
+
+  _didPaperPositionsChange(positions) {
+    const nextKeys = new Set(positions.map((position) => this._getPositionKey(position)));
+    if (nextKeys.size !== this.knownPositionKeys.size) {
+      this.knownPositionKeys = nextKeys;
+      return true;
+    }
+
+    for (const key of nextKeys) {
+      if (!this.knownPositionKeys.has(key)) {
+        this.knownPositionKeys = nextKeys;
+        return true;
+      }
+    }
+
+    this.knownPositionKeys = nextKeys;
+    return false;
+  }
+
+  _isProtectedPosition(position, instrument) {
+    if (!instrument) return false;
+
+    const entryPrice = Number(position?.entryPrice);
+    const currentSl = Number(position?.currentSl);
+    if (!Number.isFinite(entryPrice) || !Number.isFinite(currentSl)) {
+      return false;
+    }
+
+    const plan = breakevenService.getPositionExitPlan(position);
+    const spreadCompensation = plan?.breakeven?.includeSpreadCompensation
+      ? Number(instrument.spread || 0) * Number(instrument.pipSize || 0)
+      : 0;
+    const bufferDistance = Number(plan?.breakeven?.extraBufferPips || 0) * Number(instrument.pipSize || 0);
+    const threshold = String(position?.type || '').toUpperCase() === 'SELL'
+      ? entryPrice - spreadCompensation - bufferDistance
+      : entryPrice + spreadCompensation + bufferDistance;
+
+    if (String(position?.type || '').toUpperCase() === 'SELL') {
+      return currentSl <= threshold;
+    }
+    return currentSl >= threshold;
+  }
+
+  async _buildPositionContexts(positions, now, forcedSyncReason = null) {
+    const contexts = [];
+    const strategyInstanceCache = new Map();
+    let ensuredCalendar = false;
+
+    const getCachedStrategyInstance = async (position) => {
+      const strategyName = position?.strategy;
+      if (!strategyName) return null;
+      const cacheKey = `${position.symbol}:${strategyName}`;
+      if (!strategyInstanceCache.has(cacheKey)) {
+        strategyInstanceCache.set(cacheKey, getStrategyInstance(position.symbol, strategyName).catch(() => null));
+      }
+      return strategyInstanceCache.get(cacheKey);
+    };
+
+    for (const position of positions) {
+      const key = this._getPositionKey(position);
+      const instrument = getInstrument(position.symbol);
+      const categoryContext = resolveCategoryContext(position.symbol, instrument?.category, { warnSource: 'paper_position_monitor' });
+      const strategyInstance = await getCachedStrategyInstance(position);
+      const newsConfig = strategyInstance?.newsBlackout || null;
+
+      let state = 'normal';
+      let blackoutEvent = null;
+      if (newsConfig?.enabled) {
+        if (!ensuredCalendar) {
+          await economicCalendarService.ensureCalendar();
+          ensuredCalendar = true;
+        }
+        const blackout = economicCalendarService.isInBlackout(position.symbol, now, newsConfig);
+        if (blackout.blocked) {
+          state = 'news_fast_mode';
+          blackoutEvent = blackout.event || null;
+        }
+      }
+
+      if (state !== 'news_fast_mode') {
+        const openedAt = position?.openedAt ? new Date(position.openedAt) : null;
+        if (openedAt && !Number.isNaN(openedAt.getTime()) && (now.getTime() - openedAt.getTime()) < JUST_OPENED_WINDOW_MS) {
+          state = 'just_opened';
+        } else if (this._isProtectedPosition(position, instrument)) {
+          state = 'protected';
+        }
+      }
+
+      const cadenceProfile = getPositionCadenceProfile(categoryContext.category, state);
+      const lastLightScanAt = this.lastLightScanAt.get(key) || null;
+      const lastHeavyScanAt = this.lastHeavyScanAt.get(key) || null;
+      const forcedSync = Boolean(forcedSyncReason);
+      const dueLight = forcedSync
+        || !lastLightScanAt
+        || (now.getTime() - lastLightScanAt.getTime()) >= cadenceProfile.lightCadenceMs;
+      const dueHeavy = forcedSync
+        || !lastHeavyScanAt
+        || (now.getTime() - lastHeavyScanAt.getTime()) >= cadenceProfile.heavyCadenceMs;
+
+      contexts.push({
+        key,
+        position,
+        category: categoryContext.category,
+        rawCategory: categoryContext.rawCategory,
+        categoryFallback: categoryContext.categoryFallback,
+        state,
+        blackoutEvent,
+        lightCadenceMs: cadenceProfile.lightCadenceMs,
+        heavyCadenceMs: cadenceProfile.heavyCadenceMs,
+        dueLight,
+        dueHeavy,
+        scanReason: getScanReason(state, forcedSync),
+      });
+    }
+
+    return contexts;
+  }
+
+  _buildMonitorStatus(contexts, now, forcedSyncReason = null) {
+    const lightDuePositions = [];
+    const heavyDuePositions = [];
+    const fastModePositions = [];
+    const lightCadenceMs = contexts.length > 0
+      ? Math.min(...contexts.map((context) => context.lightCadenceMs))
+      : 0;
+    const heavyCadenceMs = contexts.length > 0
+      ? Math.min(...contexts.map((context) => context.heavyCadenceMs))
+      : 0;
+
+    for (const context of contexts) {
+      const lightNextScanAt = context.dueLight
+        ? new Date(now.getTime() + context.lightCadenceMs)
+        : new Date((this.lastLightScanAt.get(context.key) || now).getTime() + context.lightCadenceMs);
+      const heavyNextScanAt = context.dueHeavy
+        ? new Date(now.getTime() + context.heavyCadenceMs)
+        : new Date((this.lastHeavyScanAt.get(context.key) || now).getTime() + context.heavyCadenceMs);
+
+      const basePayload = {
+        symbol: context.position.symbol,
+        strategy: context.position.strategy || null,
+        category: context.category,
+        categoryFallback: context.categoryFallback === true,
+        state: context.state,
+      };
+
+      if (context.dueLight) {
+        lightDuePositions.push({
+          ...basePayload,
+          scanMode: 'light',
+          scanReason: context.scanReason,
+          nextScanAt: toIsoOrNull(lightNextScanAt),
+        });
+      }
+
+      if (context.dueHeavy) {
+        heavyDuePositions.push({
+          ...basePayload,
+          scanMode: 'heavy',
+          scanReason: context.scanReason,
+          nextScanAt: toIsoOrNull(heavyNextScanAt),
+        });
+      }
+
+      if (context.state === 'news_fast_mode') {
+        fastModePositions.push({
+          ...basePayload,
+          scanMode: 'light',
+          scanReason: 'news_fast_mode',
+          nextScanAt: toIsoOrNull(lightNextScanAt),
+          blackoutEvent: context.blackoutEvent || null,
+        });
+      }
+    }
+
+    return {
+      running: this.running,
+      intervalMs: this.running ? this.monitorBaseTickMs : 0,
+      baseTickMs: this.monitorBaseTickMs,
+      lightCadenceMs,
+      heavyCadenceMs,
+      lightDuePositions,
+      heavyDuePositions,
+      fastModePositions,
+      lastScanAt: toIsoOrNull(now),
+      lastForcedSyncAt: forcedSyncReason ? toIsoOrNull(now) : this.monitorStatus.lastForcedSyncAt || null,
+    };
+  }
+
+  _buildScanMetadataMap(contexts, scanMode, now) {
+    const metadata = new Map();
+    for (const context of contexts) {
+      metadata.set(context.key, {
+        symbol: context.position.symbol,
+        strategy: context.position.strategy || null,
+        category: context.category,
+        categoryFallback: context.categoryFallback === true,
+        scanMode,
+        scanReason: context.scanReason,
+        nextScanAt: toIsoOrNull(new Date(now.getTime() + (scanMode === 'light' ? context.lightCadenceMs : context.heavyCadenceMs))),
+      });
+    }
+    return metadata;
+  }
+
+  _getScheduler() {
+    if (!this.scheduler) {
+      this.scheduler = new CadenceScheduler({
+        name: 'paper-trading',
+        buildAssignments: async (bucket) => {
+          const assignments = await this._getActiveAssignments();
+          return assignments
+            .filter((assignment) => assignment.cadenceMs === bucket.cadenceMs)
+            .map((assignment) => ({
+              symbol: assignment.symbol,
+              strategyType: assignment.strategyType,
+              strategyInstance: assignment.strategyInstance,
+              category: assignment.category,
+              categoryFallback: assignment.categoryFallback,
+              scanMode: 'signal',
+              scanReason: 'cadence',
+            }));
+        },
+        runAssignments: async (analysisTasks) => {
+          await this._runAnalysisCycle(analysisTasks);
+          await this.syncMonitorNow('forced_sync');
+        },
+        onError: (error, bucket) => {
+          console.error(`[PaperTrading ${bucket.timeframe}] Trading loop error:`, error.message);
+        },
+      });
+    }
+
+    return this.scheduler;
+  }
+
   /**
    * Start paper trading mode
    * Connects to MT5 demo account and begins the analysis/execution loop
@@ -95,13 +390,10 @@ class PaperTradingService {
       process.env.PAPER_TRADING_ENABLED = 'true';
 
       // Start position monitor (sync MT5 demo positions with local DB)
-      this._startPositionMonitor();
-
-      // Start the analysis & trading loop
-      this._startTradingLoop();
-
       this.running = true;
       this.startedAt = new Date();
+      this._startPositionMonitor();
+      this._startTradingLoop();
 
       // Notify via Telegram
       await notificationService.notifySystem('start',
@@ -149,15 +441,21 @@ class PaperTradingService {
 
     process.env.PAPER_TRADING_ENABLED = 'false';
 
-    if (this.tradingLoopInterval) {
-      clearInterval(this.tradingLoopInterval);
-      this.tradingLoopInterval = null;
+    if (this.scheduler) {
+      this.scheduler.stop();
+      this.scheduler = null;
     }
 
     if (this.monitorInterval) {
       clearInterval(this.monitorInterval);
       this.monitorInterval = null;
     }
+    this.monitorProcessing = false;
+    this.pendingMonitorSyncReason = null;
+    this.lastLightScanAt.clear();
+    this.lastHeavyScanAt.clear();
+    this.knownPositionKeys.clear();
+    this.monitorStatus = this._buildEmptyMonitorStatus();
 
     this.running = false;
     const runtime = this.startedAt ? TradeLog.formatHoldingTime(Date.now() - this.startedAt.getTime()) : 'N/A';
@@ -175,35 +473,18 @@ class PaperTradingService {
    * Start the strategy analysis and trade execution loop
    */
   _startTradingLoop() {
-    // Run immediately once, then on interval
-    this._runAnalysisCycle();
-
-    this.tradingLoopInterval = setInterval(async () => {
-      try {
-        await this._runAnalysisCycle();
-      } catch (err) {
-        console.error('[PaperTrading] Trading loop error:', err.message);
-      }
-    }, this.analysisIntervalMs);
-
-    console.log(`[PaperTrading] Trading loop started (interval: ${this.analysisIntervalMs / 1000}s)`);
+    this._getScheduler().start();
+    console.log('[PaperTrading] Multi-cadence trading loop started');
   }
 
   /**
    * Run one full analysis cycle across all enabled symbols
    */
-  async _runAnalysisCycle() {
+  async _runAnalysisCycle(analysisTasks = null) {
     if (!mt5Service.isConnected()) return;
 
-    // Get enabled strategies/symbols
-    const strategies = await Strategy.findAll();
-    const activeAssignments = strategies.reduce((total, strategy) => {
-      if (!strategy.enabled || !Array.isArray(strategy.symbols)) {
-        return total;
-      }
-
-      return total + [...new Set(strategy.symbols)].length;
-    }, 0);
+    const resolvedTasks = Array.isArray(analysisTasks) ? analysisTasks : await this._getActiveAssignments();
+    const activeAssignments = Array.isArray(resolvedTasks) ? resolvedTasks.length : 0;
 
     if (activeAssignments === 0) {
       console.log('[PaperTrading] No enabled strategy assignments to analyze');
@@ -234,7 +515,7 @@ class PaperTradingService {
         await this._executePaperTrade(signal);
       },
       null,
-      { scope: 'paper' }
+      { scope: 'paper', mode: 'paper', analysisTasks: resolvedTasks }
     );
   }
 
@@ -244,6 +525,8 @@ class PaperTradingService {
    */
   async _executePaperTrade(signal) {
     if (signal.signal === 'NONE') return;
+
+    let preflight = null;
 
     try {
       const accountInfo = await mt5Service.getAccountInfo();
@@ -283,10 +566,14 @@ class PaperTradingService {
         });
       }
 
+      signal.executionScore = riskCheck.executionScore ?? signal.executionScore ?? null;
+      signal.executionScoreDetails = riskCheck.executionScoreDetails || signal.executionScoreDetails || null;
+      signal.executionPolicy = riskCheck.executionPolicy || signal.executionPolicy || null;
+
       // Execute on MT5 demo account
       const brokerComment = buildBrokerComment(signal, 'PT');
       const tradeComment = buildTradeComment(signal, brokerComment);
-      const preflight = await mt5Service.preflightOrder(
+      preflight = await mt5Service.preflightOrder(
         signal.symbol,
         signal.signal,
         riskCheck.lotSize,
@@ -302,7 +589,12 @@ class PaperTradingService {
           codeName: preflight.retcodeName,
           volume: riskCheck.lotSize,
           accountInfo,
-          details: preflight,
+          details: {
+            ...preflight,
+            preflightAllowed: preflight.allowed,
+            preflightRetcode: preflight.retcode,
+            preflightRetcodeName: preflight.retcodeName,
+          },
         });
         auditService.preflightRejected({
           symbol: signal.symbol,
@@ -344,7 +636,23 @@ class PaperTradingService {
       const entryFee = Number(result.entryDeal?.fee) || 0;
       const activeProfile = await RiskProfile.getActive();
       const strategyRecord = signal.strategy ? await Strategy.findByName(signal.strategy) : null;
-      const breakevenConfig = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyRecord);
+      const breakevenConfig = signal.effectiveBreakeven
+        || signal.effectiveTradeManagement?.breakeven
+        || breakevenService.resolveEffectiveBreakeven(activeProfile, strategyRecord);
+      const exitPlan = signal.effectiveExitPlan
+        || breakevenService.resolveEffectiveExitPlan(
+          activeProfile,
+          strategyRecord,
+          signal.exitPlan || null
+        );
+      const managedPositionState = buildManagedPositionState({
+        signal,
+        lotSize: riskCheck.lotSize,
+        entryPrice,
+        breakevenConfig,
+        exitPlan,
+        plannedRiskAmount: riskCheck.plannedRiskAmount,
+      });
 
       // Save to paper positions DB
       const position = await paperPositionsDb.insert({
@@ -360,9 +668,10 @@ class PaperTradingService {
         strategy: signal.strategy,
         comment: tradeComment,
         confidence: signal.confidence,
+        rawConfidence: signal.rawConfidence ?? signal.confidence,
         reason: signal.reason,
         atrAtEntry,
-        breakevenConfig,
+        ...managedPositionState,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
@@ -379,6 +688,7 @@ class PaperTradingService {
         signalReason: signal.reason,
         strategy: signal.strategy,
         confidence: signal.confidence,
+        rawConfidence: signal.rawConfidence ?? signal.confidence,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         commission: entryCommission,
         swap: entrySwap,
@@ -388,6 +698,17 @@ class PaperTradingService {
         mt5Comment,
         comment: tradeComment,
         positionDbId: position._id,
+        executionPolicy: signal.executionPolicy || null,
+        executionScore: managedPositionState.executionScore,
+        executionScoreDetails: managedPositionState.executionScoreDetails,
+        plannedRiskAmount: managedPositionState.plannedRiskAmount,
+        targetRMultiple: managedPositionState.targetRMultiple,
+        exitPlanSnapshot: managedPositionState.exitPlanSnapshot,
+        managementEvents: managedPositionState.managementEvents,
+        setupTimeframe: managedPositionState.setupTimeframe,
+        entryTimeframe: managedPositionState.entryTimeframe,
+        setupCandleTime: managedPositionState.setupCandleTime,
+        entryCandleTime: managedPositionState.entryCandleTime,
         openedAt,
       });
 
@@ -395,6 +716,7 @@ class PaperTradingService {
         `[PaperTrading] Trade executed: ${signal.signal} ${riskCheck.lotSize} ${signal.symbol} `
         + `@ ${entryPrice} | SL: ${signal.sl} TP: ${signal.tp} | ${signal.reason}`
       );
+      await this.syncMonitorNow('forced_sync');
 
       auditService.orderOpened({
         symbol: signal.symbol,
@@ -412,6 +734,10 @@ class PaperTradingService {
           mt5PositionId,
           mt5DealId,
           orderId: result.orderId || null,
+          preflightAllowed: preflight.allowed,
+          preflightRetcode: preflight.retcode,
+          preflightRetcodeName: preflight.retcodeName,
+          sendRetcode: result.retcode ?? null,
         },
       });
 
@@ -436,7 +762,14 @@ class PaperTradingService {
           code: auditCode,
           codeName: auditCodeName,
           accountInfo,
-          details: err.details || { method: err.method || null },
+          details: {
+            ...(err.details || { method: err.method || null }),
+            preflightAllowed: preflight?.allowed ?? null,
+            preflightRetcode: preflight?.retcode ?? null,
+            preflightRetcodeName: preflight?.retcodeName ?? null,
+            sendRetcode: err.details?.retcode ?? err.code ?? null,
+            sendRetcodeName: err.details?.retcodeName ?? err.codeName ?? null,
+          },
         });
         auditService.orderFailed({
           symbol: signal.symbol,
@@ -447,7 +780,14 @@ class PaperTradingService {
           mt5Retcode: typeof auditCode === 'number' ? auditCode : null,
           reasonCode: auditCodeName || `ORDER_FAILED:${auditStage}`,
           reasonText: err.message,
-          details: err.details || { method: err.method || null, stage: auditStage },
+          details: {
+            ...(err.details || { method: err.method || null, stage: auditStage }),
+            preflightAllowed: preflight?.allowed ?? null,
+            preflightRetcode: preflight?.retcode ?? null,
+            preflightRetcodeName: preflight?.retcodeName ?? null,
+            sendRetcode: err.details?.retcode ?? err.code ?? null,
+            sendRetcodeName: err.details?.retcodeName ?? err.codeName ?? null,
+          },
         });
         this._broadcastRejection(signal, err.message, {
           stage: auditStage,
@@ -476,24 +816,46 @@ class PaperTradingService {
    * Syncs MT5 demo positions, detects closures, logs to trade_log
    */
   _startPositionMonitor() {
+    if (this.monitorInterval) {
+      return;
+    }
+
+    this.monitorIntervalMs = this.monitorBaseTickMs;
     this.monitorInterval = setInterval(async () => {
       try {
-        await this._syncPaperPositions();
-        await this._runTrailingStops();
+        await this._runMonitorCycle();
       } catch (err) {
         console.error('[PaperTrading] Monitor error:', err.message);
       }
-    }, this.monitorIntervalMs);
+    }, this.monitorBaseTickMs);
 
-    console.log(`[PaperTrading] Position monitor started (interval: ${this.monitorIntervalMs / 1000}s)`);
+    if (typeof this.monitorInterval.unref === 'function') {
+      this.monitorInterval.unref();
+    }
+
+    console.log(`[PaperTrading] Position monitor started (base tick: ${this.monitorBaseTickMs / 1000}s)`);
+    this.syncMonitorNow('forced_sync').catch((err) => {
+      console.error('[PaperTrading] Initial monitor sync error:', err.message);
+    });
+  }
+
+  requestMonitorSync(reason = 'forced_sync') {
+    this.pendingMonitorSyncReason = reason || 'forced_sync';
+  }
+
+  async syncMonitorNow(reason = 'forced_sync') {
+    this.requestMonitorSync(reason);
+    await this._runMonitorCycle();
   }
 
   /**
    * Sync MT5 demo positions with paper positions DB
    * Detect externally closed positions (SL/TP hit) and log them
    */
-  async _syncPaperPositions() {
-    if (!mt5Service.isConnected()) return;
+  async _syncPaperPositions({ broadcast = true } = {}) {
+    if (!mt5Service.isConnected()) {
+      return [];
+    }
 
     const mt5Positions = await mt5Service.getPositions();
     const localPositions = await paperPositionsDb.find({});
@@ -523,29 +885,74 @@ class PaperTradingService {
       }
     }
 
-    // Broadcast update
     const updatedPositions = await paperPositionsDb.find({});
-    websocketService.broadcast('positions', 'paper_positions_sync', updatedPositions);
+    if (broadcast) {
+      websocketService.broadcast('positions', 'paper_positions_sync', updatedPositions);
+    }
+    return updatedPositions;
   }
 
-  async _runTrailingStops() {
-    if (!mt5Service.isConnected()) return;
+  async _runTrailingStops(
+    positions = null,
+    contexts = null,
+    scanMode = 'heavy',
+    now = new Date(),
+    cycleState = { id: `paper-monitor:${Date.now()}`, fingerprints: new Set() }
+  ) {
+    if (!mt5Service.isConnected()) return [];
+    const effectivePositions = Array.isArray(positions) ? positions : await paperPositionsDb.find({});
+    if (effectivePositions.length === 0) return [];
+    const effectiveContexts = Array.isArray(contexts) && contexts.length > 0
+      ? contexts
+      : (await this._buildPositionContexts(effectivePositions, now, null)).map((context) => ({
+          ...context,
+          dueLight: true,
+          dueHeavy: true,
+          scanReason: context.scanReason || 'cadence',
+        }));
+    const hooks = trailingStopService.createPositionManagementHooks({
+      getCandlesFn: scanMode === 'heavy'
+        ? async (symbol, timeframe) => mt5Service.getCandles(symbol, timeframe, null, 251)
+        : null,
+      closePositionFn: async (position, reason) => {
+        if (!position?._id) {
+          throw new Error('Paper position is missing local _id');
+        }
+        return this.closePosition(position._id, reason || 'TIME_EXIT');
+      },
+      partialCloseFn: async (position, volume) => {
+        if (!position?.mt5PositionId) {
+          throw new Error('Paper position is missing mt5PositionId');
+        }
+        if (typeof mt5Service.partialClosePosition !== 'function') {
+          throw new Error('partialClosePosition not supported by MT5 bridge');
+        }
+        return mt5Service.partialClosePosition(position.mt5PositionId, volume);
+      },
+      updatePositionFn: async (localId, patch) => {
+        await paperPositionsDb.update({ _id: localId }, { $set: patch });
+      },
+    });
 
-    const positions = await paperPositionsDb.find({});
-    if (positions.length === 0) return;
-
+    const metadataByPosition = this._buildScanMetadataMap(effectiveContexts, scanMode, now);
     const updates = await trailingStopService.processPositions(
-      positions,
+      effectivePositions,
       async (symbol) => mt5Service.getPrice(symbol),
-      async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp)
+      async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp),
+      hooks,
+      {
+        scanMode,
+        cycleState,
+        scanMetadataByPosition: metadataByPosition,
+      }
     );
 
     if (updates.length === 0) {
-      return;
+      return [];
     }
 
     const positionsByMt5Id = new Map(
-      positions
+      effectivePositions
         .filter((position) => position.mt5PositionId != null)
         .map((position) => [String(position.mt5PositionId), position])
     );
@@ -554,14 +961,108 @@ class PaperTradingService {
       const localPosition = positionsByMt5Id.get(String(update.positionId));
       if (!localPosition) continue;
 
-      await paperPositionsDb.update(
-        { _id: localPosition._id },
-        { $set: { currentSl: update.newSl } }
-      );
+      if (update.newSl !== undefined) {
+        await paperPositionsDb.update(
+          { _id: localPosition._id },
+          { $set: { currentSl: update.newSl } }
+        );
+      }
+
+      const actionKind = update.kind || update.action || (update.newSl !== undefined ? 'SL_UPDATE' : null);
+      let reasonCode = actionKind;
+      if (actionKind === 'SL_UPDATE') {
+        reasonCode = update.phase === 'breakeven'
+          ? auditService.REASON.BREAKEVEN_SET
+          : update.phase === 'trailing'
+            ? auditService.REASON.TRAILING_UPDATED
+            : 'SL_UPDATE';
+      } else if (actionKind === 'PARTIAL_CLOSE') {
+        reasonCode = auditService.REASON.PARTIAL_CLOSE;
+      } else if (actionKind === 'PARTIAL_TP') {
+        reasonCode = auditService.REASON.PARTIAL_TP;
+      } else if (actionKind === 'TIME_EXIT') {
+        reasonCode = auditService.REASON.TIME_EXIT;
+      }
+
+      auditService.positionManaged({
+        symbol: localPosition.symbol,
+        strategy: localPosition.strategy,
+        module: 'paperTradingService',
+        scope: 'paper',
+        signal: localPosition.type,
+        positionDbId: localPosition._id,
+        reasonCode: reasonCode || 'POSITION_UPDATE',
+        reasonText: update.message
+          || (actionKind === 'SL_UPDATE'
+            ? `SL updated to ${update.newSl}`
+            : actionKind === 'PARTIAL_TP'
+              ? `Partial close ${update.volume || ''}`
+              : 'Position update'),
+        details: update,
+      });
     }
 
     const refreshedPositions = await paperPositionsDb.find({});
     websocketService.broadcast('positions', 'paper_positions_sync', refreshedPositions);
+    return updates;
+  }
+
+  async _runMonitorCycle() {
+    if (this.monitorProcessing || (!this.running && !this.pendingMonitorSyncReason)) {
+      return;
+    }
+
+    this.monitorProcessing = true;
+    const now = new Date();
+    let forcedSyncReason = this.pendingMonitorSyncReason;
+    this.pendingMonitorSyncReason = null;
+
+    try {
+      const syncedPositions = await this._syncPaperPositions({ broadcast: false });
+      const positions = Array.isArray(syncedPositions) ? syncedPositions : [];
+      const positionsChanged = this._didPaperPositionsChange(positions);
+      if (positionsChanged && !forcedSyncReason) {
+        forcedSyncReason = 'forced_sync';
+      }
+      this._cleanupMonitorMaps(positions);
+
+      const contexts = await this._buildPositionContexts(positions, now, forcedSyncReason);
+      const lightContexts = contexts.filter((context) => context.dueLight);
+      const heavyContexts = contexts.filter((context) => context.dueHeavy);
+      const cycleState = { id: `paper-monitor:${Date.now()}`, fingerprints: new Set() };
+
+      if (lightContexts.length > 0) {
+        const lightKeys = new Set(lightContexts.map((context) => context.key));
+        const lightPositions = positions.filter((position) => lightKeys.has(this._getPositionKey(position)));
+        await this._runTrailingStops(lightPositions, lightContexts, 'light', now, cycleState);
+        lightContexts.forEach((context) => {
+          this.lastLightScanAt.set(context.key, now);
+        });
+      }
+
+      if (heavyContexts.length > 0) {
+        const refreshedPositions = lightContexts.length > 0 ? await paperPositionsDb.find({}) : positions;
+        const heavyKeys = new Set(heavyContexts.map((context) => context.key));
+        const heavyPositions = refreshedPositions.filter((position) => heavyKeys.has(this._getPositionKey(position)));
+        await this._runTrailingStops(heavyPositions, heavyContexts, 'heavy', now, cycleState);
+        heavyContexts.forEach((context) => {
+          this.lastHeavyScanAt.set(context.key, now);
+        });
+      }
+
+      this.monitorStatus = this._buildMonitorStatus(contexts, now, forcedSyncReason);
+    } catch (err) {
+      console.error('[PaperTrading] Monitor error:', err.message);
+      this.monitorStatus = {
+        ...this.monitorStatus,
+        running: this.running,
+        intervalMs: this.running ? this.monitorBaseTickMs : 0,
+        baseTickMs: this.monitorBaseTickMs,
+        lastScanAt: toIsoOrNull(now),
+      };
+    } finally {
+      this.monitorProcessing = false;
+    }
   }
 
   /**
@@ -598,6 +1099,7 @@ class PaperTradingService {
     const closedSnapshot = buildClosedTradeSnapshot(localPos, dealSummary, {
       exitPrice: fallbackExitPrice,
       reason: 'EXTERNAL',
+      pendingExitAction: localPos.pendingExitAction || null,
     });
 
     const openedAt = new Date(localPos.openedAt);
@@ -613,12 +1115,26 @@ class PaperTradingService {
       fee: closedSnapshot.fee,
       openedAt,
       closedAt: closedSnapshot.closedAt,
+      realizedRMultiple: closedSnapshot.realizedRMultiple,
+      targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
     });
 
     // Track loss for daily limit
     if (closedSnapshot.profitLoss < 0) {
       await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt, 'paper');
     }
+
+    try {
+      await strategyDailyStopService.recordTradeOutcome({
+        strategy: localPos.strategy,
+        symbol: localPos.symbol,
+        timeframe: localPos.setupTimeframe || localPos.timeframe || null,
+        realizedRMultiple: closedSnapshot.realizedRMultiple,
+        profitLoss: closedSnapshot.profitLoss,
+        plannedRiskAmount: localPos.plannedRiskAmount,
+        closedAt: closedSnapshot.closedAt,
+      });
+    } catch (_) {}
 
     // Remove from paper positions
     await paperPositionsDb.remove({ _id: localPos._id });
@@ -656,6 +1172,7 @@ class PaperTradingService {
 
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
     await notificationService.notifyTradeClosed(closedTrade);
+    await this.syncMonitorNow('forced_sync');
   }
 
   /**
@@ -674,6 +1191,19 @@ class PaperTradingService {
 
     // Close on MT5 demo
     let closeResult = null;
+    const closeAction = createManagerAction(reason || 'MANUAL', {
+      source: 'paperTradingService.closePosition',
+    });
+    await paperPositionsDb.update({ _id: positionDbId }, {
+      $set: {
+        pendingExitAction: closeAction,
+        managerActionId: closeAction.id,
+        managementEvents: appendManagementEvent(position, closeAction, { status: 'PENDING' }),
+      },
+    });
+    position.pendingExitAction = closeAction;
+    position.managerActionId = closeAction.id;
+    position.managementEvents = appendManagementEvent(position, closeAction, { status: 'PENDING' });
     if (position.mt5PositionId) {
       try {
         closeResult = await mt5Service.closePosition(position.mt5PositionId);
@@ -708,6 +1238,7 @@ class PaperTradingService {
     const closedSnapshot = buildClosedTradeSnapshot(position, dealSummary, {
       exitPrice: fallbackExitPrice,
       reason,
+      pendingExitAction: position.pendingExitAction || null,
     });
 
     const openedAt = new Date(position.openedAt);
@@ -723,11 +1254,25 @@ class PaperTradingService {
       fee: closedSnapshot.fee,
       openedAt,
       closedAt: closedSnapshot.closedAt,
+      realizedRMultiple: closedSnapshot.realizedRMultiple,
+      targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
     });
 
     if (closedSnapshot.profitLoss < 0) {
       await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt, 'paper');
     }
+
+    try {
+      await strategyDailyStopService.recordTradeOutcome({
+        strategy: position.strategy,
+        symbol: position.symbol,
+        timeframe: position.setupTimeframe || position.timeframe || null,
+        realizedRMultiple: closedSnapshot.realizedRMultiple,
+        profitLoss: closedSnapshot.profitLoss,
+        plannedRiskAmount: position.plannedRiskAmount,
+        closedAt: closedSnapshot.closedAt,
+      });
+    } catch (_) {}
 
     await paperPositionsDb.remove({ _id: positionDbId });
 
@@ -758,6 +1303,7 @@ class PaperTradingService {
 
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
     await notificationService.notifyTradeClosed(closedTrade);
+    await this.syncMonitorNow('forced_sync');
 
     return {
       success: true,
@@ -774,6 +1320,12 @@ class PaperTradingService {
     const openPositions = await paperPositionsDb.find({});
     const todayTrades = await TradeLog.findToday();
     const allTimeStats = await TradeLog.getStats();
+    const assignments = await this._getActiveAssignments();
+    const assignmentStats = buildAssignmentStats(assignments);
+    const signalScanBuckets = buildSignalScanBucketStatus(
+      assignments,
+      this.scheduler ? this.scheduler.getBucketStates() : new Map()
+    );
 
     return {
       running: this.running,
@@ -783,6 +1335,17 @@ class PaperTradingService {
       positions: openPositions,
       todayTrades: todayTrades.length,
       allTimeStats,
+      activeAssignments: assignmentStats.activeAssignments,
+      activeSymbols: assignmentStats.activeSymbols,
+      signalScanBuckets,
+      scanBuckets: signalScanBuckets,
+      positionMonitor: {
+        ...this.monitorStatus,
+        running: this.running,
+        intervalMs: this.running ? this.monitorBaseTickMs : 0,
+        baseTickMs: this.monitorBaseTickMs,
+      },
+      monitorIntervalMs: this.monitorIntervalMs,
     };
   }
 

@@ -16,6 +16,7 @@ function buildQuery(params) {
   if (params.scope) query.scope = params.scope;
   if (params.module) query.module = params.module;
   if (params.reasonCode) query.reasonCode = params.reasonCode;
+  if (params.type) query.type = params.type;
 
   if (params.stage) {
     const stages = String(params.stage).split(',').map((s) => s.trim()).filter(Boolean);

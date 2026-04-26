@@ -10,6 +10,7 @@ function toSummary(job) {
     runModel: job.runModel || 'independent',
     period: job.period,
     initialBalance: job.initialBalance,
+    ruinThreshold: job.ruinThreshold != null ? job.ruinThreshold : 0,
     strategyScopeMode: job.strategyScopeMode || 'enabled_assigned_only',
     timeframeMode: job.timeframeMode,
     forcedTimeframe: job.forcedTimeframe || null,

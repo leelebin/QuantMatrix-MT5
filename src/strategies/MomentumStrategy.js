@@ -22,7 +22,7 @@ const BaseStrategy = require('./BaseStrategy');
 class MomentumStrategy extends BaseStrategy {
   constructor() {
     super('Momentum', 'RSI + MACD momentum strategy for indices');
-    this.marketQualityThreshold = 2;
+    this.marketQualityThreshold = 3;
     this.marketQualityMaxScore = 3;
   }
 

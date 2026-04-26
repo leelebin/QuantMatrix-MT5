@@ -124,6 +124,23 @@ const indicatorService = {
     };
   },
 
+  calculateForStrategy(strategyType, candles, params = {}) {
+    if (strategyType === 'VolumeFlowHybrid') {
+      const closes = candles.map((c) => c.close);
+      const ema20Period = Number(params.ema_fast) || 20;
+      const ema50Period = Number(params.ema_period || params.ema_slow) || 50;
+      const atrPeriod = Number(params.atr_period) || 14;
+
+      return {
+        ema20: this.ema(closes, ema20Period),
+        ema50: this.ema(closes, ema50Period),
+        atr: this.atr(candles, atrPeriod),
+      };
+    }
+
+    return this.calculateAll(candles, params);
+  },
+
   /**
    * Resolve the best available volume scalar on a single candle. Prefers
    * `real_volume`/`volume` when populated; falls back to `tickVolume`.

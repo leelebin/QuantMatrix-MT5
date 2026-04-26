@@ -1,4 +1,5 @@
 const RiskProfile = require('../models/RiskProfile');
+const strategyDailyStopService = require('../services/strategyDailyStopService');
 
 async function buildRiskSettingsPayload() {
   const profiles = await RiskProfile.findAll();
@@ -78,6 +79,53 @@ exports.activateRiskProfile = async (req, res) => {
     }
 
     res.json({ success: true, data: await buildRiskSettingsPayload() });
+  } catch (err) {
+    sendError(res, err);
+  }
+};
+
+exports.getStrategyDailyStops = async (req, res) => {
+  try {
+    const config = await strategyDailyStopService.getActiveConfig();
+    const todayStoppedStrategies = await strategyDailyStopService.getTodayStoppedStrategies({}, config);
+    const { tradingDay, resetAt } = strategyDailyStopService.resolveTradingDay(new Date(), config);
+    const blockedEntriesToday = strategyDailyStopService.getBlockedEntriesToday(tradingDay);
+
+    res.json({
+      success: true,
+      data: {
+        config,
+        tradingDay,
+        resetAt,
+        todayStoppedStrategies,
+        todayStoppedStrategiesCount: todayStoppedStrategies.length,
+        blockedEntriesTodayByStrategyDailyStop: blockedEntriesToday,
+      },
+    });
+  } catch (err) {
+    sendError(res, err);
+  }
+};
+
+exports.resetStrategyDailyStop = async (req, res) => {
+  try {
+    const { strategy, symbol, timeframe } = req.body || {};
+    if (!strategy || !symbol || !timeframe) {
+      return res.status(400).json({
+        success: false,
+        message: 'strategy, symbol, and timeframe are required',
+      });
+    }
+
+    const actor = req.user?.email || req.headers['x-actor'] || 'manual-reset';
+    const result = await strategyDailyStopService.manualReset({
+      strategy,
+      symbol,
+      timeframe,
+      actor,
+    });
+
+    res.json({ success: true, data: result });
   } catch (err) {
     sendError(res, err);
   }

@@ -14,6 +14,7 @@ const STAGES = Object.freeze({
   ORDER_FAILED: 'ORDER_FAILED',
   POSITION_MANAGED: 'POSITION_MANAGED',
   ORDER_CLOSED: 'ORDER_CLOSED',
+  NEWS_BLACKOUT: 'NEWS_BLACKOUT',
 });
 
 const STATUSES = Object.freeze({
@@ -31,6 +32,7 @@ function normalizeRecord(event) {
     symbol: event.symbol || null,
     strategy: event.strategy || null,
     module: event.module || null,
+    type: event.type || null,
     stage: event.stage || null,
     status: event.status || 'INFO',
     scope: event.scope || 'live', // live | paper | backtest

@@ -6,6 +6,9 @@
 
 const indicatorService = require('./indicatorService');
 const breakevenService = require('./breakevenService');
+const volumeFeatureService = require('./volumeFeatureService');
+const backtestChartService = require('./backtestChartService');
+const { DEFAULT_EXECUTION_POLICY, calculateExecutionScore } = require('./executionPolicyService');
 const { getInstrument } = require('../config/instruments');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const { backtestsDb } = require('../config/db');
@@ -18,6 +21,9 @@ const MultiTimeframeStrategy = require('../strategies/MultiTimeframeStrategy');
 const MomentumStrategy = require('../strategies/MomentumStrategy');
 const BreakoutStrategy = require('../strategies/BreakoutStrategy');
 const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy');
+const { estimateBarDistance } = require('../utils/timeframe');
+
+const HISTORY_WINDOW_SIZE = 251;
 
 const STRATEGY_MAP = {
   TrendFollowing: TrendFollowingStrategy,
@@ -58,8 +64,23 @@ class BacktestEngine {
     };
   }
 
-  _buildIndicators(candles, resolvedParams) {
-    return indicatorService.calculateAll(candles, resolvedParams);
+  _buildIndicators(candles, resolvedParams, strategyType = null) {
+    return indicatorService.calculateForStrategy(strategyType, candles, resolvedParams);
+  }
+
+  _strategyNeedsEntryIndicators(strategyType) {
+    return strategyType === 'TrendFollowing' || strategyType === 'MultiTimeframe';
+  }
+
+  _buildVolumeFeatureSeries(candles, resolvedParams, strategyType = null) {
+    if (strategyType !== 'VolumeFlowHybrid') {
+      return null;
+    }
+
+    return volumeFeatureService.buildFeatureSeries(candles, {
+      volumeAvgPeriod: Math.max(5, Math.round(Number(resolvedParams.volume_avg_period) || 20)),
+      deltaSmoothing: Math.max(2, Math.round(Number(resolvedParams.cumulative_delta_smoothing) || 8)),
+    });
   }
 
   _toTimeMs(value) {
@@ -80,6 +101,146 @@ class BacktestEngine {
       sliced[key] = sliceStart < sliceEnd ? values.slice(sliceStart, sliceEnd) : [];
     }
     return sliced;
+  }
+
+  _prepareIndicatorSeries(fullIndicators, totalCandles) {
+    const constants = {};
+    const series = [];
+
+    for (const [key, values] of Object.entries(fullIndicators || {})) {
+      if (!Array.isArray(values)) {
+        constants[key] = values;
+        continue;
+      }
+
+      series.push({
+        key,
+        values,
+        offset: totalCandles - values.length,
+      });
+    }
+
+    return { constants, series };
+  }
+
+  _buildPreparedIndicatorWindow(preparedSeries, windowStart, windowEnd) {
+    if (!preparedSeries) {
+      return null;
+    }
+
+    const sliced = { ...preparedSeries.constants };
+
+    for (const entry of preparedSeries.series) {
+      const sliceStart = Math.max(0, windowStart - entry.offset);
+      const sliceEnd = Math.max(0, windowEnd - entry.offset);
+      sliced[entry.key] = sliceStart < sliceEnd ? entry.values.slice(sliceStart, sliceEnd) : [];
+    }
+
+    return sliced;
+  }
+
+  _createRollingArrayWindowState(source = [], maxSize = HISTORY_WINDOW_SIZE) {
+    return {
+      source,
+      maxSize,
+      cursor: -1,
+      window: [],
+    };
+  }
+
+  _advanceRollingArrayWindowState(state, cursor) {
+    if (!state) {
+      return null;
+    }
+
+    if (!Array.isArray(state.source) || cursor < 0) {
+      state.cursor = cursor;
+      state.window = [];
+      return state.window;
+    }
+
+    if (
+      state.cursor === -1
+      || !Array.isArray(state.window)
+      || cursor < state.cursor
+      || (cursor - state.cursor) >= state.maxSize
+    ) {
+      const start = Math.max(0, cursor - state.maxSize + 1);
+      state.window = state.source.slice(start, cursor + 1);
+      state.cursor = cursor;
+      return state.window;
+    }
+
+    for (let index = state.cursor + 1; index <= cursor; index++) {
+      state.window.push(state.source[index]);
+      if (state.window.length > state.maxSize) {
+        state.window.shift();
+      }
+    }
+
+    state.cursor = cursor;
+    return state.window;
+  }
+
+  _createRollingIndicatorWindowState(preparedSeries = null, maxSize = HISTORY_WINDOW_SIZE) {
+    return {
+      preparedSeries,
+      maxSize,
+      cursor: -1,
+      window: preparedSeries ? { ...preparedSeries.constants } : null,
+    };
+  }
+
+  _advanceRollingIndicatorWindowState(state, cursor) {
+    if (!state || !state.preparedSeries) {
+      return null;
+    }
+
+    if (cursor < 0) {
+      state.cursor = cursor;
+      state.window = { ...state.preparedSeries.constants };
+      for (const entry of state.preparedSeries.series) {
+        state.window[entry.key] = [];
+      }
+      return state.window;
+    }
+
+    if (
+      state.cursor === -1
+      || !state.window
+      || cursor < state.cursor
+      || (cursor - state.cursor) >= state.maxSize
+    ) {
+      const start = Math.max(0, cursor - state.maxSize + 1);
+      state.window = this._buildPreparedIndicatorWindow(state.preparedSeries, start, cursor + 1);
+      state.cursor = cursor;
+      return state.window;
+    }
+
+    for (let index = state.cursor + 1; index <= cursor; index++) {
+      const previousStart = Math.max(0, index - state.maxSize);
+      const nextStart = Math.max(0, index - state.maxSize + 1);
+
+      for (const entry of state.preparedSeries.series) {
+        const removedValueIndex = previousStart - entry.offset;
+        if (
+          nextStart > previousStart
+          && removedValueIndex >= 0
+          && removedValueIndex < entry.values.length
+          && state.window[entry.key].length > 0
+        ) {
+          state.window[entry.key].shift();
+        }
+
+        const valueIndex = index - entry.offset;
+        if (valueIndex >= 0 && valueIndex < entry.values.length) {
+          state.window[entry.key].push(entry.values[valueIndex]);
+        }
+      }
+    }
+
+    state.cursor = cursor;
+    return state.window;
   }
 
   _buildHigherTimeframeTrendSeries(higherTfCandles, resolvedParams) {
@@ -131,8 +292,12 @@ class BacktestEngine {
       tradeEndTime = null,
       strategyParams = null,
       storedStrategyParameters = null,
+      parameterPreset = 'default',
+      parameterPresetResolution = null,
       breakevenConfig = null,
+      executionPolicy = null,
       executionConfigOverride = null,
+      includeChartData = false,
     } = params;
 
     const instrument = getInstrument(symbol);
@@ -153,25 +318,39 @@ class BacktestEngine {
       : breakevenService.getDefaultBreakevenConfig();
     const tradingInstrument = this._buildTradingInstrument(instrument, resolvedParams, strategyType, executionConfigOverride);
     const strategy = this._createStrategy(strategyType);
+    const effectiveExecutionPolicy = executionPolicy || DEFAULT_EXECUTION_POLICY;
     const spread = (spreadPips || instrument.spread) * instrument.pipSize;
     const slippage = slippagePips * instrument.pipSize;
+    const needsEntryIndicators = this._strategyNeedsEntryIndicators(strategyType);
 
     let balance = initialBalance;
     let equity = initialBalance;
-    let peakBalance = initialBalance;
     const trades = [];
     const equityCurve = [{ time: tradeStartTime || candles[0]?.time || '', equity: initialBalance }];
     let openPosition = null;
     const warmupPeriod = 250;
     const tradeStartMs = tradeStartTime ? new Date(tradeStartTime).getTime() : null;
     const candleTimes = candles.map((candle) => this._toTimeMs(candle.time));
-    const fullIndicators = this._buildIndicators(candles, resolvedParams);
+    const fullIndicators = this._buildIndicators(candles, resolvedParams, strategyType);
+    const preparedIndicators = this._prepareIndicatorSeries(fullIndicators, candles.length);
+    const fullVolumeFeatureSeries = this._buildVolumeFeatureSeries(candles, resolvedParams, strategyType);
     const lowerTfTimes = lowerTfCandles ? lowerTfCandles.map((candle) => this._toTimeMs(candle.time)) : null;
-    const fullLowerIndicators = lowerTfCandles && tradingInstrument.entryTimeframe
-      ? this._buildIndicators(lowerTfCandles, resolvedParams)
+    const fullLowerIndicators = lowerTfCandles && tradingInstrument.entryTimeframe && needsEntryIndicators
+      ? this._buildIndicators(lowerTfCandles, resolvedParams, strategyType)
+      : null;
+    const preparedLowerIndicators = fullLowerIndicators
+      ? this._prepareIndicatorSeries(fullLowerIndicators, lowerTfCandles.length)
       : null;
     const higherTfTimes = higherTfCandles ? higherTfCandles.map((candle) => this._toTimeMs(candle.time)) : null;
     const higherTrendSeries = this._buildHigherTimeframeTrendSeries(higherTfCandles, resolvedParams);
+    const historyWindowState = this._createRollingArrayWindowState(candles);
+    const indicatorWindowState = this._createRollingIndicatorWindowState(preparedIndicators);
+    const lowerHistoryWindowState = lowerTfCandles && tradingInstrument.entryTimeframe
+      ? this._createRollingArrayWindowState(lowerTfCandles)
+      : null;
+    const lowerIndicatorWindowState = preparedLowerIndicators
+      ? this._createRollingIndicatorWindowState(preparedLowerIndicators)
+      : null;
     let lowerCursor = -1;
     let higherCursor = -1;
 
@@ -183,10 +362,8 @@ class BacktestEngine {
       const currentCandle = candles[i];
       const currentTimeMs = candleTimes[i];
       const nextCandle = candles[i + 1] || null;
-      const historyStart = Math.max(0, i - 250);
-      const historyEnd = i + 1;
-      const historicalCandles = candles.slice(historyStart, historyEnd);
-      const ind = this._sliceIndicatorWindow(fullIndicators, candles.length, historyStart, historyEnd);
+      const historicalCandles = this._advanceRollingArrayWindowState(historyWindowState, i);
+      const ind = this._advanceRollingIndicatorWindowState(indicatorWindowState, i);
       let lowerHistoricalCandles = null;
       let lowerInd = null;
       let pendingEntry = null;
@@ -197,13 +374,13 @@ class BacktestEngine {
         }
 
         if (lowerCursor >= 0) {
-          const lowerStart = Math.max(0, lowerCursor - 250);
-          const lowerEnd = lowerCursor + 1;
-          lowerHistoricalCandles = lowerTfCandles.slice(lowerStart, lowerEnd);
-          lowerInd = this._sliceIndicatorWindow(fullLowerIndicators, lowerTfCandles.length, lowerStart, lowerEnd);
+          lowerHistoricalCandles = this._advanceRollingArrayWindowState(lowerHistoryWindowState, lowerCursor);
+          if (preparedLowerIndicators) {
+            lowerInd = this._advanceRollingIndicatorWindowState(lowerIndicatorWindowState, lowerCursor);
+          }
         }
 
-        if (lowerHistoricalCandles && lowerHistoricalCandles.length > 1) {
+        if (needsEntryIndicators && lowerHistoricalCandles && lowerHistoricalCandles.length > 1) {
           lowerInd = lowerInd || {};
         }
       }
@@ -222,8 +399,7 @@ class BacktestEngine {
           balance += trade.profitLoss;
           trades.push(trade);
           openPosition = null;
-
-          if (balance > peakBalance) peakBalance = balance;
+          equity = balance;
           equityCurve.push({ time: currentCandle.time, equity: balance });
           continue;
         }
@@ -239,6 +415,7 @@ class BacktestEngine {
           higherTfCandles,
           entryCandles: lowerHistoricalCandles,
           entryIndicators: lowerInd,
+          volumeFeatureSnapshot: fullVolumeFeatureSeries ? fullVolumeFeatureSeries[i] : null,
           strategyParams: resolvedParams,
         });
 
@@ -254,6 +431,43 @@ class BacktestEngine {
           lotSize = Math.min(lotSize, 5.0);
 
           const currentAtr = ind.atr && ind.atr.length > 0 ? ind.atr[ind.atr.length - 1] : 0;
+          const signalTime = result.entryCandleTime || result.setupCandleTime || currentCandle.time;
+          const duplicateWindowBars = Number(effectiveExecutionPolicy.duplicateEntryWindowBars) || 0;
+          const cooldownBarsAfterLoss = Number(effectiveExecutionPolicy.cooldownBarsAfterLoss) || 0;
+          const duplicateReference = duplicateWindowBars > 0
+            ? [...trades].reverse().find((trade) => {
+                if (trade.type !== result.signal) return false;
+                const referenceTime = trade.entryCandleTime || trade.setupCandleTime || trade.entryTime;
+                return estimateBarDistance(referenceTime, signalTime, result.setupTimeframe || result.entryTimeframe || timeframe) <= duplicateWindowBars;
+              })
+            : null;
+          const lastLossTrade = cooldownBarsAfterLoss > 0
+            ? [...trades].reverse().find((trade) => Number(trade.profitLoss) < 0 && trade.exitTime)
+            : null;
+
+          if (
+            lastLossTrade
+            && estimateBarDistance(
+              lastLossTrade.exitTime,
+              signalTime,
+              result.setupTimeframe || result.entryTimeframe || timeframe
+            ) <= cooldownBarsAfterLoss
+          ) {
+            continue;
+          }
+
+          const executionScore = calculateExecutionScore(result, effectiveExecutionPolicy, {
+            sameDirectionSymbolPositions: openPosition && openPosition.type === result.signal ? 1 : 0,
+            sameDirectionCategoryPositions: openPosition && openPosition.type === result.signal ? 1 : 0,
+            duplicatePenalty: Boolean(duplicateReference),
+          });
+          if (executionScore.score < effectiveExecutionPolicy.minExecutionScore) {
+            continue;
+          }
+          const plannedRiskAmount = parseFloat((slPips * tradingInstrument.pipValue * lotSize).toFixed(4));
+          const targetRMultiple = slDistance > 0
+            ? parseFloat((Math.abs(result.tp - entryPrice) / slDistance).toFixed(4))
+            : null;
 
           pendingEntry = {
             id: trades.length + 1,
@@ -266,8 +480,20 @@ class BacktestEngine {
             lotSize,
             atrAtEntry: currentAtr,
             breakevenConfig: effectiveBreakeven,
+            executionPolicy: effectiveExecutionPolicy,
+            executionScore: executionScore.score,
+            executionScoreDetails: executionScore.details,
+            plannedRiskAmount,
+            targetRMultiple,
             indicatorsSnapshot: result.indicatorsSnapshot,
             reason: result.reason,
+            entryReason: result.entryReason || [result.reason, result.triggerReason].filter(Boolean).join(' | ') || result.reason,
+            setupReason: result.setupReason || result.reason || '',
+            triggerReason: result.triggerReason || '',
+            setupTimeframe: result.setupTimeframe || timeframe,
+            entryTimeframe: result.entryTimeframe || null,
+            setupCandleTime: result.setupCandleTime || currentCandle.time,
+            entryCandleTime: result.entryCandleTime || signalTime,
           };
         }
       }
@@ -297,10 +523,35 @@ class BacktestEngine {
       const trade = this._closeTrade(openPosition, exitPrice, 'END_OF_DATA', lastCandle.time, tradingInstrument);
       balance += trade.profitLoss;
       trades.push(trade);
+      equityCurve.push({ time: lastCandle.time, equity: balance });
     }
 
-    const summary = this._generateSummary(trades, initialBalance, balance, peakBalance);
+    equity = balance;
+    const summary = this._generateSummary(trades, initialBalance, balance, equityCurve);
     const monthlyBreakdown = this._generateMonthlyBreakdown(trades);
+    const resolvedPreset = parameterPresetResolution || {
+      preset: parameterPreset || 'default',
+      fallbackUsed: false,
+      resolvedFrom: strategyParams && Object.keys(strategyParams).length > 0 ? 'runtime_overrides' : 'instance',
+      optimizerHistoryId: null,
+      optimizerCompletedAt: null,
+      optimizerTimeframe: null,
+      optimizerOptimizeFor: null,
+    };
+    const chartData = includeChartData
+      ? backtestChartService.buildChartData({
+          symbol,
+          strategyType,
+          timeframe,
+          candles,
+          indicators: fullIndicators,
+          resolvedParams,
+          tradeStartTime: tradeStartTime || candles[warmupPeriod]?.time || '',
+          tradeEndTime: tradeEndTime || candles[candles.length - 1]?.time || '',
+          trades,
+          volumeFeatureSeries: fullVolumeFeatureSeries,
+        })
+      : null;
 
     return {
       symbol,
@@ -311,15 +562,27 @@ class BacktestEngine {
         end: tradeEndTime || candles[candles.length - 1]?.time || '',
       },
       parameters: resolvedParams,
+      parameterPreset: resolvedPreset.preset || 'default',
+      parameterPresetResolution: resolvedPreset,
       parameterSource: {
         hasStoredParameters: Boolean(storedStrategyParameters && Object.keys(storedStrategyParameters).length > 0),
         hasRuntimeOverrides: Boolean(strategyParams && Object.keys(strategyParams).length > 0),
+        preset: resolvedPreset.preset || 'default',
+        resolvedFrom: resolvedPreset.resolvedFrom || 'instance',
+        fallbackUsed: Boolean(resolvedPreset.fallbackUsed),
+        optimizerHistoryId: resolvedPreset.optimizerHistoryId || null,
+        optimizerCompletedAt: resolvedPreset.optimizerCompletedAt || null,
+        optimizerTimeframe: resolvedPreset.optimizerTimeframe || null,
+        optimizerOptimizeFor: resolvedPreset.optimizerOptimizeFor || null,
       },
       breakevenConfigUsed: effectiveBreakeven,
+      executionPolicyUsed: effectiveExecutionPolicy,
       summary,
       monthlyBreakdown,
       trades,
       equityCurve,
+      chartData,
+      initialBalance,
       finalBalance: balance,
       finalEquity: equity,
     };
@@ -330,8 +593,10 @@ class BacktestEngine {
    */
   async run(params) {
     const result = await this._runSimulation(params);
+    const persistedResult = { ...result };
+    delete persistedResult.chartData;
     const saved = await backtestsDb.insert({
-      ...result,
+      ...persistedResult,
       batchJobId: params.batchJobId || null,
       isBatchChild: Boolean(params.batchJobId),
       createdAt: new Date(),
@@ -397,6 +662,13 @@ class BacktestEngine {
       : position.entryPrice - exitPrice;
     const profitPips = priceDiff / instrument.pipSize;
     const profitLoss = priceDiff * position.lotSize * instrument.contractSize;
+    const realizedRMultiple = Number(position.plannedRiskAmount) > 0
+      ? parseFloat((profitLoss / position.plannedRiskAmount).toFixed(4))
+      : null;
+    const targetRMultipleCaptured = Number.isFinite(realizedRMultiple)
+      && Number(position.targetRMultiple) > 0
+      ? parseFloat((realizedRMultiple / position.targetRMultiple).toFixed(4))
+      : null;
 
     return {
       id: position.id,
@@ -411,8 +683,21 @@ class BacktestEngine {
       lotSize: position.lotSize,
       profitPips: parseFloat(profitPips.toFixed(1)),
       profitLoss: parseFloat(profitLoss.toFixed(2)),
+      realizedRMultiple,
+      targetRMultipleCaptured,
       exitReason: reason,
+      exitReasonText: backtestChartService.humanizeExitReason(reason),
       reason: position.reason,
+      entryReason: position.entryReason || position.reason || '',
+      setupReason: position.setupReason || position.reason || '',
+      triggerReason: position.triggerReason || '',
+      executionScore: position.executionScore ?? null,
+      executionScoreDetails: position.executionScoreDetails || null,
+      executionPolicy: position.executionPolicy || null,
+      setupTimeframe: position.setupTimeframe || null,
+      entryTimeframe: position.entryTimeframe || null,
+      setupCandleTime: position.setupCandleTime || null,
+      entryCandleTime: position.entryCandleTime || null,
       indicatorsAtEntry: position.indicatorsSnapshot,
     };
   }
@@ -420,7 +705,41 @@ class BacktestEngine {
   /**
    * Generate summary statistics
    */
-  _generateSummary(trades, initialBalance, finalBalance) {
+  _calculateMaxDrawdownFromCurve(equityCurve = [], initialBalance = 0) {
+    const points = Array.isArray(equityCurve) ? equityCurve : [];
+    const startingEquity = Number(initialBalance) || 0;
+
+    if (points.length === 0 && startingEquity <= 0) {
+      return 0;
+    }
+
+    let peak = startingEquity > 0
+      ? startingEquity
+      : Number(points[0] && points[0].equity) || 0;
+    let maxDrawdown = 0;
+
+    for (const point of points) {
+      const equityValue = Number(point && point.equity);
+      if (!Number.isFinite(equityValue)) {
+        continue;
+      }
+
+      if (equityValue > peak) {
+        peak = equityValue;
+      }
+
+      if (peak > 0) {
+        const drawdown = (peak - equityValue) / peak;
+        if (drawdown > maxDrawdown) {
+          maxDrawdown = drawdown;
+        }
+      }
+    }
+
+    return maxDrawdown;
+  }
+
+  _generateSummary(trades, initialBalance, finalBalance, equityCurve = null) {
     if (trades.length === 0) {
       return {
         totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0,
@@ -455,15 +774,7 @@ class BacktestEngine {
       maxConsLosses = Math.max(maxConsLosses, consLosses);
     }
 
-    let peak = initialBalance;
-    let maxDD = 0;
-    let runningBalance = initialBalance;
-    for (const trade of trades) {
-      runningBalance += trade.profitLoss;
-      if (runningBalance > peak) peak = runningBalance;
-      const dd = (peak - runningBalance) / peak;
-      if (dd > maxDD) maxDD = dd;
-    }
+    const maxDD = this._calculateMaxDrawdownFromCurve(equityCurve, initialBalance);
 
     const returns = trades.map((trade) => trade.profitLoss / initialBalance);
     const avgReturn = returns.reduce((sum, value) => sum + value, 0) / returns.length;
@@ -551,7 +862,25 @@ class BacktestEngine {
   }
 
   async getResult(id) {
-    return backtestsDb.findOne({ _id: id });
+    const result = await backtestsDb.findOne({ _id: id });
+    if (!result) {
+      return null;
+    }
+
+    if (
+      (result.initialBalance == null || Number.isNaN(Number(result.initialBalance)))
+      && result.finalBalance != null
+      && result.summary
+      && result.summary.netProfitMoney != null
+    ) {
+      result.initialBalance = Number(result.finalBalance) - Number(result.summary.netProfitMoney);
+    }
+
+    if (typeof result.chartData === 'undefined') {
+      result.chartData = null;
+    }
+
+    return result;
   }
 
   async deleteResult(id) {

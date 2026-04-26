@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect } = require('../middleware/auth');
 const {
   runBacktest,
+  getBacktestParameterPreset,
   runAllStrategies,
   runBatchBacktest,
   getBatchJobs,
@@ -17,6 +18,7 @@ const {
 
 router.use(protect);
 
+router.get('/preset', getBacktestParameterPreset);
 router.post('/run', runBacktest);
 router.post('/run-all-strategies', runAllStrategies);
 router.post('/batch/run', runBatchBacktest);

@@ -10,6 +10,7 @@
  */
 
 const BaseStrategy = require('./BaseStrategy');
+const { normalizeHigherTfTrendSnapshot } = require('../utils/positionExitState');
 
 class MultiTimeframeStrategy extends BaseStrategy {
   constructor() {
@@ -52,10 +53,13 @@ class MultiTimeframeStrategy extends BaseStrategy {
     if (!indicators) return null;
 
     const direction = position?.type;
-    if (this.higherTfTrend && this.higherTfTrend.trend) {
+    const higherTfTrend = normalizeHigherTfTrendSnapshot(context?.higherTfTrend)
+      || normalizeHigherTfTrendSnapshot(position?.higherTfTrend)
+      || normalizeHigherTfTrendSnapshot(position?.indicatorsSnapshot?.higherTfTrend);
+    if (higherTfTrend && higherTfTrend.trend) {
       const htfAgainst =
-        (direction === 'BUY' && this.higherTfTrend.trend === 'BEARISH')
-        || (direction === 'SELL' && this.higherTfTrend.trend === 'BULLISH');
+        (direction === 'BUY' && higherTfTrend.trend === 'BEARISH')
+        || (direction === 'SELL' && higherTfTrend.trend === 'BULLISH');
       if (htfAgainst) {
         return {
           breakeven: { triggerAtrMultiple: 0.4 },
@@ -110,11 +114,19 @@ class MultiTimeframeStrategy extends BaseStrategy {
       return this.noSignal();
     }
 
+    let higherTfTrend = normalizeHigherTfTrendSnapshot(context?.higherTfTrend)
+      || normalizeHigherTfTrendSnapshot(this.higherTfTrend);
     let trendDirection = 'NEUTRAL';
-    if (this.higherTfTrend) {
-      trendDirection = this.higherTfTrend.trend;
+    if (higherTfTrend && higherTfTrend.trend) {
+      trendDirection = higherTfTrend.trend;
     } else if (currentEma200) {
       trendDirection = currentPrice > currentEma200 ? 'BULLISH' : 'BEARISH';
+      higherTfTrend = normalizeHigherTfTrendSnapshot({
+        trend: trendDirection,
+        ema200: currentEma200,
+        price: currentPrice,
+        timeframe: context?.higherTfTrend?.timeframe || instrument.higherTimeframe || instrument.timeframe || null,
+      });
     }
 
     const setup = this._buildSetup(candles, indicators, instrument, trendDirection);
@@ -127,7 +139,7 @@ class MultiTimeframeStrategy extends BaseStrategy {
       stochD: currentStoch.d,
       atr: currentAtr,
       price: currentPrice,
-      higherTfTrend: trendDirection,
+      higherTfTrend: higherTfTrend || trendDirection,
     };
 
     if (!setup) {

@@ -8,13 +8,20 @@ const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
 const breakevenService = require('./breakevenService');
+const positionMonitor = require('./positionMonitor');
 const { positionsDb, tradesDb } = require('../config/db');
 const ExecutionAudit = require('../models/ExecutionAudit');
 const RiskProfile = require('../models/RiskProfile');
 const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
+const {
+  appendManagementEvent,
+  buildManagedPositionState,
+  createManagerAction,
+} = require('../utils/positionExitState');
 const auditService = require('./auditService');
+const strategyDailyStopService = require('./strategyDailyStopService');
 
 class TradeExecutor {
   async _recordAudit(stage, status, signal, extra = {}) {
@@ -107,6 +114,10 @@ class TradeExecutor {
         });
       }
 
+      signal.executionScore = riskCheck.executionScore ?? signal.executionScore ?? null;
+      signal.executionScoreDetails = riskCheck.executionScoreDetails || signal.executionScoreDetails || null;
+      signal.executionPolicy = riskCheck.executionPolicy || signal.executionPolicy || null;
+
       const brokerComment = buildBrokerComment(signal, 'QM');
       const tradeComment = buildTradeComment(signal, brokerComment);
       const preflight = await mt5Service.preflightOrder(
@@ -170,12 +181,23 @@ class TradeExecutor {
       const entryFee = Number(result.entryDeal?.fee) || 0;
       const activeProfile = await RiskProfile.getActive();
       const strategyRecord = signal.strategy ? await Strategy.findByName(signal.strategy) : null;
-      const breakevenConfig = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyRecord);
-      const exitPlan = breakevenService.resolveEffectiveExitPlan(
-        activeProfile,
-        strategyRecord,
-        signal.exitPlan || null
-      );
+      const breakevenConfig = signal.effectiveBreakeven
+        || signal.effectiveTradeManagement?.breakeven
+        || breakevenService.resolveEffectiveBreakeven(activeProfile, strategyRecord);
+      const exitPlan = signal.effectiveExitPlan
+        || breakevenService.resolveEffectiveExitPlan(
+          activeProfile,
+          strategyRecord,
+          signal.exitPlan || null
+        );
+      const managedPositionState = buildManagedPositionState({
+        signal,
+        lotSize: riskCheck.lotSize,
+        entryPrice: executedEntryPrice,
+        breakevenConfig,
+        exitPlan,
+        plannedRiskAmount: riskCheck.plannedRiskAmount,
+      });
 
       // Save position to local DB
       const position = await positionsDb.insert({
@@ -185,19 +207,16 @@ class TradeExecutor {
         currentSl: signal.sl,
         currentTp: signal.tp,
         lotSize: riskCheck.lotSize,
-        originalLotSize: riskCheck.lotSize,
         mt5PositionId,
         mt5EntryDealId,
         mt5Comment,
         strategy: signal.strategy,
         comment: tradeComment,
         confidence: signal.confidence,
+        rawConfidence: signal.rawConfidence ?? signal.confidence,
         reason: signal.reason,
         atrAtEntry,
-        breakevenConfig,
-        exitPlan,
-        partialsExecutedIndices: [],
-        maxFavourablePrice: executedEntryPrice,
+        ...managedPositionState,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
@@ -213,9 +232,21 @@ class TradeExecutor {
         lotSize: riskCheck.lotSize,
         strategy: signal.strategy,
         confidence: signal.confidence,
+        rawConfidence: signal.rawConfidence ?? signal.confidence,
         reason: signal.reason,
         breakevenConfig,
         exitPlan,
+        executionPolicy: signal.executionPolicy || null,
+        executionScore: managedPositionState.executionScore,
+        executionScoreDetails: managedPositionState.executionScoreDetails,
+        plannedRiskAmount: managedPositionState.plannedRiskAmount,
+        targetRMultiple: managedPositionState.targetRMultiple,
+        exitPlanSnapshot: managedPositionState.exitPlanSnapshot,
+        managementEvents: managedPositionState.managementEvents,
+        setupTimeframe: managedPositionState.setupTimeframe,
+        entryTimeframe: managedPositionState.entryTimeframe,
+        setupCandleTime: managedPositionState.setupCandleTime,
+        entryCandleTime: managedPositionState.entryCandleTime,
         indicatorsSnapshot: signal.indicatorsSnapshot,
         commission: entryCommission,
         swap: entrySwap,
@@ -264,6 +295,7 @@ class TradeExecutor {
 
       // Send Telegram notification
       await notificationService.notifyTradeOpened(position);
+      await positionMonitor.syncNow('forced_sync');
 
       return { success: true, message: 'Trade executed', trade: position };
     } catch (err) {
@@ -328,6 +360,19 @@ class TradeExecutor {
 
       // Close on MT5
       let closeResult = null;
+      const closeAction = createManagerAction(reason || 'MANUAL', {
+        source: 'tradeExecutor.closePosition',
+      });
+      await positionsDb.update({ _id: positionDbId }, {
+        $set: {
+          pendingExitAction: closeAction,
+          managerActionId: closeAction.id,
+          managementEvents: appendManagementEvent(position, closeAction, { status: 'PENDING' }),
+        },
+      });
+      position.pendingExitAction = closeAction;
+      position.managerActionId = closeAction.id;
+      position.managementEvents = appendManagementEvent(position, closeAction, { status: 'PENDING' });
       if (position.mt5PositionId) {
         closeResult = await mt5Service.closePosition(position.mt5PositionId);
       }
@@ -352,6 +397,7 @@ class TradeExecutor {
       const closedSnapshot = buildClosedTradeSnapshot(position, dealSummary, {
         exitPrice: closeResult?.closeDeal?.price || closeResult?.price,
         reason,
+        pendingExitAction: position.pendingExitAction || null,
       });
 
       // Update position in DB
@@ -372,6 +418,10 @@ class TradeExecutor {
           swap: closedSnapshot.swap,
           fee: closedSnapshot.fee,
           mt5CloseDealId: closeResult?.closeDeal?.id || closeResult?.dealId || null,
+          exitPlanSnapshot: closedSnapshot.exitPlanSnapshot || null,
+          managementEvents: closedSnapshot.managementEvents || [],
+          realizedRMultiple: closedSnapshot.realizedRMultiple,
+          targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
         },
       });
 
@@ -379,6 +429,18 @@ class TradeExecutor {
       if (closedSnapshot.profitLoss < 0) {
         await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt);
       }
+
+      try {
+        await strategyDailyStopService.recordTradeOutcome({
+          strategy: position.strategy,
+          symbol: position.symbol,
+          timeframe: position.setupTimeframe || position.timeframe || null,
+          realizedRMultiple: closedSnapshot.realizedRMultiple,
+          profitLoss: closedSnapshot.profitLoss,
+          plannedRiskAmount: position.plannedRiskAmount,
+          closedAt: closedSnapshot.closedAt,
+        });
+      } catch (_) {}
 
       // Remove from active positions
       await positionsDb.remove({ _id: positionDbId });
@@ -419,6 +481,7 @@ class TradeExecutor {
 
       // Send Telegram notification
       await notificationService.notifyTradeClosed(closedTrade);
+      await positionMonitor.syncNow('forced_sync');
 
       return {
         success: true,

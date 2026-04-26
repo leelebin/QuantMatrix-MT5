@@ -281,6 +281,63 @@ describe('MeanReversion evaluateExit adaptive rules', () => {
   });
 });
 
+describe('Breakout evaluateExit structure-anchor handling', () => {
+  test('tightens exits when price snaps back through structure anchor', () => {
+    const strategy = new BreakoutStrategy();
+    const override = strategy.evaluateExit(
+      {
+        type: 'BUY',
+        atrAtEntry: 1.0,
+        structureAnchor: 100,
+      },
+      {
+        indicators: { atr: [0.75, 0.8] },
+        candles: [{ time: 1, open: 101, high: 101.2, low: 98.8, close: 99 }],
+      }
+    );
+
+    expect(override).not.toBeNull();
+    expect(override.breakeven.triggerAtrMultiple).toBe(0.5);
+    expect(override.trailing).toEqual(expect.objectContaining({
+      enabled: true,
+      startAtrMultiple: 0.8,
+      distanceAtrMultiple: 0.6,
+      mode: 'atr',
+    }));
+  });
+});
+
+describe('MultiTimeframe evaluateExit higher-timeframe precedence', () => {
+  test('prefers explicit context higherTfTrend over shared instance state', () => {
+    const strategy = new MultiTimeframeStrategy();
+    strategy.setHigherTimeframeTrend('BULLISH', { ema200: 95, price: 101 });
+
+    const override = strategy.evaluateExit(
+      {
+        type: 'BUY',
+        indicatorsSnapshot: {
+          higherTfTrend: { trend: 'BULLISH', ema200: 95, price: 101 },
+        },
+      },
+      {
+        indicators: {
+          macd: [{ histogram: 0.2, signal: 0.1 }],
+        },
+        higherTfTrend: { trend: 'BEARISH', ema200: 102, price: 99 },
+      }
+    );
+
+    expect(override).not.toBeNull();
+    expect(override.breakeven.triggerAtrMultiple).toBe(0.4);
+    expect(override.trailing).toEqual(expect.objectContaining({
+      enabled: true,
+      startAtrMultiple: 0.6,
+      distanceAtrMultiple: 0.6,
+      mode: 'atr',
+    }));
+  });
+});
+
 describe('Strategy tradeManagement normalization', () => {
   test('normalizeStrategyTradeManagement accepts exitPlanOverride', () => {
     const profile = {

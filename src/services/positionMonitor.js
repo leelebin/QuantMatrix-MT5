@@ -1,6 +1,7 @@
 /**
  * Position Monitor
- * Syncs MT5 positions with local DB, runs trailing stops, detects external closures
+ * Syncs MT5 positions with local DB, manages exits, detects external closures,
+ * and runs a light/heavy dual scan loop that is independent from signal cadence.
  */
 
 const mt5Service = require('./mt5Service');
@@ -8,172 +9,316 @@ const trailingStopService = require('./trailingStopService');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
-const indicatorService = require('./indicatorService');
-const strategyEngine = require('./strategyEngine');
-const { getInstrument } = require('../config/instruments');
+const breakevenService = require('./breakevenService');
+const economicCalendarService = require('./economicCalendarService');
 const { positionsDb, tradesDb } = require('../config/db');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const auditService = require('./auditService');
+const { getStrategyInstance } = require('./strategyInstanceService');
+const { getInstrument } = require('../config/instruments');
+const {
+  getPositionCadenceProfile,
+  getScanReason,
+  resolveCategoryContext,
+  toIsoOrNull,
+} = require('./assignmentRuntimeService');
+
+const BASE_MONITOR_TICK_MS = 15 * 1000;
+const JUST_OPENED_WINDOW_MS = 5 * 60 * 1000;
 
 class PositionMonitor {
   constructor() {
     this.monitorInterval = null;
     this.running = false;
+    this.processing = false;
+    this.baseTickMs = BASE_MONITOR_TICK_MS;
+    this.pendingSyncReason = null;
+    this.lastLightScanAt = new Map();
+    this.lastHeavyScanAt = new Map();
+    this.knownPositionKeys = new Set();
+    this.lastStatus = this._buildEmptyStatus();
   }
 
-  /**
-   * Start monitoring positions
-   * @param {number} intervalMs - Check interval in ms (default 30s)
-   */
-  start(intervalMs = 30000) {
-    if (this.running) return;
-    this.running = true;
-
-    this.monitorInterval = setInterval(async () => {
-      try {
-        await this.syncPositions();
-        await this.runTrailingStops();
-      } catch (err) {
-        console.error('[Monitor] Error:', err.message);
-      }
-    }, intervalMs);
-
-    console.log(`[Monitor] Started (interval: ${intervalMs / 1000}s)`);
+  _buildEmptyStatus() {
+    return {
+      running: false,
+      intervalMs: 0,
+      baseTickMs: this.baseTickMs,
+      lightCadenceMs: 0,
+      heavyCadenceMs: 0,
+      lightDuePositions: [],
+      heavyDuePositions: [],
+      fastModePositions: [],
+      lastScanAt: null,
+      lastForcedSyncAt: null,
+    };
   }
 
-  /**
-   * Stop monitoring
-   */
-  stop() {
-    if (this.monitorInterval) {
-      clearInterval(this.monitorInterval);
-      this.monitorInterval = null;
+  _getPositionKey(position) {
+    return String(position?._id || position?.mt5PositionId || `${position?.symbol || 'unknown'}:${position?.strategy || 'unknown'}`);
+  }
+
+  _cleanupScanMaps(positions) {
+    const activeKeys = new Set(positions.map((position) => this._getPositionKey(position)));
+    for (const key of [...this.lastLightScanAt.keys()]) {
+      if (!activeKeys.has(key)) this.lastLightScanAt.delete(key);
     }
-    this.running = false;
-    console.log('[Monitor] Stopped');
+    for (const key of [...this.lastHeavyScanAt.keys()]) {
+      if (!activeKeys.has(key)) this.lastHeavyScanAt.delete(key);
+    }
   }
 
-  /**
-   * Sync MT5 positions with local database
-   * Detects positions closed externally (by SL/TP hit or manual close)
-   */
-  async syncPositions() {
-    if (!mt5Service.isConnected()) return;
-
-    const mt5Positions = await mt5Service.getPositions();
-    const localPositions = await positionsDb.find({});
-
-    const mt5PositionIds = new Set(mt5Positions.map((p) => String(p.id)));
-
-    // Find locally tracked positions that no longer exist on MT5 (closed externally)
-    for (const localPos of localPositions) {
-      if (localPos.mt5PositionId && !mt5PositionIds.has(String(localPos.mt5PositionId))) {
-        await this._handleExternalClose(localPos);
-      }
+  _didPositionsChange(positions) {
+    const nextKeys = new Set(positions.map((position) => this._getPositionKey(position)));
+    if (nextKeys.size !== this.knownPositionKeys.size) {
+      this.knownPositionKeys = nextKeys;
+      return true;
     }
 
-    // Update local positions with current MT5 data
-    for (const mt5Pos of mt5Positions) {
-      const localPos = localPositions.find(
-        (lp) => String(lp.mt5PositionId) === String(mt5Pos.id)
-      );
-      if (localPos) {
-        await positionsDb.update({ _id: localPos._id }, {
-          $set: {
-            currentSl: mt5Pos.stopLoss || localPos.currentSl,
-            currentTp: mt5Pos.takeProfit || localPos.currentTp,
-            currentPrice: mt5Pos.currentPrice,
-            unrealizedPl: mt5Pos.unrealizedProfit || mt5Pos.profit || 0,
-          },
+    for (const key of nextKeys) {
+      if (!this.knownPositionKeys.has(key)) {
+        this.knownPositionKeys = nextKeys;
+        return true;
+      }
+    }
+
+    this.knownPositionKeys = nextKeys;
+    return false;
+  }
+
+  _isPositionProtected(position, instrument) {
+    if (!instrument) return false;
+
+    const entryPrice = Number(position?.entryPrice);
+    const currentSl = Number(position?.currentSl);
+    if (!Number.isFinite(entryPrice) || !Number.isFinite(currentSl)) {
+      return false;
+    }
+
+    const plan = breakevenService.getPositionExitPlan(position);
+    const spreadCompensation = plan?.breakeven?.includeSpreadCompensation
+      ? Number(instrument.spread || 0) * Number(instrument.pipSize || 0)
+      : 0;
+    const bufferDistance = Number(plan?.breakeven?.extraBufferPips || 0) * Number(instrument.pipSize || 0);
+    const threshold = String(position?.type || '').toUpperCase() === 'SELL'
+      ? entryPrice - spreadCompensation - bufferDistance
+      : entryPrice + spreadCompensation + bufferDistance;
+
+    if (String(position?.type || '').toUpperCase() === 'SELL') {
+      return currentSl <= threshold;
+    }
+    return currentSl >= threshold;
+  }
+
+  async _buildPositionContexts(positions, now, forcedSyncReason = null) {
+    const contexts = [];
+    const strategyInstanceCache = new Map();
+    let ensuredCalendar = false;
+
+    const getCachedStrategyInstance = async (position) => {
+      const strategyName = position?.strategy;
+      if (!strategyName) return null;
+      const cacheKey = `${position.symbol}:${strategyName}`;
+      if (!strategyInstanceCache.has(cacheKey)) {
+        strategyInstanceCache.set(cacheKey, getStrategyInstance(position.symbol, strategyName).catch(() => null));
+      }
+      return strategyInstanceCache.get(cacheKey);
+    };
+
+    for (const position of positions) {
+      const key = this._getPositionKey(position);
+      const instrument = getInstrument(position.symbol);
+      const categoryContext = resolveCategoryContext(position.symbol, instrument?.category, { warnSource: 'position_monitor' });
+      const strategyInstance = await getCachedStrategyInstance(position);
+      const newsConfig = strategyInstance?.newsBlackout || null;
+
+      let state = 'normal';
+      let blackoutEvent = null;
+      if (newsConfig?.enabled) {
+        if (!ensuredCalendar) {
+          await economicCalendarService.ensureCalendar();
+          ensuredCalendar = true;
+        }
+        const blackout = economicCalendarService.isInBlackout(position.symbol, now, newsConfig);
+        if (blackout.blocked) {
+          state = 'news_fast_mode';
+          blackoutEvent = blackout.event || null;
+        }
+      }
+
+      if (state !== 'news_fast_mode') {
+        const openedAt = position?.openedAt ? new Date(position.openedAt) : null;
+        if (openedAt && !Number.isNaN(openedAt.getTime()) && (now.getTime() - openedAt.getTime()) < JUST_OPENED_WINDOW_MS) {
+          state = 'just_opened';
+        } else if (this._isPositionProtected(position, instrument)) {
+          state = 'protected';
+        }
+      }
+
+      const cadenceProfile = getPositionCadenceProfile(categoryContext.category, state);
+      const lastLightScanAt = this.lastLightScanAt.get(key) || null;
+      const lastHeavyScanAt = this.lastHeavyScanAt.get(key) || null;
+      const forcedSync = Boolean(forcedSyncReason);
+      const dueLight = forcedSync
+        || !lastLightScanAt
+        || (now.getTime() - lastLightScanAt.getTime()) >= cadenceProfile.lightCadenceMs;
+      const dueHeavy = forcedSync
+        || !lastHeavyScanAt
+        || (now.getTime() - lastHeavyScanAt.getTime()) >= cadenceProfile.heavyCadenceMs;
+      const scanReason = getScanReason(state, forcedSync);
+
+      contexts.push({
+        key,
+        position,
+        category: categoryContext.category,
+        rawCategory: categoryContext.rawCategory,
+        categoryFallback: categoryContext.categoryFallback,
+        state,
+        blackoutEvent,
+        lightCadenceMs: cadenceProfile.lightCadenceMs,
+        heavyCadenceMs: cadenceProfile.heavyCadenceMs,
+        dueLight,
+        dueHeavy,
+        scanReason,
+      });
+    }
+
+    return contexts;
+  }
+
+  _buildMonitorStatus(contexts, now, forcedSyncReason = null) {
+    const lightDuePositions = [];
+    const heavyDuePositions = [];
+    const fastModePositions = [];
+    const lightCadenceMs = contexts.length > 0
+      ? Math.min(...contexts.map((context) => context.lightCadenceMs))
+      : 0;
+    const heavyCadenceMs = contexts.length > 0
+      ? Math.min(...contexts.map((context) => context.heavyCadenceMs))
+      : 0;
+
+    for (const context of contexts) {
+      const lightNextScanAt = context.dueLight
+        ? new Date(now.getTime() + context.lightCadenceMs)
+        : new Date((this.lastLightScanAt.get(context.key) || now).getTime() + context.lightCadenceMs);
+      const heavyNextScanAt = context.dueHeavy
+        ? new Date(now.getTime() + context.heavyCadenceMs)
+        : new Date((this.lastHeavyScanAt.get(context.key) || now).getTime() + context.heavyCadenceMs);
+
+      const basePayload = {
+        symbol: context.position.symbol,
+        strategy: context.position.strategy || null,
+        category: context.category,
+        categoryFallback: context.categoryFallback === true,
+        state: context.state,
+      };
+
+      if (context.dueLight) {
+        lightDuePositions.push({
+          ...basePayload,
+          scanMode: 'light',
+          scanReason: context.scanReason,
+          nextScanAt: toIsoOrNull(lightNextScanAt),
+        });
+      }
+
+      if (context.dueHeavy) {
+        heavyDuePositions.push({
+          ...basePayload,
+          scanMode: 'heavy',
+          scanReason: context.scanReason,
+          nextScanAt: toIsoOrNull(heavyNextScanAt),
+        });
+      }
+
+      if (context.state === 'news_fast_mode') {
+        fastModePositions.push({
+          ...basePayload,
+          scanMode: 'light',
+          scanReason: 'news_fast_mode',
+          nextScanAt: toIsoOrNull(lightNextScanAt),
+          blackoutEvent: context.blackoutEvent || null,
         });
       }
     }
 
-    // Broadcast positions update
-    const updatedPositions = await positionsDb.find({});
-    websocketService.broadcast('positions', 'positions_sync', updatedPositions);
+    return {
+      running: this.running,
+      intervalMs: this.running ? this.baseTickMs : 0,
+      baseTickMs: this.baseTickMs,
+      lightCadenceMs,
+      heavyCadenceMs,
+      lightDuePositions,
+      heavyDuePositions,
+      fastModePositions,
+      lastScanAt: toIsoOrNull(now),
+      lastForcedSyncAt: forcedSyncReason ? toIsoOrNull(now) : this.lastStatus.lastForcedSyncAt || null,
+    };
   }
 
-  /**
-   * Run exit-plan lifecycle (BE, trailing, partials, time-exit) on all open
-   * positions. Strategies' evaluateExit() hooks are invoked with fresh
-   * candle + indicator context so they can adapt to current market state.
-   */
-  async runTrailingStops() {
-    if (!mt5Service.isConnected()) return;
+  _buildScanMetadataMap(contexts, scanMode, now) {
+    const metadata = new Map();
+    for (const context of contexts) {
+      metadata.set(context.key, {
+        symbol: context.position.symbol,
+        strategy: context.position.strategy || null,
+        category: context.category,
+        categoryFallback: context.categoryFallback === true,
+        scanMode,
+        scanReason: context.scanReason,
+        nextScanAt: toIsoOrNull(new Date(now.getTime() + (scanMode === 'light' ? context.lightCadenceMs : context.heavyCadenceMs))),
+      });
+    }
+    return metadata;
+  }
 
-    const positions = await positionsDb.find({});
-    if (positions.length === 0) return;
+  async _runPositionManagement(positions, contexts, scanMode, now, cycleState) {
+    if (!Array.isArray(positions) || positions.length === 0) {
+      return [];
+    }
 
-    // Per-tick cache so multiple positions on the same symbol/timeframe share
-    // one candle fetch + indicator computation.
-    const candleCache = new Map();
-    const indicatorCache = new Map();
-
-    const getLiveContext = async (position) => {
-      const instrument = getInstrument(position.symbol);
-      if (!instrument) return null;
-      const timeframe = instrument.timeframe || '1h';
-      const cacheKey = `${position.symbol}:${timeframe}`;
-      try {
-        if (!candleCache.has(cacheKey)) {
-          const candles = await mt5Service.getCandles(
-            position.symbol,
-            timeframe,
-            new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-            251
-          );
-          candleCache.set(cacheKey, Array.isArray(candles) ? candles : []);
+    const hooks = trailingStopService.createPositionManagementHooks({
+      getCandlesFn: scanMode === 'heavy'
+        ? async (symbol, timeframe) => mt5Service.getCandles(symbol, timeframe, null, 251)
+        : null,
+      closePositionFn: async (position) => {
+        if (!position?.mt5PositionId) {
+          throw new Error('Position is missing mt5PositionId');
         }
-        const rawCandles = candleCache.get(cacheKey);
-        const closedCandles = rawCandles && rawCandles.length > 1
-          ? rawCandles.slice(0, -1)
-          : rawCandles || [];
-        if (closedCandles.length < 20) return null;
-        if (!indicatorCache.has(cacheKey)) {
-          indicatorCache.set(cacheKey, indicatorService.calculateAll(closedCandles));
+        return mt5Service.closePosition(position.mt5PositionId);
+      },
+      partialCloseFn: async (position, volume) => {
+        if (!position?.mt5PositionId) {
+          throw new Error('Position is missing mt5PositionId');
         }
-        return {
-          candles: closedCandles,
-          indicators: indicatorCache.get(cacheKey),
-        };
-      } catch (err) {
-        console.warn(`[Monitor] Live context fetch failed for ${position.symbol}: ${err.message}`);
-        return null;
-      }
-    };
+        if (typeof mt5Service.partialClosePosition !== 'function') {
+          throw new Error('partialClosePosition not supported by MT5 bridge');
+        }
+        return mt5Service.partialClosePosition(position.mt5PositionId, volume);
+      },
+      updatePositionFn: async (localId, patch) => {
+        const query = localId && typeof localId === 'string' && localId.length >= 16
+          ? { _id: localId }
+          : { mt5PositionId: String(localId) };
+        await positionsDb.update(query, { $set: patch });
+      },
+    });
 
-    const getStrategy = (name) => {
-      if (!name) return null;
-      const strategies = strategyEngine.strategies || {};
-      return strategies[name] || null;
-    };
-
+    const metadataByPosition = this._buildScanMetadataMap(contexts, scanMode, now);
     const updates = await trailingStopService.processPositions(
       positions,
       async (symbol) => mt5Service.getPrice(symbol),
       async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp),
+      hooks,
       {
-        getStrategy,
-        getLiveContext,
-        closePositionFn: async (positionId) => mt5Service.closePosition(positionId),
-        partialCloseFn: async (positionId, volume) => {
-          if (typeof mt5Service.partialClosePosition !== 'function') {
-            throw new Error('partialClosePosition not supported by MT5 bridge');
-          }
-          return mt5Service.partialClosePosition(positionId, volume);
-        },
-        updatePositionFn: async (localId, patch) => {
-          const query = localId && typeof localId === 'string' && localId.length >= 16
-            ? { _id: localId }
-            : { mt5PositionId: String(localId) };
-          await positionsDb.update(query, { $set: patch });
-        },
+        scanMode,
+        cycleState,
+        scanMetadataByPosition: metadataByPosition,
       }
     );
 
     if (updates.length === 0) {
-      return;
+      return [];
     }
 
     const positionsByMt5Id = new Map(
@@ -202,6 +347,10 @@ class PositionMonitor {
             : 'SL_UPDATE';
       } else if (actionKind === 'PARTIAL_CLOSE') {
         reasonCode = auditService.REASON.PARTIAL_CLOSE;
+      } else if (actionKind === 'PARTIAL_TP') {
+        reasonCode = auditService.REASON.PARTIAL_TP;
+      } else if (actionKind === 'TIME_EXIT') {
+        reasonCode = auditService.REASON.TIME_EXIT;
       }
 
       auditService.positionManaged({
@@ -215,20 +364,159 @@ class PositionMonitor {
         reasonText: update.message
           || (actionKind === 'SL_UPDATE'
             ? `SL updated to ${update.newSl}`
-            : actionKind === 'PARTIAL_CLOSE'
+            : actionKind === 'PARTIAL_TP'
               ? `Partial close ${update.volume || ''}`
-              : `Position update`),
+              : 'Position update'),
         details: update,
       });
     }
 
     const refreshedPositions = await positionsDb.find({});
     websocketService.broadcast('positions', 'positions_sync', refreshedPositions);
+    return updates;
   }
 
-  /**
-   * Handle a position that was closed externally (SL/TP hit)
-   */
+  start() {
+    if (this.running) return;
+
+    this.running = true;
+    this.monitorInterval = setInterval(() => {
+      this._tick().catch((err) => {
+        console.error('[Monitor] Error:', err.message);
+      });
+    }, this.baseTickMs);
+
+    if (typeof this.monitorInterval.unref === 'function') {
+      this.monitorInterval.unref();
+    }
+
+    console.log(`[Monitor] Started (base tick: ${this.baseTickMs / 1000}s)`);
+    this.syncNow('forced_sync').catch((err) => {
+      console.error('[Monitor] Initial sync error:', err.message);
+    });
+  }
+
+  stop() {
+    if (this.monitorInterval) {
+      clearInterval(this.monitorInterval);
+      this.monitorInterval = null;
+    }
+    this.running = false;
+    this.processing = false;
+    this.pendingSyncReason = null;
+    this.lastLightScanAt.clear();
+    this.lastHeavyScanAt.clear();
+    this.knownPositionKeys.clear();
+    this.lastStatus = this._buildEmptyStatus();
+    console.log('[Monitor] Stopped');
+  }
+
+  requestSync(reason = 'forced_sync') {
+    this.pendingSyncReason = reason || 'forced_sync';
+  }
+
+  async syncNow(reason = 'forced_sync') {
+    this.requestSync(reason);
+    await this._tick();
+  }
+
+  async _tick() {
+    if (this.processing || (!this.running && !this.pendingSyncReason)) {
+      return;
+    }
+
+    this.processing = true;
+    const now = new Date();
+    let forcedSyncReason = this.pendingSyncReason;
+    this.pendingSyncReason = null;
+
+    try {
+      const syncedPositions = await this.syncPositions({ broadcast: false });
+      const positions = Array.isArray(syncedPositions) ? syncedPositions : [];
+      const positionsChanged = this._didPositionsChange(positions);
+      if (positionsChanged && !forcedSyncReason) {
+        forcedSyncReason = 'forced_sync';
+      }
+      this._cleanupScanMaps(positions);
+
+      const contexts = await this._buildPositionContexts(positions, now, forcedSyncReason);
+      const lightContexts = contexts.filter((context) => context.dueLight);
+      const heavyContexts = contexts.filter((context) => context.dueHeavy);
+      const cycleState = { id: `monitor:${Date.now()}`, fingerprints: new Set() };
+
+      if (lightContexts.length > 0) {
+        const lightKeys = new Set(lightContexts.map((context) => context.key));
+        const lightPositions = positions.filter((position) => lightKeys.has(this._getPositionKey(position)));
+        await this._runPositionManagement(lightPositions, lightContexts, 'light', now, cycleState);
+        lightContexts.forEach((context) => {
+          this.lastLightScanAt.set(context.key, now);
+        });
+      }
+
+      if (heavyContexts.length > 0) {
+        const refreshedPositions = lightContexts.length > 0 ? await positionsDb.find({}) : positions;
+        const heavyKeys = new Set(heavyContexts.map((context) => context.key));
+        const heavyPositions = refreshedPositions.filter((position) => heavyKeys.has(this._getPositionKey(position)));
+        await this._runPositionManagement(heavyPositions, heavyContexts, 'heavy', now, cycleState);
+        heavyContexts.forEach((context) => {
+          this.lastHeavyScanAt.set(context.key, now);
+        });
+      }
+
+      this.lastStatus = this._buildMonitorStatus(contexts, now, forcedSyncReason);
+    } catch (err) {
+      console.error('[Monitor] Error:', err.message);
+      this.lastStatus = {
+        ...this.lastStatus,
+        running: this.running,
+        intervalMs: this.running ? this.baseTickMs : 0,
+        baseTickMs: this.baseTickMs,
+        lastScanAt: toIsoOrNull(now),
+      };
+    } finally {
+      this.processing = false;
+    }
+  }
+
+  async syncPositions(options = {}) {
+    const { broadcast = true } = options;
+    if (!mt5Service.isConnected()) {
+      return await positionsDb.find({});
+    }
+
+    const mt5Positions = await mt5Service.getPositions();
+    const localPositions = await positionsDb.find({});
+    const mt5PositionIds = new Set(mt5Positions.map((p) => String(p.id)));
+
+    for (const localPos of localPositions) {
+      if (localPos.mt5PositionId && !mt5PositionIds.has(String(localPos.mt5PositionId))) {
+        await this._handleExternalClose(localPos);
+      }
+    }
+
+    for (const mt5Pos of mt5Positions) {
+      const localPos = localPositions.find(
+        (lp) => String(lp.mt5PositionId) === String(mt5Pos.id)
+      );
+      if (localPos) {
+        await positionsDb.update({ _id: localPos._id }, {
+          $set: {
+            currentSl: mt5Pos.stopLoss || localPos.currentSl,
+            currentTp: mt5Pos.takeProfit || localPos.currentTp,
+            currentPrice: mt5Pos.currentPrice,
+            unrealizedPl: mt5Pos.unrealizedProfit || mt5Pos.profit || 0,
+          },
+        });
+      }
+    }
+
+    const updatedPositions = await positionsDb.find({});
+    if (broadcast) {
+      websocketService.broadcast('positions', 'positions_sync', updatedPositions);
+    }
+    return updatedPositions;
+  }
+
   async _handleExternalClose(localPos) {
     console.log(`[Monitor] Position closed externally: ${localPos.symbol} ${localPos.type}`);
     let dealSummary = null;
@@ -261,9 +549,9 @@ class PositionMonitor {
     const closedSnapshot = buildClosedTradeSnapshot(localPos, dealSummary, {
       exitPrice: fallbackExitPrice,
       reason: 'EXTERNAL',
+      pendingExitAction: localPos.pendingExitAction || null,
     });
 
-    // Update trade record
     await tradesDb.update({ positionDbId: localPos._id }, {
       $set: {
         status: 'CLOSED',
@@ -276,15 +564,17 @@ class PositionMonitor {
         swap: closedSnapshot.swap,
         fee: closedSnapshot.fee,
         mt5CloseDealId: dealSummary?.lastExitDeal?.id || null,
+        exitPlanSnapshot: closedSnapshot.exitPlanSnapshot || null,
+        managementEvents: closedSnapshot.managementEvents || [],
+        realizedRMultiple: closedSnapshot.realizedRMultiple,
+        targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
       },
     });
 
-    // Track loss for daily limit
     if (closedSnapshot.profitLoss < 0) {
       await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt);
     }
 
-    // Remove from active positions
     await positionsDb.remove({ _id: localPos._id });
 
     const closedTrade = {
@@ -310,21 +600,17 @@ class PositionMonitor {
       },
     });
 
-    // Broadcast via WebSocket
     websocketService.broadcast('trades', 'trade_closed', closedTrade);
     websocketService.broadcast('positions', 'position_update', { action: 'closed', position: closedTrade });
-
-    // Send Telegram notification
     await notificationService.notifyTradeClosed(closedTrade);
   }
 
-  /**
-   * Get monitoring status
-   */
   getStatus() {
     return {
+      ...this.lastStatus,
       running: this.running,
-      intervalMs: this.monitorInterval ? 30000 : 0,
+      intervalMs: this.running ? this.baseTickMs : 0,
+      baseTickMs: this.baseTickMs,
     };
   }
 }

@@ -3,5 +3,7 @@ node_modules/
 coverage/
 *.log
 data/
+data/economic-calendar.json
 node-portable/
+ngrok-portable/
 __pycache__/

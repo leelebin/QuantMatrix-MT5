@@ -5,8 +5,16 @@ const strategyEngine = require('../services/strategyEngine');
 const websocketService = require('../services/websocketService');
 const breakevenService = require('../services/breakevenService');
 const Strategy = require('../models/Strategy');
+const OptimizerRun = require('../models/OptimizerRun');
 const RiskProfile = require('../models/RiskProfile');
-const { getStrategyExecutionConfig } = require('../config/strategyExecution');
+const { getStrategyInstance } = require('../services/strategyInstanceService');
+const { resolveStrategyParameters } = require('../config/strategyParameters');
+const {
+  FORCED_TIMEFRAME_OPTIONS,
+  getForcedTimeframeExecutionConfig,
+  getStrategyExecutionConfig,
+  isValidForcedTimeframe,
+} = require('../config/strategyExecution');
 const { getInstrument, getAllSymbols } = require('../config/instruments');
 const {
   clampDateRangeToNow,
@@ -17,11 +25,80 @@ const {
   normalizeDateRange,
 } = require('../utils/candleRange');
 
+const VALID_STRATEGIES = ['TrendFollowing', 'MeanReversion', 'MultiTimeframe', 'Momentum', 'Breakout', 'VolumeFlowHybrid'];
+
+async function resolveBacktestParameterPreset({ symbol, strategyType, parameterPreset = 'default', runtimeOverrides = null }) {
+  const instrument = getInstrument(symbol);
+  if (!instrument) {
+    const error = new Error(`Invalid symbol: ${symbol}. Available: ${getAllSymbols().join(', ')}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!VALID_STRATEGIES.includes(strategyType)) {
+    const error = new Error(`Invalid strategy: ${strategyType}. Available: ${VALID_STRATEGIES.join(', ')}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const strategyInstance = await getStrategyInstance(symbol, strategyType);
+  const preset = parameterPreset === 'optimized' ? 'optimized' : 'default';
+  let runtimeParameters = runtimeOverrides && Object.keys(runtimeOverrides).length > 0
+    ? { ...runtimeOverrides }
+    : null;
+  let resolvedFrom = runtimeParameters ? 'runtime_overrides' : 'instance';
+  let fallbackUsed = false;
+  let optimizerRecord = null;
+
+  if (!runtimeParameters && preset === 'optimized') {
+    optimizerRecord = await OptimizerRun.findLatestBestResult(symbol, strategyType);
+    const optimizerParams = optimizerRecord?.bestResult?.parameters;
+    if (optimizerParams && Object.keys(optimizerParams).length > 0) {
+      runtimeParameters = { ...optimizerParams };
+      resolvedFrom = 'optimizer_best_result';
+    } else {
+      fallbackUsed = true;
+    }
+  }
+
+  const effectiveParameters = resolveStrategyParameters({
+    strategyType,
+    instrument,
+    storedParameters: strategyInstance.parameters,
+    overrides: runtimeParameters,
+  });
+
+  return {
+    effectiveParameters,
+    strategyInstance,
+    runtimeParameters,
+    parameterPreset: preset,
+    parameterPresetResolution: {
+      preset,
+      fallbackUsed,
+      resolvedFrom,
+      optimizerHistoryId: optimizerRecord?._id || null,
+      optimizerCompletedAt: optimizerRecord?.completedAt || null,
+      optimizerTimeframe: optimizerRecord?.timeframe || null,
+      optimizerOptimizeFor: optimizerRecord?.optimizeFor || null,
+    },
+  };
+}
+
 // @desc    Run a backtest
 // @route   POST /api/backtest/run
 exports.runBacktest = async (req, res) => {
   try {
-    const { symbol, strategyType, timeframe, startDate, endDate, initialBalance, strategyParams } = req.body;
+    const {
+      symbol,
+      strategyType,
+      timeframe,
+      startDate,
+      endDate,
+      initialBalance,
+      strategyParams,
+      parameterPreset,
+    } = req.body;
 
     // Validate inputs
     const instrument = getInstrument(symbol);
@@ -32,24 +109,41 @@ exports.runBacktest = async (req, res) => {
       });
     }
 
-    const validStrategies = ['TrendFollowing', 'MeanReversion', 'MultiTimeframe', 'Momentum', 'Breakout', 'VolumeFlowHybrid'];
-    if (!validStrategies.includes(strategyType)) {
+    if (!VALID_STRATEGIES.includes(strategyType)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid strategy: ${strategyType}. Available: ${validStrategies.join(', ')}`,
+        message: `Invalid strategy: ${strategyType}. Available: ${VALID_STRATEGIES.join(', ')}`,
       });
     }
-    const strategyConfig = await Strategy.findByName(strategyType);
-    const activeProfile = await RiskProfile.getActive();
-    const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyConfig);
+    const presetResolution = await resolveBacktestParameterPreset({
+      symbol,
+      strategyType,
+      parameterPreset,
+      runtimeOverrides: strategyParams || null,
+    });
+    const effectiveBreakeven = presetResolution.strategyInstance.effectiveBreakeven
+      || presetResolution.strategyInstance.effectiveTradeManagement?.breakeven
+      || breakevenService.resolveEffectiveBreakeven(
+        await RiskProfile.getActive(),
+        await Strategy.findByName(strategyType)
+      );
+
+    if (timeframe && !isValidForcedTimeframe(timeframe)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid timeframe: ${timeframe}. Allowed: ${FORCED_TIMEFRAME_OPTIONS.join(', ')}`,
+      });
+    }
 
     // Connect to MT5 if needed (for fetching historical data)
     if (!mt5Service.isConnected()) {
       await mt5Service.connect();
     }
 
-    const executionConfig = getStrategyExecutionConfig(symbol, strategyType) || instrument;
-    const tf = timeframe || executionConfig.timeframe || instrument.timeframe || '1h';
+    const executionConfig = timeframe
+      ? getForcedTimeframeExecutionConfig(symbol, strategyType, timeframe)
+      : (getStrategyExecutionConfig(symbol, strategyType) || instrument);
+    const tf = executionConfig.timeframe || instrument.timeframe || timeframe || '1h';
     const normalizedRange = normalizeDateRange(startDate, endDate);
     const { start, endExclusive } = clampDateRangeToNow(normalizedRange.start, normalizedRange.endExclusive);
     const rangeEnd = new Date(endExclusive.getTime() - 1);
@@ -125,9 +219,13 @@ exports.runBacktest = async (req, res) => {
       initialBalance: initialBalance || 10000,
       tradeStartTime: (effectiveStart || start).toISOString(),
       tradeEndTime: effectiveEnd.toISOString(),
-      storedStrategyParameters: strategyConfig?.parameters || null,
-      strategyParams: strategyParams || null,
+      storedStrategyParameters: presetResolution.strategyInstance.parameters,
+      strategyParams: presetResolution.runtimeParameters,
+      parameterPreset: presetResolution.parameterPreset,
+      parameterPresetResolution: presetResolution.parameterPresetResolution,
       breakevenConfig: effectiveBreakeven,
+      executionPolicy: presetResolution.strategyInstance.executionPolicy,
+      includeChartData: true,
     });
 
     console.log(`[Backtest] Completed: ${result.summary.totalTrades} trades, WR: ${(result.summary.winRate * 100).toFixed(1)}%, PF: ${result.summary.profitFactor}`);
@@ -136,6 +234,61 @@ exports.runBacktest = async (req, res) => {
   } catch (err) {
     console.error('[Backtest] Error:', err.message);
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Resolve the current single-backtest parameter preset
+// @route   GET /api/backtest/preset
+exports.getBacktestParameterPreset = async (req, res) => {
+  try {
+    const symbol = String(req.query.symbol || '').trim();
+    const strategyType = String(req.query.strategyType || '').trim();
+    const parameterPreset = String(req.query.preset || 'default').trim();
+
+    if (!symbol || !strategyType) {
+      return res.status(400).json({
+        success: false,
+        message: 'symbol and strategyType are required',
+      });
+    }
+
+    const presetResolution = await resolveBacktestParameterPreset({
+      symbol,
+      strategyType,
+      parameterPreset,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        symbol,
+        strategyType,
+        parameterPreset: presetResolution.parameterPreset,
+        parameterPresetResolution: presetResolution.parameterPresetResolution,
+        parameterSource: {
+          hasStoredParameters: Boolean(
+            presetResolution.strategyInstance.parameters
+            && Object.keys(presetResolution.strategyInstance.parameters).length > 0
+          ),
+          hasRuntimeOverrides: Boolean(
+            presetResolution.runtimeParameters
+            && Object.keys(presetResolution.runtimeParameters).length > 0
+          ),
+          preset: presetResolution.parameterPreset,
+          resolvedFrom: presetResolution.parameterPresetResolution.resolvedFrom,
+          fallbackUsed: presetResolution.parameterPresetResolution.fallbackUsed,
+          optimizerHistoryId: presetResolution.parameterPresetResolution.optimizerHistoryId,
+          optimizerCompletedAt: presetResolution.parameterPresetResolution.optimizerCompletedAt,
+          optimizerTimeframe: presetResolution.parameterPresetResolution.optimizerTimeframe,
+          optimizerOptimizeFor: presetResolution.parameterPresetResolution.optimizerOptimizeFor,
+        },
+        parameters: presetResolution.effectiveParameters,
+        newsBlackout: presetResolution.strategyInstance.newsBlackout,
+        instanceSource: presetResolution.strategyInstance.source,
+      },
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 };
 
@@ -158,11 +311,17 @@ exports.runAllStrategies = async (req, res) => {
       return res.status(500).json({ success: false, message: 'No strategies registered' });
     }
 
+    if (timeframe && !isValidForcedTimeframe(timeframe)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid timeframe: ${timeframe}. Allowed: ${FORCED_TIMEFRAME_OPTIONS.join(', ')}`,
+      });
+    }
+
     if (!mt5Service.isConnected()) {
       await mt5Service.connect();
     }
 
-    const activeProfile = await RiskProfile.getActive();
     const normalizedRange = normalizeDateRange(startDate, endDate);
     const { start, endExclusive } = clampDateRangeToNow(normalizedRange.start, normalizedRange.endExclusive);
     const rangeEnd = new Date(endExclusive.getTime() - 1);
@@ -187,12 +346,19 @@ exports.runAllStrategies = async (req, res) => {
       const strategyType = info.type;
       const entry = { strategyType, displayName: info.name || strategyType };
       try {
-        const executionConfig = getStrategyExecutionConfig(symbol, strategyType) || instrument;
-        const tf = timeframe || executionConfig.timeframe || instrument.timeframe || '1h';
+        const executionConfig = timeframe
+          ? getForcedTimeframeExecutionConfig(symbol, strategyType, timeframe)
+          : (getStrategyExecutionConfig(symbol, strategyType) || instrument);
+        const tf = executionConfig.timeframe || instrument.timeframe || timeframe || '1h';
         entry.timeframe = tf;
 
-        const strategyConfig = await Strategy.findByName(strategyType);
-        const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, strategyConfig);
+        const strategyInstance = await getStrategyInstance(symbol, strategyType);
+        const effectiveBreakeven = strategyInstance.effectiveBreakeven
+          || strategyInstance.effectiveTradeManagement?.breakeven
+          || breakevenService.resolveEffectiveBreakeven(
+            await RiskProfile.getActive(),
+            await Strategy.findByName(strategyType)
+          );
 
         const higherTimeframe = executionConfig.higherTimeframe || null;
         const entryTimeframe = executionConfig.entryTimeframe || null;
@@ -234,9 +400,10 @@ exports.runAllStrategies = async (req, res) => {
           initialBalance: balance,
           tradeStartTime: (effectiveStart || start).toISOString(),
           tradeEndTime: effectiveEnd.toISOString(),
-          storedStrategyParameters: strategyConfig?.parameters || null,
+          storedStrategyParameters: strategyInstance.parameters,
           strategyParams: null,
           breakevenConfig: effectiveBreakeven,
+          executionPolicy: strategyInstance.executionPolicy,
         });
 
         entry.summary = result.summary;
@@ -308,12 +475,22 @@ exports.deleteResult = async (req, res) => {
 // @route   POST /api/backtest/batch/run
 exports.runBatchBacktest = async (req, res) => {
   try {
-    const { startDate, endDate, initialBalance, timeframeMode, forcedTimeframe, strategyScopeMode, runModel } = req.body;
+    const {
+      startDate,
+      endDate,
+      initialBalance,
+      ruinThreshold,
+      timeframeMode,
+      forcedTimeframe,
+      strategyScopeMode,
+      runModel,
+    } = req.body;
     const job = await batchBacktestService.startJob(
       {
         startDate,
         endDate,
         initialBalance,
+        ruinThreshold,
         timeframeMode,
         forcedTimeframe,
         strategyScopeMode,

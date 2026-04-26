@@ -1,12 +1,11 @@
 const backtestEngine = require('./backtestEngine');
 const mt5Service = require('./mt5Service');
 const strategyEngine = require('./strategyEngine');
-const breakevenService = require('./breakevenService');
 const { runSharedPortfolioBacktest } = require('./sharedPortfolioBacktest');
 const Strategy = require('../models/Strategy');
-const RiskProfile = require('../models/RiskProfile');
 const BatchBacktestJob = require('../models/BatchBacktestJob');
 const { getAllSymbols } = require('../config/instruments');
+const { getStrategyInstance } = require('./strategyInstanceService');
 const {
   FORCED_TIMEFRAME_OPTIONS,
   getStrategyExecutionConfig,
@@ -32,6 +31,10 @@ const {
 
 const RUN_MODELS = ['independent', 'shared_portfolio'];
 
+function buildCombinationKey(symbol, strategy) {
+  return `${symbol}:${strategy}`;
+}
+
 class BatchBacktestService {
   constructor() {
     this.activeJobId = null;
@@ -52,7 +55,7 @@ class BatchBacktestService {
     const { start, endExclusive } = clampDateRangeToNow(normalizedRange.start, normalizedRange.endExclusive);
     const rangeEnd = new Date(endExclusive.getTime() - 1);
 
-    const runModel = params.runModel || 'independent';
+    const runModel = params.runModel || 'shared_portfolio';
     if (!RUN_MODELS.includes(runModel)) {
       const error = new Error(
         `Unsupported runModel: ${runModel}. Expected one of: ${RUN_MODELS.join(', ')}.`
@@ -60,6 +63,8 @@ class BatchBacktestService {
       error.statusCode = 400;
       throw error;
     }
+
+    const ruinThreshold = Math.max(0, Number(params.ruinThreshold) || 0);
 
     const timeframeMode = params.timeframeMode || 'strategy_default';
     if (!['strategy_default', 'forced_timeframe'].includes(timeframeMode)) {
@@ -96,7 +101,7 @@ class BatchBacktestService {
     const strategyRecords = await Strategy.findAll();
     const eligibleScope = strategyScopeMode === 'all_strategies'
       ? this._buildAllStrategiesScope(strategyInfos)
-      : this._buildEligibleScope(strategyRecords);
+      : await this._buildEligibleScope(strategyRecords);
 
     if (eligibleScope.combinations.length === 0) {
       const error = new Error(
@@ -125,6 +130,7 @@ class BatchBacktestService {
         end: rangeEnd.toISOString(),
       },
       initialBalance: Number(params.initialBalance) || 10000,
+      ruinThreshold,
       strategyScopeMode,
       timeframeMode,
       forcedTimeframe,
@@ -164,20 +170,11 @@ class BatchBacktestService {
       const strategyInfos = strategyEngine.getStrategiesInfo();
       await Strategy.initDefaults(strategyInfos);
       const strategyRecords = await Strategy.findAll();
-      const activeProfile = await RiskProfile.getActive();
-      const storedParametersByStrategy = new Map(
-        strategyRecords.map((strategy) => [strategy.name, strategy.parameters || {}])
-      );
-      const effectiveBreakevenByStrategy = new Map(
-        strategyRecords.map((strategy) => [
-          strategy.name,
-          breakevenService.resolveEffectiveBreakeven(activeProfile, strategy),
-        ])
-      );
 
       const start = new Date(job.period.start);
       const endExclusive = new Date(new Date(job.period.end).getTime() + 1);
       const combinations = this._buildCombinationsFromScope(job.scope || {});
+      const strategyInstancesByCombination = await this._buildStrategyInstancesByCombination(combinations);
       const jobTimeframeMode = job.timeframeMode || 'strategy_default';
       const jobForcedTimeframe = jobTimeframeMode === 'forced_timeframe' ? job.forcedTimeframe || null : null;
       const jobRunModel = job.runModel || 'independent';
@@ -190,8 +187,7 @@ class BatchBacktestService {
           start,
           endExclusive,
           candleCache,
-          storedParametersByStrategy,
-          effectiveBreakevenByStrategy,
+          strategyInstancesByCombination,
           jobForcedTimeframe,
           hooks,
         });
@@ -228,8 +224,9 @@ class BatchBacktestService {
             endExclusive,
             initialBalance: job.initialBalance,
             candleCache,
-            storedStrategyParameters: storedParametersByStrategy.get(combo.strategy) || {},
-            breakevenConfig: effectiveBreakevenByStrategy.get(combo.strategy) || breakevenService.getDefaultBreakevenConfig(),
+            strategyInstance: strategyInstancesByCombination.get(
+              buildCombinationKey(combo.symbol, combo.strategy)
+            ) || null,
             forcedTimeframe: jobForcedTimeframe,
           });
         } catch (err) {
@@ -323,8 +320,7 @@ class BatchBacktestService {
     start,
     endExclusive,
     candleCache,
-    storedParametersByStrategy,
-    effectiveBreakevenByStrategy,
+    strategyInstancesByCombination,
     jobForcedTimeframe,
     hooks,
   }) {
@@ -351,11 +347,11 @@ class BatchBacktestService {
     const portfolioResult = await runSharedPortfolioBacktest({
       combinations,
       initialBalance: job.initialBalance,
+      ruinThreshold: job.ruinThreshold,
       start,
       endExclusive,
       fetchCandles,
-      storedParametersByStrategy,
-      breakevenByStrategy: effectiveBreakevenByStrategy,
+      strategyInstancesByCombination,
       forcedTimeframe: jobForcedTimeframe,
       onProgress: async (update) => {
         if (update.phase === 'prepare') {
@@ -375,6 +371,14 @@ class BatchBacktestService {
           progress.trades = update.trades;
           progress.processedEvents = update.processedEvents;
           progress.totalEvents = update.totalEvents;
+        } else if (update.phase === 'bust') {
+          progress.phase = 'bust';
+          progress.percent = 50 + Math.round((update.percent || 0) * 0.5);
+          progress.balance = update.balance;
+          progress.openPositions = 0;
+          progress.trades = update.trades;
+          progress.processedEvents = update.processedEvents;
+          progress.totalEvents = update.totalEvents;
         }
 
         if (typeof hooks.onProgress === 'function') {
@@ -383,6 +387,7 @@ class BatchBacktestService {
             status: 'running',
             runModel: 'shared_portfolio',
             progress: { ...progress },
+            bust: update.bust || null,
           });
         }
       },
@@ -445,8 +450,7 @@ class BatchBacktestService {
     endExclusive,
     initialBalance,
     candleCache,
-    storedStrategyParameters,
-    breakevenConfig,
+    strategyInstance = null,
     forcedTimeframe = null,
   }) {
     const executionConfig = forcedTimeframe
@@ -519,8 +523,11 @@ class BatchBacktestService {
       initialBalance,
       tradeStartTime: start.toISOString(),
       tradeEndTime: tradeEnd.toISOString(),
-      storedStrategyParameters,
-      breakevenConfig,
+      storedStrategyParameters: strategyInstance?.parameters || {},
+      breakevenConfig: strategyInstance?.effectiveBreakeven
+        || strategyInstance?.effectiveTradeManagement?.breakeven
+        || null,
+      executionPolicy: strategyInstance?.executionPolicy || null,
       batchJobId: jobId,
       executionConfigOverride: forcedTimeframe ? executionConfig : null,
     });
@@ -553,7 +560,7 @@ class BatchBacktestService {
     return combinations;
   }
 
-  _buildEligibleScope(strategyRecords = []) {
+  async _buildEligibleScope(strategyRecords = []) {
     const validSymbols = getAllSymbols();
     const validSymbolSet = new Set(validSymbols);
     const assignmentsBySymbol = new Map();
@@ -561,12 +568,21 @@ class BatchBacktestService {
     const seenStrategies = new Set();
 
     for (const strategyRecord of strategyRecords) {
-      if (!strategyRecord?.enabled || !Array.isArray(strategyRecord.symbols)) {
+      if (!Array.isArray(strategyRecord.symbols)) {
         continue;
       }
 
-      const eligibleSymbols = [...new Set(strategyRecord.symbols)]
+      const eligibleSymbols = [];
+      const symbols = [...new Set(strategyRecord.symbols)]
         .filter((symbol) => validSymbolSet.has(symbol));
+
+      for (const symbol of symbols) {
+        const strategyInstance = await getStrategyInstance(symbol, strategyRecord.name);
+        if (strategyInstance.enabled === false) {
+          continue;
+        }
+        eligibleSymbols.push(symbol);
+      }
 
       if (eligibleSymbols.length === 0) {
         continue;
@@ -669,6 +685,20 @@ class BatchBacktestService {
     return this._buildCombinations(scope.symbols || [], scope.strategies || []);
   }
 
+  async _buildStrategyInstancesByCombination(combinations = []) {
+    const strategyInstances = new Map();
+
+    for (const combo of combinations) {
+      const strategyInstance = await getStrategyInstance(combo.symbol, combo.strategy);
+      strategyInstances.set(
+        buildCombinationKey(combo.symbol, combo.strategy),
+        strategyInstance || null
+      );
+    }
+
+    return strategyInstances;
+  }
+
   _createProgress(total) {
     return {
       total,
@@ -746,6 +776,7 @@ class BatchBacktestService {
           initialBalance: summary.portfolioResult.initialBalance,
           finalBalance: summary.portfolioResult.finalBalance,
           summary: summary.portfolioResult.summary,
+          bust: summary.portfolioResult.bust || null,
           combinationsRequested: summary.portfolioResult.combinationsRequested,
           combinationsUsed: (summary.portfolioResult.combinationsUsed || []).length,
         };

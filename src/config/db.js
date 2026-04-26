@@ -2,74 +2,44 @@ const Datastore = require('nedb-promises');
 const path = require('path');
 const fs = require('fs');
 
+const IS_TEST_ENV = process.env.NODE_ENV === 'test'
+  || typeof process.env.JEST_WORKER_ID !== 'undefined';
+
 // Data directory for storing database files
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 
 // Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
+if (!IS_TEST_ENV && !fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+function createDatastore(filename) {
+  if (IS_TEST_ENV) {
+    return Datastore.create({ inMemoryOnly: true });
+  }
+
+  return Datastore.create({
+    filename: path.join(DATA_DIR, filename),
+    autoload: true,
+  });
+}
+
 // Create database instances
-const usersDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'users.db'),
-  autoload: true,
-});
-
-const strategiesDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'strategies.db'),
-  autoload: true,
-});
-
-const tradesDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'trades.db'),
-  autoload: true,
-});
-
-const positionsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'positions.db'),
-  autoload: true,
-});
-
-const backtestsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'backtests.db'),
-  autoload: true,
-});
-
-const tradeLogDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'trade_log.db'),
-  autoload: true,
-});
-
-const paperPositionsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'paper_positions.db'),
-  autoload: true,
-});
-
-const riskStateDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'risk_state.db'),
-  autoload: true,
-});
-
-const riskProfilesDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'risk_profiles.db'),
-  autoload: true,
-});
-
-const executionAuditDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'execution_audit.db'),
-  autoload: true,
-});
-
-const batchBacktestJobsDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'batch_backtest_jobs.db'),
-  autoload: true,
-});
-
-const decisionAuditDb = Datastore.create({
-  filename: path.join(DATA_DIR, 'decision_audit.db'),
-  autoload: true,
-});
+const usersDb = createDatastore('users.db');
+const strategiesDb = createDatastore('strategies.db');
+const tradesDb = createDatastore('trades.db');
+const positionsDb = createDatastore('positions.db');
+const backtestsDb = createDatastore('backtests.db');
+const tradeLogDb = createDatastore('trade_log.db');
+const paperPositionsDb = createDatastore('paper_positions.db');
+const riskStateDb = createDatastore('risk_state.db');
+const riskProfilesDb = createDatastore('risk_profiles.db');
+const executionAuditDb = createDatastore('execution_audit.db');
+const batchBacktestJobsDb = createDatastore('batch_backtest_jobs.db');
+const decisionAuditDb = createDatastore('decision_audit.db');
+const optimizerRunsDb = createDatastore('optimizer_runs.db');
+const strategyInstancesDb = createDatastore('strategyInstances.db');
+const strategyDailyStopsDb = createDatastore('strategy_daily_stops.db');
 
 // Ensure indexes
 usersDb.ensureIndex({ fieldName: 'email', unique: true });
@@ -97,6 +67,15 @@ executionAuditDb.ensureIndex({ fieldName: 'createdAt' });
 batchBacktestJobsDb.ensureIndex({ fieldName: 'status' });
 batchBacktestJobsDb.ensureIndex({ fieldName: 'createdAt' });
 batchBacktestJobsDb.ensureIndex({ fieldName: 'completedAt' });
+optimizerRunsDb.ensureIndex({ fieldName: 'symbol' });
+optimizerRunsDb.ensureIndex({ fieldName: 'strategy' });
+optimizerRunsDb.ensureIndex({ fieldName: 'completedAt' });
+strategyInstancesDb.ensureIndex({ fieldName: 'strategyName' });
+strategyInstancesDb.ensureIndex({ fieldName: 'symbol' });
+strategyInstancesDb.ensureIndex({ fieldName: '_id', unique: true });
+strategyDailyStopsDb.ensureIndex({ fieldName: 'key' });
+strategyDailyStopsDb.ensureIndex({ fieldName: 'tradingDay' });
+strategyDailyStopsDb.ensureIndex({ fieldName: 'stopped' });
 decisionAuditDb.ensureIndex({ fieldName: 'symbol' });
 decisionAuditDb.ensureIndex({ fieldName: 'strategy' });
 decisionAuditDb.ensureIndex({ fieldName: 'stage' });
@@ -119,9 +98,16 @@ const connectDB = async () => {
     await riskProfilesDb.count({});
     await executionAuditDb.count({});
     await batchBacktestJobsDb.count({});
+    await optimizerRunsDb.count({});
+    await strategyInstancesDb.count({});
+    await strategyDailyStopsDb.count({});
     await decisionAuditDb.count({});
-    console.log('Database Connected: NeDB (local file storage)');
-    console.log(`Data directory: ${DATA_DIR}`);
+    if (IS_TEST_ENV) {
+      console.log('Database Connected: NeDB (in-memory test storage)');
+    } else {
+      console.log('Database Connected: NeDB (local file storage)');
+      console.log(`Data directory: ${DATA_DIR}`);
+    }
   } catch (error) {
     console.error(`Database error: ${error.message}`);
     process.exit(1);
@@ -140,4 +126,7 @@ module.exports.riskStateDb = riskStateDb;
 module.exports.riskProfilesDb = riskProfilesDb;
 module.exports.executionAuditDb = executionAuditDb;
 module.exports.batchBacktestJobsDb = batchBacktestJobsDb;
+module.exports.optimizerRunsDb = optimizerRunsDb;
+module.exports.strategyInstancesDb = strategyInstancesDb;
+module.exports.strategyDailyStopsDb = strategyDailyStopsDb;
 module.exports.decisionAuditDb = decisionAuditDb;

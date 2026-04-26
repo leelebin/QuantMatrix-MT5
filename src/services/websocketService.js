@@ -3,22 +3,24 @@
  * Real-time communication with frontend clients
  *
  * Features:
- * - Heartbeat detection (ping/pong every 30s)
- * - Connection tracking with metadata
+  * - Heartbeat detection (ping/pong every 30s)
+ * - Authenticated connection tracking with metadata
  * - Topic-based broadcasting (positions, trades, signals, account, status)
  * - Disconnect logging with reasons
  */
 
 const WebSocket = require('ws');
+const { authenticateAccessToken } = require('../middleware/auth');
 
 class WebSocketService {
   constructor() {
     this.wss = null;
-    this.clients = new Map(); // ws -> { id, subscribedTopics, lastPong, connectedAt }
+    this.clients = new Map(); // ws -> { id, authenticated, subscribedTopics, lastPong, connectedAt }
     this.heartbeatInterval = null;
     this.clientIdCounter = 0;
     this.HEARTBEAT_INTERVAL = 30000; // 30 seconds
     this.PONG_TIMEOUT = 10000; // 10 seconds to respond
+    this.DEFAULT_TOPICS = ['positions', 'trades', 'signals', 'account', 'status', 'notifications', 'diagnostics'];
   }
 
   /**
@@ -30,27 +32,20 @@ class WebSocketService {
 
     this.wss.on('connection', (ws, req) => {
       const clientId = ++this.clientIdCounter;
-      const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+      const clientIp = forwardedFor || req.socket.remoteAddress;
 
       this.clients.set(ws, {
         id: clientId,
         ip: clientIp,
-        subscribedTopics: new Set(['positions', 'trades', 'signals', 'account', 'status', 'notifications', 'diagnostics']),
+        authenticated: false,
+        user: null,
+        subscribedTopics: new Set(),
         lastPong: Date.now(),
         connectedAt: new Date().toISOString(),
       });
 
       console.log(`[WS] Client #${clientId} connected from ${clientIp} (total: ${this.clients.size})`);
-
-      // Send welcome message
-      this._send(ws, {
-        type: 'connected',
-        data: {
-          clientId,
-          message: 'Connected to QuantMatrix WebSocket',
-          topics: ['positions', 'trades', 'signals', 'account', 'status', 'notifications', 'diagnostics'],
-        },
-      });
 
       // Handle incoming messages
       ws.on('message', (message) => {
@@ -99,10 +94,24 @@ class WebSocketService {
       if (!client) return;
 
       switch (message.type) {
+        case 'auth':
+          this._authenticateClient(ws, message.token);
+          break;
+
         case 'subscribe':
+          if (!client.authenticated) {
+            this._send(ws, {
+              type: 'auth_required',
+              data: { message: 'Authenticate before subscribing to updates' },
+            });
+            break;
+          }
+
           // Subscribe to specific topics
           if (Array.isArray(message.topics)) {
-            message.topics.forEach((t) => client.subscribedTopics.add(t));
+            message.topics
+              .filter((topic) => this.DEFAULT_TOPICS.includes(topic))
+              .forEach((topic) => client.subscribedTopics.add(topic));
             this._send(ws, {
               type: 'subscribed',
               data: { topics: Array.from(client.subscribedTopics) },
@@ -111,6 +120,14 @@ class WebSocketService {
           break;
 
         case 'unsubscribe':
+          if (!client.authenticated) {
+            this._send(ws, {
+              type: 'auth_required',
+              data: { message: 'Authenticate before unsubscribing from updates' },
+            });
+            break;
+          }
+
           if (Array.isArray(message.topics)) {
             message.topics.forEach((t) => client.subscribedTopics.delete(t));
             this._send(ws, {
@@ -121,11 +138,21 @@ class WebSocketService {
           break;
 
         case 'ping':
-          // Client-initiated ping (in addition to WebSocket protocol ping/pong)
-          this._send(ws, { type: 'pong', data: { timestamp: Date.now() } });
+          if (client.authenticated) {
+            // Client-initiated ping (in addition to WebSocket protocol ping/pong)
+            this._send(ws, { type: 'pong', data: { timestamp: Date.now() } });
+          }
           break;
 
         case 'getTopics':
+          if (!client.authenticated) {
+            this._send(ws, {
+              type: 'auth_required',
+              data: { message: 'Authenticate before requesting topics' },
+            });
+            break;
+          }
+
           this._send(ws, {
             type: 'topics',
             data: { topics: Array.from(client.subscribedTopics) },
@@ -143,6 +170,44 @@ class WebSocketService {
         type: 'error',
         data: { message: 'Invalid JSON message' },
       });
+    }
+  }
+
+  async _authenticateClient(ws, token) {
+    const client = this.clients.get(ws);
+    if (!client) return;
+
+    try {
+      const user = await authenticateAccessToken(token);
+      client.authenticated = true;
+      client.user = {
+        id: user._id || user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      };
+      client.lastAuthenticatedAt = new Date().toISOString();
+
+      this._send(ws, {
+        type: 'authenticated',
+        data: {
+          clientId: client.id,
+          message: 'Connected to QuantMatrix WebSocket',
+          availableTopics: this.DEFAULT_TOPICS,
+          user: client.user,
+        },
+      });
+    } catch (err) {
+      this._send(ws, {
+        type: 'auth_failed',
+        data: {
+          message: err.message || 'Authentication failed',
+        },
+      });
+
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close(4401, 'Authentication failed');
+      }
     }
   }
 
@@ -190,7 +255,7 @@ class WebSocketService {
 
     let sent = 0;
     for (const [ws, client] of this.clients) {
-      if (ws.readyState === WebSocket.OPEN && client.subscribedTopics.has(topic)) {
+      if (ws.readyState === WebSocket.OPEN && client.authenticated && client.subscribedTopics.has(topic)) {
         this._send(ws, message);
         sent++;
       }
@@ -239,6 +304,8 @@ class WebSocketService {
       info.push({
         id: client.id,
         ip: client.ip,
+        authenticated: client.authenticated,
+        user: client.user,
         connectedAt: client.connectedAt,
         duration: this._getDuration(client.connectedAt),
         topics: Array.from(client.subscribedTopics),

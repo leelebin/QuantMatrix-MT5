@@ -35,10 +35,21 @@ const REASON = Object.freeze({
   MAX_POSITIONS_REACHED: 'MAX_POSITIONS_REACHED',
   SYMBOL_EXPOSURE_LIMIT: 'SYMBOL_EXPOSURE_LIMIT',
   CATEGORY_EXPOSURE_LIMIT: 'CATEGORY_EXPOSURE_LIMIT',
+  SAME_DIRECTION_SYMBOL_LIMIT: 'SAME_DIRECTION_SYMBOL_LIMIT',
+  SAME_DIRECTION_CATEGORY_LIMIT: 'SAME_DIRECTION_CATEGORY_LIMIT',
+  DUPLICATE_ENTRY_WINDOW: 'DUPLICATE_ENTRY_WINDOW',
+  COOLDOWN_AFTER_LOSS: 'COOLDOWN_AFTER_LOSS',
+  EXECUTION_SCORE_TOO_LOW: 'EXECUTION_SCORE_TOO_LOW',
   LOT_BELOW_MIN: 'LOT_BELOW_MIN',
   INVALID_SL: 'INVALID_SL',
   SL_TOO_CLOSE: 'SL_TOO_CLOSE',
   UNKNOWN_INSTRUMENT: 'UNKNOWN_INSTRUMENT',
+
+  // Strategy-level daily stop (per strategy+symbol+timeframe)
+  STRATEGY_DAILY_STOP_ACTIVE: 'STRATEGY_DAILY_STOP_ACTIVE',
+  STRATEGY_DAILY_STOP_TRIGGERED: 'STRATEGY_DAILY_STOP_TRIGGERED',
+  STRATEGY_DAILY_STOP_RESET: 'STRATEGY_DAILY_STOP_RESET',
+  STRATEGY_DAILY_STOP_CLASSIFICATION: 'STRATEGY_DAILY_STOP_CLASSIFICATION',
 
   // Execution
   PREFLIGHT_REJECTED: 'PREFLIGHT_REJECTED',
@@ -54,11 +65,16 @@ const REASON = Object.freeze({
   TRAILING_UPDATED: 'TRAILING_UPDATED',
   PARTIAL_CLOSE: 'PARTIAL_CLOSE',
   POSITION_REMOVED: 'POSITION_REMOVED',
+  NEWS_BLACKOUT: 'NEWS_BLACKOUT',
 
   // Close
   SL_HIT: 'SL_HIT',
   TP_HIT: 'TP_HIT',
   STOP_OUT: 'STOP_OUT',
+  BREAKEVEN: 'BREAKEVEN',
+  TRAILING_STOP: 'TRAILING_STOP',
+  PARTIAL_TP: 'PARTIAL_TP',
+  BROKER_EXTERNAL: 'BROKER_EXTERNAL',
   MANUAL: 'MANUAL',
   EXTERNAL: 'EXTERNAL',
   TIME_EXIT: 'TIME_EXIT',
@@ -73,12 +89,14 @@ function broadcastSafe(record) {
         symbol: record.symbol,
         strategy: record.strategy,
         module: record.module,
+        type: record.type,
         stage: record.stage,
         status: record.status,
         reasonCode: record.reasonCode,
         reasonText: record.reasonText,
         signal: record.signal,
         scope: record.scope,
+        details: record.details,
       });
     }
   } catch (_) {}
@@ -149,6 +167,10 @@ function filtered(event) {
     status: event.status || 'INFO',
     reasonCode: event.reasonCode || REASON.FILTERED,
   });
+}
+
+function signalFiltered(event) {
+  return filtered(event);
 }
 
 function triggered(event) {
@@ -229,6 +251,7 @@ module.exports = {
   noSetup,
   setupFound,
   filtered,
+  signalFiltered,
   triggered,
   duplicate,
   riskRejected,

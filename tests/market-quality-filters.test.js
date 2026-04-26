@@ -2,10 +2,15 @@ jest.mock('../src/models/Strategy', () => ({
   findAll: jest.fn().mockResolvedValue([]),
 }));
 
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
+}));
+
 const MomentumStrategy = require('../src/strategies/MomentumStrategy');
 const BreakoutStrategy = require('../src/strategies/BreakoutStrategy');
 const strategyEngine = require('../src/services/strategyEngine');
 const Strategy = require('../src/models/Strategy');
+const { getStrategyInstance } = require('../src/services/strategyInstanceService');
 const { STRATEGY_TYPES } = require('../src/config/instruments');
 
 function makeMomentumCandles({ lastThreeBody = 1.2, baseBody = 0.4 } = {}) {
@@ -61,6 +66,11 @@ describe('market quality filters', () => {
     strategyEngine.lastEmittedSignals.clear();
     jest.restoreAllMocks();
     Strategy.findAll.mockResolvedValue([]);
+    getStrategyInstance.mockImplementation(async () => ({
+      parameters: {},
+      enabled: true,
+      source: 'instance',
+    }));
   });
 
   test('Momentum filters low-volatility regimes even when direction aligns', () => {
@@ -82,7 +92,7 @@ describe('market quality filters', () => {
     expect(result.signal).toBe('NONE');
     expect(result.status).toBe('FILTERED');
     expect(result.filterReason).toContain('ATR regime below threshold');
-    expect(result.marketQualityThreshold).toBe(2);
+    expect(result.marketQualityThreshold).toBe(3);
   });
 
   test('Momentum filters weak EMA50 slope before allowing entry', () => {
@@ -106,7 +116,7 @@ describe('market quality filters', () => {
     expect(result.marketQualityScore).toBe(1);
   });
 
-  test('Momentum allows entries once 2 of 3 quality checks pass', () => {
+  test('Momentum blocks entries when only 2 of 3 quality checks pass', () => {
     const strategy = new MomentumStrategy();
     const result = strategy.analyze(makeMomentumCandles({ lastThreeBody: 1.2, baseBody: 0.4 }), {
       ema50: [101.8, 102.1, 102.5, 102.9, 103.3],
@@ -122,9 +132,32 @@ describe('market quality filters', () => {
       riskParams: { slMultiplier: 1.5, tpMultiplier: 3 },
     });
 
-    expect(result.signal).toBe('BUY');
+    expect(result.signal).toBe('NONE');
     expect(result.marketQualityScore).toBe(2);
-    expect(result.reason).toContain('quality 2/3');
+    expect(result.marketQualityThreshold).toBe(3);
+    expect(result.filterReason).toContain('weak MACD persistence');
+  });
+
+  test('Momentum allows entries only when all 3 quality checks pass', () => {
+    const strategy = new MomentumStrategy();
+    const result = strategy.analyze(makeMomentumCandles({ lastThreeBody: 1.2, baseBody: 0.4 }), {
+      ema50: [101.8, 102.1, 102.5, 102.9, 103.3],
+      rsi: [54, 57, 60],
+      macd: [
+        { MACD: 1.08, signal: 0.8, histogram: 0.28 },
+        { MACD: 1.14, signal: 0.83, histogram: 0.32 },
+        { MACD: 1.2, signal: 0.87, histogram: 0.36 },
+      ],
+      atr: Array(20).fill(2),
+    }, {
+      pipSize: 0.01,
+      riskParams: { slMultiplier: 1.5, tpMultiplier: 3 },
+    });
+
+    expect(result.signal).toBe('BUY');
+    expect(result.marketQualityScore).toBe(3);
+    expect(result.marketQualityThreshold).toBe(3);
+    expect(result.reason).toContain('quality 3/3');
   });
 
   test('Momentum still blocks entries when only 1 quality check passes', () => {
@@ -217,7 +250,7 @@ describe('market quality filters', () => {
       reason: 'Momentum filtered: weak EMA50 slope',
       filterReason: 'Momentum filtered: weak EMA50 slope',
       marketQualityScore: 1,
-      marketQualityThreshold: 2,
+      marketQualityThreshold: 3,
       marketQualityDetails: {
         ema50SlopeScore: 0,
         directionalBodyScore: 1,
@@ -247,7 +280,7 @@ describe('market quality filters', () => {
       status: 'FILTERED',
       filterReason: 'Momentum filtered: weak EMA50 slope',
       marketQualityScore: 1,
-      marketQualityThreshold: 2,
+      marketQualityThreshold: 3,
       marketQualityDetails: expect.objectContaining({
         ema50SlopeScore: 0,
       }),

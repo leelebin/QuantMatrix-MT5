@@ -279,10 +279,10 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.INDICES,
     strategyType: STRATEGY_TYPES.MOMENTUM,
     pipSize: 0.01,
-    pipValue: 1,
-    contractSize: 1,
-    minLot: 0.1,
-    lotStep: 0.1,
+    pipValue: 0.1,
+    contractSize: 10,
+    minLot: 0.01,
+    lotStep: 0.01,
     spread: 3.0,
     timeframe: '1h',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
@@ -292,10 +292,10 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.INDICES,
     strategyType: STRATEGY_TYPES.MOMENTUM,
     pipSize: 0.01,
-    pipValue: 1,
-    contractSize: 1,
-    minLot: 0.1,
-    lotStep: 0.1,
+    pipValue: 0.1,
+    contractSize: 10,
+    minLot: 0.01,
+    lotStep: 0.01,
     spread: 0.8,
     timeframe: '1h',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
@@ -305,10 +305,10 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.INDICES,
     strategyType: STRATEGY_TYPES.MOMENTUM,
     pipSize: 0.01,
-    pipValue: 1,
-    contractSize: 1,
-    minLot: 0.1,
-    lotStep: 0.1,
+    pipValue: 0.1,
+    contractSize: 10,
+    minLot: 0.01,
+    lotStep: 0.01,
     spread: 1.5,
     timeframe: '1h',
     riskParams: { riskPercent: 0.01, slMultiplier: 1.5, tpMultiplier: 3 },
@@ -344,9 +344,10 @@ const instruments = {
 
   // ─── Crypto (Breakout / Momentum) ──────────────────────────────────────
   //
-  // All crypto instruments assume 1 standard lot = 1 unit of the base
-  // coin. Brokers vary (some use 100 BTC or 1000 coins per lot); if the
-  // user's broker differs, pipValue/contractSize should be overridden.
+  // Crypto sizing below is aligned to the current MT5 broker profile.
+  // Live/paper lot sizing now also asks MT5 to calculate broker-side
+  // P/L directly, so these defaults mainly keep backtests and diagnostics
+  // close to the live contract spec.
   // Conservative defaults:
   //   - riskPercent 0.008 (slightly below the forex 0.01 default)
   //   - slMultiplier 2.5, tpMultiplier 4 (wider stops, asymmetric RR)
@@ -373,8 +374,8 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.CRYPTO,
     strategyType: STRATEGY_TYPES.BREAKOUT,
     pipSize: 0.01,
-    pipValue: 0.01,
-    contractSize: 1,
+    pipValue: 0.1,
+    contractSize: 10,
     minLot: 0.01,
     lotStep: 0.01,
     spread: 300,        // ~$3
@@ -387,8 +388,8 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.CRYPTO,
     strategyType: STRATEGY_TYPES.MOMENTUM,
     pipSize: 0.01,
-    pipValue: 0.01,
-    contractSize: 1,
+    pipValue: 1,
+    contractSize: 100,
     minLot: 0.01,
     lotStep: 0.01,
     spread: 50,         // ~$0.50
@@ -400,8 +401,8 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.CRYPTO,
     strategyType: STRATEGY_TYPES.BREAKOUT,
     pipSize: 0.00001,
-    pipValue: 0.00001,
-    contractSize: 1,
+    pipValue: 0.5,
+    contractSize: 50000,
     minLot: 0.01,
     lotStep: 0.01,
     spread: 300,        // ~$0.003
@@ -413,8 +414,8 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.CRYPTO,
     strategyType: STRATEGY_TYPES.MOMENTUM,
     pipSize: 0.01,
-    pipValue: 0.01,
-    contractSize: 1,
+    pipValue: 0.1,
+    contractSize: 10,
     minLot: 0.01,
     lotStep: 0.01,
     spread: 150,        // ~$1.50
@@ -426,8 +427,8 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.CRYPTO,
     strategyType: STRATEGY_TYPES.BREAKOUT,
     pipSize: 0.01,
-    pipValue: 0.01,
-    contractSize: 1,
+    pipValue: 1,
+    contractSize: 100,
     minLot: 0.01,
     lotStep: 0.01,
     spread: 30,         // ~$0.30
@@ -440,8 +441,8 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.CRYPTO,
     strategyType: STRATEGY_TYPES.MOMENTUM,
     pipSize: 0.00001,
-    pipValue: 0.00001,
-    contractSize: 1,
+    pipValue: 0.1,
+    contractSize: 10000,
     minLot: 0.01,
     lotStep: 0.01,
     spread: 200,        // ~$0.002
@@ -453,8 +454,8 @@ const instruments = {
     category: INSTRUMENT_CATEGORIES.CRYPTO,
     strategyType: STRATEGY_TYPES.BREAKOUT,
     pipSize: 0.00001,
-    pipValue: 0.00001,
-    contractSize: 1,
+    pipValue: 1,
+    contractSize: 100000,
     minLot: 0.01,
     lotStep: 0.01,
     spread: 200,        // ~$0.002

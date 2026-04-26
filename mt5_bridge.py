@@ -7,7 +7,7 @@ import sys
 import json
 import traceback
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 try:
     import MetaTrader5 as mt5
@@ -53,6 +53,29 @@ TIMEFRAME_MAP = {
     "1d": mt5.TIMEFRAME_D1,
     "1w": mt5.TIMEFRAME_W1,
     "1mn": mt5.TIMEFRAME_MN1,
+}
+
+TIMEFRAME_TO_SECONDS = {
+    "1m": 60,
+    "5m": 5 * 60,
+    "15m": 15 * 60,
+    "30m": 30 * 60,
+    "1h": 60 * 60,
+    "2h": 2 * 60 * 60,
+    "4h": 4 * 60 * 60,
+    "6h": 6 * 60 * 60,
+    "8h": 8 * 60 * 60,
+    "12h": 12 * 60 * 60,
+    "1d": 24 * 60 * 60,
+    "1w": 7 * 24 * 60 * 60,
+}
+
+# Large minute-range requests can fail with `(-2, "Terminal: Invalid params")`
+# on some terminals/brokers. We chunk those requests into smaller date windows
+# and stitch the series back together so intraday backtests remain stable.
+CHUNKED_RANGE_DAYS_BY_TIMEFRAME = {
+    "1m": 30,
+    "5m": 90,
 }
 
 try:
@@ -106,6 +129,9 @@ TRADE_RETCODE_NAMES = {
     getattr(mt5, "TRADE_RETCODE_LIMIT_ORDERS", 10033): "LIMIT_ORDERS",
     getattr(mt5, "TRADE_RETCODE_LIMIT_VOLUME", 10034): "LIMIT_VOLUME",
 }
+if 0 not in TRADE_RETCODE_NAMES:
+    TRADE_RETCODE_NAMES[0] = "CHECK_OK"
+# If MetaTrader5 already exposes a retcode 0 name, keep that mapping intact.
 
 DEAL_ENTRY_NAMES = {
     getattr(mt5, "DEAL_ENTRY_IN", 0): "IN",
@@ -157,6 +183,51 @@ def parse_datetime(value, default_value):
             return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc)
         except (ValueError, TypeError):
             return default_value
+
+
+def timeframe_step_delta(timeframe_str):
+    seconds = TIMEFRAME_TO_SECONDS.get(timeframe_str)
+    return timedelta(seconds=seconds) if seconds else timedelta(minutes=1)
+
+
+def should_chunk_range(timeframe_str, dt_from, dt_to):
+    chunk_days = CHUNKED_RANGE_DAYS_BY_TIMEFRAME.get(timeframe_str)
+    if not chunk_days:
+        return False
+    return (dt_to - dt_from) > timedelta(days=chunk_days)
+
+
+def copy_rates_range_chunked(symbol, tf, dt_from, dt_to, timeframe_str):
+    chunk_days = CHUNKED_RANGE_DAYS_BY_TIMEFRAME.get(timeframe_str)
+    if not chunk_days:
+        return None, None
+
+    cursor = dt_from
+    chunk_delta = timedelta(days=chunk_days)
+    step_delta = timeframe_step_delta(timeframe_str)
+    seen_timestamps = set()
+    all_rates = []
+
+    while cursor < dt_to:
+        chunk_end = min(cursor + chunk_delta, dt_to)
+        chunk_rates = mt5.copy_rates_range(symbol, tf, cursor, chunk_end)
+        if chunk_rates is None:
+            return None, mt5.last_error()
+
+        if len(chunk_rates) > 0:
+            for rate in chunk_rates:
+                timestamp = int(rate[0])
+                if timestamp in seen_timestamps:
+                    continue
+                seen_timestamps.add(timestamp)
+                all_rates.append(rate)
+
+            last_chunk_time = datetime.fromtimestamp(int(chunk_rates[-1][0]), tz=timezone.utc)
+            cursor = max(last_chunk_time + step_delta, chunk_end + step_delta)
+        else:
+            cursor = chunk_end + step_delta
+
+    return all_rates, None
 
 
 def sort_deals(deals):
@@ -236,6 +307,7 @@ def serialize_symbol_info(symbol_info, tick=None):
 
     return {
         "symbol": symbol_info.name,
+        "path": getattr(symbol_info, "path", None),
         "visible": symbol_info.visible,
         "tradeMode": symbol_info.trade_mode,
         "tradeModeName": SYMBOL_TRADE_MODE_NAMES.get(symbol_info.trade_mode, str(symbol_info.trade_mode)),
@@ -247,6 +319,14 @@ def serialize_symbol_info(symbol_info, tick=None):
         "volumeMin": symbol_info.volume_min,
         "volumeMax": symbol_info.volume_max,
         "volumeStep": symbol_info.volume_step,
+        "tradeTickSize": getattr(symbol_info, "trade_tick_size", None),
+        "tradeTickValue": getattr(symbol_info, "trade_tick_value", None),
+        "tradeTickValueProfit": getattr(symbol_info, "trade_tick_value_profit", None),
+        "tradeTickValueLoss": getattr(symbol_info, "trade_tick_value_loss", None),
+        "tradeContractSize": getattr(symbol_info, "trade_contract_size", None),
+        "currencyBase": getattr(symbol_info, "currency_base", None),
+        "currencyProfit": getattr(symbol_info, "currency_profit", None),
+        "currencyMargin": getattr(symbol_info, "currency_margin", None),
         "sessionDeals": getattr(symbol_info, "session_deals", None),
         "sessionBuyOrders": getattr(symbol_info, "session_buy_orders", None),
         "sessionSellOrders": getattr(symbol_info, "session_sell_orders", None),
@@ -369,16 +449,24 @@ def build_market_order_request(symbol, order_type, volume, sl=0.0, tp=0.0, comme
     return request, symbol_info, tick, None
 
 
-def serialize_trade_check(check_result, symbol_info=None, tick=None):
-    retcode = getattr(check_result, "retcode", None)
-    allowed_retcodes = {
+def is_check_retcode_ok(retcode):
+    """True when MqlTradeCheckResult.retcode means 'can send'."""
+    if retcode is None:
+        return False
+
+    ok_codes = {
         0,
         getattr(mt5, "TRADE_RETCODE_DONE", 10009),
         getattr(mt5, "TRADE_RETCODE_PLACED", 10008),
     }
+    return retcode in ok_codes
+
+
+def serialize_trade_check(check_result, symbol_info=None, tick=None):
+    retcode = getattr(check_result, "retcode", None)
 
     return {
-        "allowed": retcode in allowed_retcodes if retcode is not None else False,
+        "allowed": is_check_retcode_ok(retcode),
         "retcode": retcode,
         "retcodeName": TRADE_RETCODE_NAMES.get(retcode, str(retcode) if retcode is not None else None),
         "comment": getattr(check_result, "comment", None),
@@ -564,6 +652,7 @@ def handle_preflight_order(params):
         check_result["allowed"] = False
         check_result["comment"] = "Symbol is short-only"
 
+    # With `allowed` fixed, retcode=0 only falls through here when the tick is actually stale.
     if not check_result["allowed"] and check_result["retcode"] in (None, 0) and is_tick_stale(tick):
         check_result = build_market_closed_result(symbol_info, tick, request)
 
@@ -625,10 +714,7 @@ def handle_place_order(params):
     }}
 
 
-def handle_close_position(params):
-    """Close an open position"""
-    position_id = int(params["positionId"])
-
+def execute_position_close(position_id, volume=None, comment="close", reject_full_close=False):
     # Find the position
     positions = mt5.positions_get(ticket=position_id)
     if positions is None or len(positions) == 0:
@@ -636,11 +722,19 @@ def handle_close_position(params):
 
     position = positions[0]
     symbol = position.symbol
-    volume = position.volume
+    current_volume = float(position.volume)
+    close_volume = current_volume if volume is None else float(volume)
+
+    if close_volume <= 0:
+        return {"success": False, "error": "Close volume must be positive"}
+    if reject_full_close and close_volume >= current_volume:
+        return {"success": False, "error": f"Partial close volume must be less than open volume {current_volume}"}
+    if close_volume > current_volume:
+        return {"success": False, "error": f"Close volume {close_volume} exceeds open volume {current_volume}"}
 
     close_type = "SELL" if position.type == mt5.ORDER_TYPE_BUY else "BUY"
     request, symbol_info, tick, error = build_market_order_request(
-        symbol, close_type, volume, 0, 0, "close", position_id=position_id
+        symbol, close_type, close_volume, 0, 0, comment, position_id=position_id
     )
     if error:
         return error
@@ -689,6 +783,19 @@ def handle_close_position(params):
         "price": result.price,
         "closeDeal": serialize_deal(close_deal),
     }}
+
+
+def handle_close_position(params):
+    """Close an open position"""
+    position_id = int(params["positionId"])
+    return execute_position_close(position_id)
+
+
+def handle_partial_close_position(params):
+    """Partially close an open position"""
+    position_id = int(params["positionId"])
+    volume = float(params["volume"])
+    return execute_position_close(position_id, volume=volume, comment="partial_close", reject_full_close=True)
 
 
 def handle_modify_position(params):
@@ -751,7 +858,24 @@ def handle_get_candles(params):
         except (ValueError, AttributeError):
             dt_to = datetime.fromtimestamp(int(end_time) / 1000, tz=timezone.utc)
 
-        rates = mt5.copy_rates_range(symbol, tf, dt_from, dt_to)
+        if should_chunk_range(timeframe_str, dt_from, dt_to):
+            rates, chunk_error = copy_rates_range_chunked(symbol, tf, dt_from, dt_to, timeframe_str)
+            if rates is None:
+                return {"success": False, "error": f"Failed to get candles for {symbol}: {chunk_error}"}
+        else:
+            rates = mt5.copy_rates_range(symbol, tf, dt_from, dt_to)
+            if rates is None:
+                error = mt5.last_error()
+                if (
+                    error
+                    and len(error) > 0
+                    and int(error[0]) == -2
+                    and timeframe_str in CHUNKED_RANGE_DAYS_BY_TIMEFRAME
+                ):
+                    rates, chunk_error = copy_rates_range_chunked(symbol, tf, dt_from, dt_to, timeframe_str)
+                    if rates is None:
+                        return {"success": False, "error": f"Failed to get candles for {symbol}: {chunk_error}"}
+
         if rates is not None and len(rates) > limit:
             rates = rates[-limit:]
     elif start_time:
@@ -823,6 +947,53 @@ def handle_get_symbol_info(params):
         return {"success": True, "result": None}
 
     return {"success": True, "result": serialize_symbol_info(info)}
+
+
+def handle_calculate_order_profit(params):
+    """Estimate P/L for a hypothetical order using MT5's broker-side contract rules."""
+    symbol = params["symbol"]
+    order_type = str(params["type"]).upper()
+    volume = float(params.get("volume", 1.0))
+    open_price = float(params["openPrice"])
+    close_price = float(params["closePrice"])
+
+    if order_type not in ("BUY", "SELL"):
+        return {"success": False, "error": f"Unsupported order type: {order_type}"}
+
+    symbol_info, tick, error = ensure_symbol_ready(symbol)
+    if error:
+        return error
+
+    mt5_order_type = mt5.ORDER_TYPE_BUY if order_type == "BUY" else mt5.ORDER_TYPE_SELL
+    profit = mt5.order_calc_profit(mt5_order_type, symbol, volume, open_price, close_price)
+    if profit is None:
+        last_error = mt5.last_error()
+        return error_response(
+            f"order_calc_profit failed: {last_error}",
+            code=last_error[0] if isinstance(last_error, tuple) and len(last_error) > 0 else None,
+            details={
+                "symbol": symbol,
+                "type": order_type,
+                "volume": volume,
+                "openPrice": open_price,
+                "closePrice": close_price,
+                "symbolInfo": serialize_symbol_info(symbol_info, tick),
+                "lastError": last_error,
+            },
+        )
+
+    return {
+        "success": True,
+        "result": {
+            "symbol": symbol,
+            "type": order_type,
+            "volume": volume,
+            "openPrice": open_price,
+            "closePrice": close_price,
+            "profit": float(profit),
+            "symbolInfo": serialize_symbol_info(symbol_info, tick),
+        },
+    }
 
 
 def handle_list_symbols(params):
@@ -908,11 +1079,13 @@ HANDLERS = {
     "preflightOrder": handle_preflight_order,
     "placeOrder": handle_place_order,
     "closePosition": handle_close_position,
+    "partialClosePosition": handle_partial_close_position,
     "modifyPosition": handle_modify_position,
     "getCandles": handle_get_candles,
     "getPrice": handle_get_price,
     "getDeals": handle_get_deals,
     "getSymbolInfo": handle_get_symbol_info,
+    "calculateOrderProfit": handle_calculate_order_profit,
     "listSymbols": handle_list_symbols,
 }
 

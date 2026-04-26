@@ -1,6 +1,7 @@
 const express = require('express');
 const { body } = require('express-validator');
 const {
+  getAuthConfig,
   register,
   login,
   logout,
@@ -12,6 +13,8 @@ const { protect } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
+
+router.get('/config', getAuthConfig);
 
 router.post(
   '/register',

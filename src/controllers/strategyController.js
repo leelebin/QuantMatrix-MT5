@@ -1,12 +1,24 @@
 const Strategy = require('../models/Strategy');
+const StrategyInstance = require('../models/StrategyInstance');
 const RiskProfile = require('../models/RiskProfile');
 const strategyEngine = require('../services/strategyEngine');
 const breakevenService = require('../services/breakevenService');
-const { getInstrument, getAllSymbols } = require('../config/instruments');
-const {
-  getStrategyParameterDefinitions,
-  resolveStrategyParameters,
-} = require('../config/strategyParameters');
+const { getAllSymbols } = require('../config/instruments');
+const { getStrategyParameterDefinitions } = require('../config/strategyParameters');
+
+async function ensureStrategyInstancesForSymbols(strategyName, symbols = []) {
+  const uniqueSymbols = [...new Set(Array.isArray(symbols) ? symbols : [])];
+  for (const symbol of uniqueSymbols) {
+    await StrategyInstance.upsert(strategyName, symbol, {});
+  }
+}
+
+async function syncStrategyInstances(strategyName, symbols = [], patch = {}) {
+  const targetSymbols = [...new Set(Array.isArray(symbols) ? symbols : [])];
+  for (const symbol of targetSymbols) {
+    await StrategyInstance.upsert(strategyName, symbol, patch);
+  }
+}
 
 function buildAssignmentsPayload(strategies) {
   const symbols = getAllSymbols();
@@ -40,15 +52,9 @@ function buildAssignmentsPayload(strategies) {
 }
 
 function enrichStrategy(strategy, activeProfile = null) {
-  const instrument = getInstrument(strategy.symbols && strategy.symbols.length > 0 ? strategy.symbols[0] : null);
   return {
     ...strategy,
     parameterDefinitions: getStrategyParameterDefinitions(strategy.name),
-    resolvedParameters: resolveStrategyParameters({
-      strategyType: strategy.name,
-      instrument,
-      storedParameters: strategy.parameters || null,
-    }),
     effectiveBreakeven: breakevenService.resolveEffectiveBreakeven(activeProfile, strategy),
     effectiveExitPlan: breakevenService.resolveEffectiveExitPlan(activeProfile, strategy, null),
   };
@@ -93,21 +99,21 @@ exports.updateStrategy = async (req, res) => {
     }
 
     const { symbols, enabled, parameters, tradeManagement } = req.body;
-    const updateFields = {};
-    if (symbols !== undefined) updateFields.symbols = symbols;
-    if (enabled !== undefined) updateFields.enabled = enabled;
-    if (parameters !== undefined) updateFields.parameters = parameters;
-    if (tradeManagement !== undefined) {
-      const activeProfile = await RiskProfile.getActive();
-      const normalizedTradeManagement = breakevenService.normalizeStrategyTradeManagement(tradeManagement, {
-        activeProfile,
+    if (enabled !== undefined || parameters !== undefined || tradeManagement !== undefined) {
+      return res.status(409).json({
+        success: false,
+        message: 'Runtime strategy enabled, parameters, and tradeManagement must be edited via /api/strategy-instances/:strategyName/:symbol',
       });
-      if (normalizedTradeManagement !== undefined) {
-        updateFields.tradeManagement = normalizedTradeManagement;
-      }
     }
 
+    const updateFields = {};
+    if (symbols !== undefined) updateFields.symbols = symbols;
+
     const updatedStrategy = await Strategy.update(req.params.id, updateFields);
+    const shouldEnsureInstances = symbols !== undefined;
+    if (shouldEnsureInstances) {
+      await ensureStrategyInstancesForSymbols(updatedStrategy.name, updatedStrategy.symbols);
+    }
     const activeProfile = await RiskProfile.getActive();
     res.json({ success: true, data: enrichStrategy(updatedStrategy, activeProfile) });
   } catch (err) {
@@ -189,6 +195,10 @@ exports.updateAssignments = async (req, res) => {
       return Strategy.update(strategy._id, { symbols: nextSymbols });
     }));
 
+    for (const strategy of strategies) {
+      await ensureStrategyInstancesForSymbols(strategy.name, nextAssignmentsByStrategy[strategy.name]);
+    }
+
     const updatedStrategies = await Strategy.findAll();
     res.json({
       success: true,
@@ -203,15 +213,14 @@ exports.updateAssignments = async (req, res) => {
 // @route   PUT /api/strategies/:id/toggle
 exports.toggleStrategy = async (req, res) => {
   try {
-    const activeProfile = await RiskProfile.getActive();
-    const strategy = await Strategy.toggleEnabled(req.params.id);
+    const strategy = await Strategy.findById(req.params.id);
     if (!strategy) {
       return res.status(404).json({ success: false, message: 'Strategy not found' });
     }
-    res.json({
-      success: true,
-      message: `Strategy ${strategy.enabled ? 'enabled' : 'disabled'}`,
-      data: enrichStrategy(strategy, activeProfile),
+
+    return res.status(409).json({
+      success: false,
+      message: 'Runtime strategy enabled state must be edited per assignment via /api/strategy-instances/:strategyName/:symbol',
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -225,6 +234,9 @@ exports.resetAssignments = async (req, res) => {
     await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
     await Strategy.resetToDefaults();
     const strategies = await Strategy.findAll();
+    for (const strategy of strategies) {
+      await ensureStrategyInstancesForSymbols(strategy.name, strategy.symbols);
+    }
     res.json({
       success: true,
       message: 'Strategy symbol assignments reset to defaults',

@@ -228,6 +228,114 @@ function anchoredVwapSeries(candles = [], anchorTime = null) {
 }
 
 /**
+ * Precompute a per-candle feature snapshot series for the hybrid
+ * strategy so callers can reuse O(n) work instead of rebuilding the
+ * same cumulative/VWAP statistics on every bar.
+ */
+function buildFeatureSeries(candles = [], {
+  volumeAvgPeriod = 20,
+  deltaSmoothing = 8,
+} = {}) {
+  if (!Array.isArray(candles) || candles.length === 0) {
+    return [];
+  }
+
+  const minCandles = Math.max(volumeAvgPeriod + 2, 5);
+  const out = new Array(candles.length).fill(null);
+  const volumes = new Array(candles.length);
+  const cumulative = new Array(candles.length);
+  const signed = new Array(candles.length);
+
+  let rollingVolumeSum = 0;
+  let rollingCumulativeSum = 0;
+  let rollingSignedRecentSum = 0;
+  let cumulativeDelta = 0;
+
+  let currentSession = null;
+  let sessionCumVolPrice = 0;
+  let sessionCumVol = 0;
+
+  for (let i = 0; i < candles.length; i++) {
+    const candle = candles[i];
+    const vol = resolveVolume(candle);
+    const direction = classifyBar(candle);
+    const signedVolume = direction === 'BULL' ? vol : direction === 'BEAR' ? -vol : 0;
+
+    volumes[i] = vol;
+    signed[i] = signedVolume;
+    cumulativeDelta += signedVolume;
+    cumulative[i] = cumulativeDelta;
+
+    const trailingAvgExcludingCurrent = i >= volumeAvgPeriod
+      ? (rollingVolumeSum / volumeAvgPeriod)
+      : null;
+    const rvol = trailingAvgExcludingCurrent == null
+      ? null
+      : trailingAvgExcludingCurrent > 0 ? vol / trailingAvgExcludingCurrent : 0;
+
+    rollingVolumeSum += vol;
+    if (i >= volumeAvgPeriod) {
+      rollingVolumeSum -= volumes[i - volumeAvgPeriod];
+    }
+    const averageVolume = i + 1 >= volumeAvgPeriod
+      ? (rollingVolumeSum / volumeAvgPeriod)
+      : null;
+
+    rollingCumulativeSum += cumulativeDelta;
+    if (i >= deltaSmoothing) {
+      rollingCumulativeSum -= cumulative[i - deltaSmoothing];
+    }
+    const cumulativeDeltaSmoothed = rollingCumulativeSum / Math.min(i + 1, deltaSmoothing);
+
+    rollingSignedRecentSum += signedVolume;
+    if (i >= 5) {
+      rollingSignedRecentSum -= signed[i - 5];
+    }
+
+    const key = sessionKey(candle);
+    if (key !== currentSession) {
+      currentSession = key;
+      sessionCumVolPrice = 0;
+      sessionCumVol = 0;
+    }
+    const typical = (candle.high + candle.low + candle.close) / 3;
+    sessionCumVolPrice += typical * vol;
+    sessionCumVol += vol;
+    const sessionVwap = sessionCumVol > 0 ? sessionCumVolPrice / sessionCumVol : candle.close;
+
+    if (i + 1 < minCandles) {
+      continue;
+    }
+
+    const wick = wickBodyRatio(candle);
+    const spread = spreadEfficiency(candle);
+
+    out[i] = {
+      latestCandle: candle,
+      previousCandle: candles[i - 1] || null,
+      volume: vol,
+      averageVolume,
+      rvol,
+      volumeSpikeClass: classifyVolumeSpike(rvol),
+      cumulativeDelta,
+      cumulativeDeltaSmoothed,
+      cumulativeDeltaPrev: cumulative[i - 1] ?? 0,
+      signedVolumeLatest: signedVolume,
+      signedVolumeRecentSum: rollingSignedRecentSum,
+      sessionVwap,
+      vwapDistance: candle.close - sessionVwap,
+      vwapDistancePct: sessionVwap ? ((candle.close - sessionVwap) / sessionVwap) : 0,
+      wickUpperRatio: wick.upper,
+      wickLowerRatio: wick.lower,
+      wickMaxRatio: wick.max,
+      spreadEfficiency: spread,
+    };
+  }
+
+  return out;
+}
+
+/**
  * Compute a compact feature snapshot for the latest closed candle.
  * Returns a plain object; missing inputs are represented as null so
  * the caller can short-circuit cleanly.
@@ -240,44 +348,8 @@ function computeLatestFeatures(candles = [], {
   volumeAvgPeriod = 20,
   deltaSmoothing = 8,
 } = {}) {
-  if (!Array.isArray(candles) || candles.length < Math.max(volumeAvgPeriod + 2, 5)) {
-    return null;
-  }
-  const latest = candles[candles.length - 1];
-  const prev = candles[candles.length - 2];
-
-  const rvol = relativeVolume(candles, volumeAvgPeriod);
-  const cumulative = cumulativeDeltaSeries(candles);
-  const smoothed = smoothDeltaSeries(cumulative, deltaSmoothing);
-  const vwapSeries = sessionVwapSeries(candles);
-  const vwap = vwapSeries[vwapSeries.length - 1];
-  const wick = wickBodyRatio(latest);
-  const efficiency = spreadEfficiency(latest);
-
-  const signed = signedVolumeSeries(candles);
-  const signedLast = signed[signed.length - 1];
-  const signedRecent = signed.slice(-Math.min(5, signed.length));
-
-  return {
-    latestCandle: latest,
-    previousCandle: prev,
-    volume: resolveVolume(latest),
-    averageVolume: indicatorService.averageVolume(candles, volumeAvgPeriod),
-    rvol,
-    volumeSpikeClass: classifyVolumeSpike(rvol),
-    cumulativeDelta: cumulative[cumulative.length - 1],
-    cumulativeDeltaSmoothed: smoothed[smoothed.length - 1],
-    cumulativeDeltaPrev: cumulative[cumulative.length - 2] ?? 0,
-    signedVolumeLatest: signedLast,
-    signedVolumeRecentSum: signedRecent.reduce((acc, v) => acc + v, 0),
-    sessionVwap: vwap,
-    vwapDistance: latest.close - vwap,
-    vwapDistancePct: vwap ? ((latest.close - vwap) / vwap) : 0,
-    wickUpperRatio: wick.upper,
-    wickLowerRatio: wick.lower,
-    wickMaxRatio: wick.max,
-    spreadEfficiency: efficiency,
-  };
+  const series = buildFeatureSeries(candles, { volumeAvgPeriod, deltaSmoothing });
+  return series.length > 0 ? series[series.length - 1] : null;
 }
 
 module.exports = {
@@ -293,6 +365,7 @@ module.exports = {
   sessionKey,
   sessionVwapSeries,
   anchoredVwapSeries,
+  buildFeatureSeries,
   computeLatestFeatures,
   MS_IN_DAY,
 };

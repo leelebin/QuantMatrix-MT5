@@ -4,9 +4,13 @@
  */
 
 const { getInstrument } = require('../config/instruments');
-const { positionsDb, paperPositionsDb, riskStateDb } = require('../config/db');
+const { positionsDb, paperPositionsDb, riskStateDb, tradesDb, tradeLogDb } = require('../config/db');
 const RiskProfile = require('../models/RiskProfile');
 const auditService = require('./auditService');
+const mt5Service = require('./mt5Service');
+const strategyDailyStopService = require('./strategyDailyStopService');
+const { calculateExecutionScore, DEFAULT_EXECUTION_POLICY } = require('./executionPolicyService');
+const { estimateBarDistance } = require('../utils/timeframe');
 
 class RiskManager {
   constructor() {
@@ -37,6 +41,12 @@ class RiskManager {
   _getPositionsStore(scope = 'live', overrideStore = null) {
     if (overrideStore) return overrideStore;
     return this._normalizeScope(scope) === 'paper' ? paperPositionsDb : positionsDb;
+  }
+
+  _getTradesStore(scope = 'live', overrideStore = null) {
+    if (overrideStore) return overrideStore;
+    const store = this._normalizeScope(scope) === 'paper' ? tradeLogDb : tradesDb;
+    return store && typeof store.find === 'function' ? store : null;
   }
 
   _isTradingEnabled(scope = 'live', override = null) {
@@ -159,16 +169,78 @@ class RiskManager {
     return normalizedPeak > 0 ? (normalizedPeak - normalizedEquity) / normalizedPeak : 0;
   }
 
-  calculateLotSizeDetails(signal, instrument, balance, settings) {
-    const instrumentRiskPercent = Number(instrument?.riskParams?.riskPercent) || 0;
-    const effectiveRiskPercent = Math.min(settings.maxRiskPerTrade, instrumentRiskPercent || settings.maxRiskPerTrade);
+  _getSignalRiskPercent(signal, instrument, settings) {
+    const strategyRiskPercent = Number(signal?.strategyParams?.riskPercent);
+    const signalRiskPercent = Number(signal?.riskPercent);
+    const instrumentRiskPercent = Number(instrument?.riskParams?.riskPercent);
+    const requestedRiskPercent = strategyRiskPercent || signalRiskPercent || instrumentRiskPercent || settings.maxRiskPerTrade;
+    return Math.min(settings.maxRiskPerTrade, requestedRiskPercent || settings.maxRiskPerTrade);
+  }
+
+  _normalizeLotSize(value, lotStep) {
+    const normalizedStep = Number(lotStep) > 0 ? Number(lotStep) : 0.01;
+    const floored = Math.floor((Number(value) || 0) / normalizedStep) * normalizedStep;
+    return parseFloat(Math.max(floored, 0).toFixed(4));
+  }
+
+  _resolveLotPrecision(minLot, lotStep) {
+    const raw = String(lotStep || minLot || '0.01');
+    if (raw.includes('e-')) {
+      return parseInt(raw.split('e-')[1], 10);
+    }
+
+    const decimalPart = raw.split('.')[1];
+    return decimalPart ? decimalPart.length : 2;
+  }
+
+  async _getBrokerSizingContext(signal, instrument) {
+    if (!mt5Service.isConnected()) {
+      return null;
+    }
+
+    const entryPrice = Number(signal?.entryPrice) || 0;
+    const stopLoss = Number(signal?.sl) || 0;
+    const type = String(signal?.signal || '').toUpperCase();
+    if (entryPrice <= 0 || stopLoss <= 0 || entryPrice === stopLoss || (type !== 'BUY' && type !== 'SELL')) {
+      return null;
+    }
+
+    try {
+      const [symbolInfo, profitEstimate] = await Promise.all([
+        mt5Service.getResolvedSymbolInfo(signal.symbol),
+        mt5Service.calculateOrderProfit(signal.symbol, type, 1.0, entryPrice, stopLoss),
+      ]);
+
+      const riskPerLot = Math.abs(Number(profitEstimate?.profit));
+      if (!(riskPerLot > 0)) {
+        return null;
+      }
+
+      return {
+        riskPerLot,
+        minLot: Number(symbolInfo?.volumeMin) > 0 ? Number(symbolInfo.volumeMin) : Number(instrument?.minLot),
+        lotStep: Number(symbolInfo?.volumeStep) > 0 ? Number(symbolInfo.volumeStep) : Number(instrument?.lotStep),
+        sizingMethod: 'broker_order_profit',
+        brokerSymbolInfo: symbolInfo || null,
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  calculateLotSizeDetails(signal, instrument, balance, settings, sizingContext = null) {
+    const effectiveRiskPercent = this._getSignalRiskPercent(signal, instrument, settings);
     const riskAmount = balance * effectiveRiskPercent;
     const currentPrice = Number(signal.entryPrice) || Number(signal.tp) || 0;
     const stopLoss = Number(signal.sl) || 0;
     const slDistance = Math.abs(currentPrice - stopLoss);
+    const minLot = Number(sizingContext?.minLot) > 0 ? Number(sizingContext.minLot) : Number(instrument.minLot) || 0.01;
+    const lotStep = Number(sizingContext?.lotStep) > 0 ? Number(sizingContext.lotStep) : Number(instrument.lotStep) || 0.01;
+    const lotPrecision = this._resolveLotPrecision(minLot, lotStep);
+    const brokerRiskPerLot = Number(sizingContext?.riskPerLot) || 0;
     const slPips = instrument.pipSize > 0 ? slDistance / instrument.pipSize : 0;
 
-    if (currentPrice <= 0 || stopLoss <= 0 || slPips <= 0) {
+    if (currentPrice <= 0 || stopLoss <= 0 || slDistance <= 0 || (brokerRiskPerLot <= 0 && slPips <= 0)) {
       return {
         allowed: false,
         reason: 'Invalid stop loss distance for risk sizing',
@@ -178,53 +250,83 @@ class RiskManager {
         riskAmount,
         overrideApplied: false,
         auditMessage: null,
+        sizingMethod: sizingContext?.sizingMethod || 'config_pip_value',
+        minLot,
+        lotStep,
       };
     }
 
-    const riskPerPipPerLot = instrument.pipValue;
-    let theoreticalLotSize = riskAmount / (slPips * riskPerPipPerLot);
-    theoreticalLotSize = Math.floor(theoreticalLotSize / instrument.lotStep) * instrument.lotStep;
-    theoreticalLotSize = Math.max(theoreticalLotSize, 0);
-    theoreticalLotSize = parseFloat(theoreticalLotSize.toFixed(4));
+    const riskPerLot = brokerRiskPerLot > 0
+      ? brokerRiskPerLot
+      : slPips * Number(instrument.pipValue || 0);
+
+    if (!(riskPerLot > 0)) {
+      return {
+        allowed: false,
+        reason: 'Instrument risk specification is invalid for position sizing',
+        finalLotSize: 0,
+        theoreticalLotSize: 0,
+        effectiveRiskPercent,
+        riskAmount,
+        overrideApplied: false,
+        auditMessage: null,
+        sizingMethod: sizingContext?.sizingMethod || 'config_pip_value',
+        minLot,
+        lotStep,
+      };
+    }
+
+    let theoreticalLotSize = this._normalizeLotSize(riskAmount / riskPerLot, lotStep);
 
     const cappedLotSize = Math.min(theoreticalLotSize, 5.0);
 
-    if (cappedLotSize < instrument.minLot) {
+    if (cappedLotSize < minLot) {
       if (settings.allowAggressiveMinLot) {
-        const finalLotSize = parseFloat(instrument.minLot.toFixed(2));
+        const finalLotSize = parseFloat(minLot.toFixed(lotPrecision));
         return {
           allowed: true,
           reason: 'All risk checks passed',
-          finalLotSize,
-          theoreticalLotSize: cappedLotSize,
-          effectiveRiskPercent,
-          riskAmount,
-          overrideApplied: true,
-          auditMessage: `Aggressive min-lot override applied: theoretical ${cappedLotSize.toFixed(4)} < minimum ${instrument.minLot.toFixed(2)}. Using ${finalLotSize.toFixed(2)}.`,
+        finalLotSize,
+        theoreticalLotSize: cappedLotSize,
+        effectiveRiskPercent,
+        riskAmount,
+        plannedRiskAmount: parseFloat((riskPerLot * finalLotSize).toFixed(4)),
+        overrideApplied: true,
+        auditMessage: `Aggressive min-lot override applied: theoretical ${cappedLotSize.toFixed(4)} < minimum ${minLot.toFixed(lotPrecision)}. Using ${finalLotSize.toFixed(lotPrecision)}.`,
+        sizingMethod: sizingContext?.sizingMethod || 'config_pip_value',
+        minLot,
+        lotStep,
         };
       }
 
       return {
         allowed: false,
-        reason: `Calculated lot size ${cappedLotSize.toFixed(4)} below minimum ${instrument.minLot.toFixed(2)}. Enable aggressive min-lot mode to allow the minimum lot.`,
+        reason: `Calculated lot size ${cappedLotSize.toFixed(4)} below minimum ${minLot.toFixed(lotPrecision)}. Enable aggressive min-lot mode to allow the minimum lot.`,
         finalLotSize: 0,
         theoreticalLotSize: cappedLotSize,
         effectiveRiskPercent,
         riskAmount,
         overrideApplied: false,
         auditMessage: null,
+        sizingMethod: sizingContext?.sizingMethod || 'config_pip_value',
+        minLot,
+        lotStep,
       };
     }
 
     return {
       allowed: true,
       reason: 'All risk checks passed',
-      finalLotSize: parseFloat(cappedLotSize.toFixed(2)),
+      finalLotSize: parseFloat(cappedLotSize.toFixed(lotPrecision)),
       theoreticalLotSize: cappedLotSize,
       effectiveRiskPercent,
       riskAmount,
+      plannedRiskAmount: parseFloat((riskPerLot * cappedLotSize).toFixed(4)),
       overrideApplied: false,
       auditMessage: null,
+      sizingMethod: sizingContext?.sizingMethod || 'config_pip_value',
+      minLot,
+      lotStep,
     };
   }
 
@@ -240,6 +342,7 @@ class RiskManager {
     const state = await this.syncAccountState(accountInfo, scope);
     const settings = await this.getActiveRiskSettings();
     const instrument = getInstrument(signal.symbol);
+    const executionPolicy = signal.executionPolicy || DEFAULT_EXECUTION_POLICY;
 
     const auditBase = {
       symbol: signal?.symbol || null,
@@ -271,6 +374,7 @@ class RiskManager {
     }
 
     const positionsStore = this._getPositionsStore(scope, options.positionsStore);
+    const tradesStore = this._getTradesStore(scope, options.tradesStore);
     const { balance, equity } = accountInfo;
 
     if (!this._isTradingEnabled(scope, options.tradingEnabled)) {
@@ -289,6 +393,37 @@ class RiskManager {
         limit: balance * settings.maxDailyLoss,
       });
       return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.DAILY_LOSS_LIMIT, lotSize: 0 };
+    }
+
+    const strategyStopTimeframe = signal?.setupTimeframe || signal?.entryTimeframe || null;
+    if (signal?.strategy && signal?.symbol && strategyStopTimeframe && settings?.strategyDailyStop?.enabled !== false) {
+      try {
+        const gateResult = await strategyDailyStopService.isEntryBlocked({
+          strategy: signal.strategy,
+          symbol: signal.symbol,
+          timeframe: strategyStopTimeframe,
+        }, settings.strategyDailyStop);
+        if (gateResult.blocked) {
+          const record = gateResult.record || {};
+          const reasonText = `Strategy daily stop active for ${signal.strategy}:${signal.symbol}:${strategyStopTimeframe} (tradingDay=${gateResult.tradingDay})`;
+          strategyDailyStopService.recordBlockedEntry({
+            strategy: signal.strategy,
+            symbol: signal.symbol,
+            timeframe: strategyStopTimeframe,
+            tradingDay: gateResult.tradingDay,
+            record,
+            details: { scope, signal: signal?.signal || null },
+          });
+          return {
+            allowed: false,
+            reason: reasonText,
+            reasonCode: auditService.REASON.STRATEGY_DAILY_STOP_ACTIVE,
+            lotSize: 0,
+          };
+        }
+      } catch (_) {
+        // Never fail the trade path when the stop service itself errors.
+      }
     }
 
     const currentDrawdown = this._getCurrentDrawdown(state.peakEquity, equity);
@@ -331,15 +466,138 @@ class RiskManager {
       return { allowed: false, reason: reasonText, reasonCode: auditService.REASON.CATEGORY_EXPOSURE_LIMIT, lotSize: 0 };
     }
 
-    const sizing = this.calculateLotSizeDetails(signal, instrument, balance, settings);
+    const openPositionsByDirection = await positionsStore.find({});
+    const sameDirectionSymbolPositions = openPositionsByDirection.filter((position) => (
+      position.symbol === signal.symbol
+      && String(position.type || '').toUpperCase() === String(signal.signal || '').toUpperCase()
+    )).length;
+    if (sameDirectionSymbolPositions >= executionPolicy.maxSameDirectionPositionsPerSymbol) {
+      const reasonText = `Max same-direction positions for ${signal.symbol} reached: ${sameDirectionSymbolPositions} >= ${executionPolicy.maxSameDirectionPositionsPerSymbol}`;
+      emitReject(auditService.REASON.SAME_DIRECTION_SYMBOL_LIMIT, reasonText, {
+        sameDirectionSymbolPositions,
+        limit: executionPolicy.maxSameDirectionPositionsPerSymbol,
+      });
+      return {
+        allowed: false,
+        reason: reasonText,
+        reasonCode: auditService.REASON.SAME_DIRECTION_SYMBOL_LIMIT,
+        lotSize: 0,
+      };
+    }
+
+    const sameDirectionCategoryPositions = openPositionsByDirection.filter((position) => {
+      if (String(position.type || '').toUpperCase() !== String(signal.signal || '').toUpperCase()) {
+        return false;
+      }
+      const positionInstrument = getInstrument(position.symbol);
+      return positionInstrument && positionInstrument.category === instrument.category;
+    }).length;
+    if (sameDirectionCategoryPositions >= executionPolicy.maxSameDirectionPositionsPerCategory) {
+      const reasonText = `Max same-direction positions for ${instrument.category} reached: ${sameDirectionCategoryPositions} >= ${executionPolicy.maxSameDirectionPositionsPerCategory}`;
+      emitReject(auditService.REASON.SAME_DIRECTION_CATEGORY_LIMIT, reasonText, {
+        sameDirectionCategoryPositions,
+        limit: executionPolicy.maxSameDirectionPositionsPerCategory,
+        category: instrument.category,
+      });
+      return {
+        allowed: false,
+        reason: reasonText,
+        reasonCode: auditService.REASON.SAME_DIRECTION_CATEGORY_LIMIT,
+        lotSize: 0,
+      };
+    }
+
+    const signalCandleTime = signal.entryCandleTime || signal.setupCandleTime || signal.timestamp || new Date().toISOString();
+    const entryWindowBars = Number(executionPolicy.duplicateEntryWindowBars) || 0;
+    const cooldownBarsAfterLoss = Number(executionPolicy.cooldownBarsAfterLoss) || 0;
+    const comparableTimeframe = signal.setupTimeframe || signal.entryTimeframe || '1h';
+    const historicalTrades = tradesStore
+      ? await tradesStore.find({
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          type: signal.signal,
+        })
+      : [];
+    const orderedTrades = [...historicalTrades].sort((left, right) => {
+      const leftTime = new Date(left.closedAt || left.openedAt || 0).getTime();
+      const rightTime = new Date(right.closedAt || right.openedAt || 0).getTime();
+      return rightTime - leftTime;
+    });
+
+    const duplicateReference = orderedTrades.find((trade) => {
+      const referenceTime = trade.entryCandleTime || trade.setupCandleTime || trade.openedAt;
+      if (!referenceTime) return false;
+      return estimateBarDistance(referenceTime, signalCandleTime, comparableTimeframe) <= entryWindowBars;
+    });
+    if (duplicateReference && entryWindowBars > 0) {
+      const reasonText = `Duplicate entry blocked within ${entryWindowBars} bar(s) for ${signal.symbol}/${signal.strategy}`;
+      emitReject(auditService.REASON.DUPLICATE_ENTRY_WINDOW, reasonText, {
+        duplicateEntryWindowBars: entryWindowBars,
+        previousTradeId: duplicateReference._id || duplicateReference.positionDbId || null,
+      });
+      return {
+        allowed: false,
+        reason: reasonText,
+        reasonCode: auditService.REASON.DUPLICATE_ENTRY_WINDOW,
+        lotSize: 0,
+      };
+    }
+
+    const lastLossTrade = orderedTrades.find((trade) => (
+      trade.status === 'CLOSED'
+      && Number(trade.profitLoss) < 0
+      && trade.closedAt
+    ));
+    if (
+      lastLossTrade
+      && cooldownBarsAfterLoss > 0
+      && estimateBarDistance(lastLossTrade.closedAt, signalCandleTime, comparableTimeframe) <= cooldownBarsAfterLoss
+    ) {
+      const reasonText = `Cooldown active after losing trade for ${signal.symbol}/${signal.strategy}`;
+      emitReject(auditService.REASON.COOLDOWN_AFTER_LOSS, reasonText, {
+        cooldownBarsAfterLoss,
+        previousTradeId: lastLossTrade._id || lastLossTrade.positionDbId || null,
+      });
+      return {
+        allowed: false,
+        reason: reasonText,
+        reasonCode: auditService.REASON.COOLDOWN_AFTER_LOSS,
+        lotSize: 0,
+      };
+    }
+
+    const executionScore = calculateExecutionScore(signal, executionPolicy, {
+      sameDirectionSymbolPositions,
+      sameDirectionCategoryPositions,
+      duplicatePenalty: Boolean(duplicateReference && entryWindowBars > 0),
+    });
+    if (executionScore.score < executionPolicy.minExecutionScore) {
+      const reasonText = `Execution score too low: ${executionScore.score.toFixed(2)} < ${executionPolicy.minExecutionScore.toFixed(2)}`;
+      emitReject(auditService.REASON.EXECUTION_SCORE_TOO_LOW, reasonText, {
+        executionScore,
+      });
+      return {
+        allowed: false,
+        reason: reasonText,
+        reasonCode: auditService.REASON.EXECUTION_SCORE_TOO_LOW,
+        lotSize: 0,
+        executionScore: executionScore.score,
+        executionScoreDetails: executionScore.details,
+        executionPolicy,
+      };
+    }
+
+    const brokerSizingContext = await this._getBrokerSizingContext(signal, instrument);
+    const sizing = this.calculateLotSizeDetails(signal, instrument, balance, settings, brokerSizingContext);
     if (!sizing.allowed) {
       const reasonCode = /below minimum/i.test(sizing.reason)
         ? auditService.REASON.LOT_BELOW_MIN
         : auditService.REASON.INVALID_SL;
       emitReject(reasonCode, sizing.reason, {
         theoreticalLotSize: sizing.theoreticalLotSize,
-        minLot: instrument.minLot,
+        minLot: sizing.minLot,
         effectiveRiskPercent: sizing.effectiveRiskPercent,
+        sizingMethod: sizing.sizingMethod,
       });
       return {
         allowed: false,
@@ -350,6 +608,10 @@ class RiskManager {
         effectiveRiskPercent: sizing.effectiveRiskPercent,
         overrideApplied: false,
         profileName: settings.profile?.name || null,
+        sizingMethod: sizing.sizingMethod,
+        executionScore: executionScore.score,
+        executionScoreDetails: executionScore.details,
+        executionPolicy,
       };
     }
 
@@ -378,6 +640,11 @@ class RiskManager {
       auditMessage: sizing.auditMessage,
       profileName: settings.profile?.name || null,
       allowAggressiveMinLot: settings.allowAggressiveMinLot,
+      sizingMethod: sizing.sizingMethod,
+      plannedRiskAmount: sizing.plannedRiskAmount,
+      executionScore: executionScore.score,
+      executionScoreDetails: executionScore.details,
+      executionPolicy,
     };
   }
 

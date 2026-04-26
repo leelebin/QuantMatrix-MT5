@@ -3,6 +3,95 @@ const breakevenService = require('../services/breakevenService');
 
 const DEFAULT_PROFILE_NAME = 'Bootstrap Risk';
 
+const DEFAULT_STRATEGY_DAILY_STOP = Object.freeze({
+  enabled: true,
+  consecutiveLossesToStop: 2,
+  countBreakEvenAsLoss: false,
+  countSmallLossAsLoss: false,
+  smallLossThresholdR: -0.30,
+  breakevenEpsilonR: 0.05,
+  useRealizedPnLOnly: true,
+  stopUntil: 'end_of_day',
+  resetTimezone: 'Asia/Kuala_Lumpur',
+  resetHour: 0,
+  resetMinute: 0,
+});
+
+function getDefaultStrategyDailyStop() {
+  return { ...DEFAULT_STRATEGY_DAILY_STOP };
+}
+
+function normalizeStrategyDailyStop(raw, existing = null) {
+  const base = existing ? { ...DEFAULT_STRATEGY_DAILY_STOP, ...existing } : { ...DEFAULT_STRATEGY_DAILY_STOP };
+  if (raw == null || typeof raw !== 'object') return base;
+
+  const errors = [];
+  const out = { ...base };
+
+  if (raw.enabled !== undefined) out.enabled = Boolean(raw.enabled);
+  if (raw.countBreakEvenAsLoss !== undefined) out.countBreakEvenAsLoss = Boolean(raw.countBreakEvenAsLoss);
+  if (raw.countSmallLossAsLoss !== undefined) out.countSmallLossAsLoss = Boolean(raw.countSmallLossAsLoss);
+  if (raw.useRealizedPnLOnly !== undefined) out.useRealizedPnLOnly = Boolean(raw.useRealizedPnLOnly);
+
+  if (raw.consecutiveLossesToStop !== undefined) {
+    const v = parseInt(raw.consecutiveLossesToStop, 10);
+    if (!Number.isFinite(v) || v < 1 || v > 50) {
+      errors.push({ field: 'strategyDailyStop.consecutiveLossesToStop', message: 'Must be integer between 1 and 50' });
+    } else out.consecutiveLossesToStop = v;
+  }
+
+  if (raw.smallLossThresholdR !== undefined) {
+    const v = Number(raw.smallLossThresholdR);
+    if (!Number.isFinite(v) || v > 0) {
+      errors.push({ field: 'strategyDailyStop.smallLossThresholdR', message: 'Must be a non-positive number (in R units)' });
+    } else out.smallLossThresholdR = v;
+  }
+
+  if (raw.breakevenEpsilonR !== undefined) {
+    const v = Number(raw.breakevenEpsilonR);
+    if (!Number.isFinite(v) || v < 0 || v > 1) {
+      errors.push({ field: 'strategyDailyStop.breakevenEpsilonR', message: 'Must be between 0 and 1' });
+    } else out.breakevenEpsilonR = v;
+  }
+
+  if (raw.stopUntil !== undefined) {
+    const v = String(raw.stopUntil);
+    if (v !== 'end_of_day') {
+      errors.push({ field: 'strategyDailyStop.stopUntil', message: 'Only "end_of_day" is supported' });
+    } else out.stopUntil = v;
+  }
+
+  if (raw.resetTimezone !== undefined) {
+    const v = String(raw.resetTimezone || '').trim();
+    if (!v) {
+      errors.push({ field: 'strategyDailyStop.resetTimezone', message: 'Required' });
+    } else out.resetTimezone = v;
+  }
+
+  if (raw.resetHour !== undefined) {
+    const v = parseInt(raw.resetHour, 10);
+    if (!Number.isFinite(v) || v < 0 || v > 23) {
+      errors.push({ field: 'strategyDailyStop.resetHour', message: 'Must be integer 0..23' });
+    } else out.resetHour = v;
+  }
+
+  if (raw.resetMinute !== undefined) {
+    const v = parseInt(raw.resetMinute, 10);
+    if (!Number.isFinite(v) || v < 0 || v > 59) {
+      errors.push({ field: 'strategyDailyStop.resetMinute', message: 'Must be integer 0..59' });
+    } else out.resetMinute = v;
+  }
+
+  if (errors.length) {
+    const err = new Error('Validation failed');
+    err.statusCode = 400;
+    err.details = errors;
+    throw err;
+  }
+
+  return out;
+}
+
 let initPromise = null;
 
 function toNumber(value) {
@@ -45,6 +134,7 @@ function getSeedProfile() {
     maxPositionsPerSymbol: parsePositiveInt(process.env.MAX_POSITIONS_PER_SYMBOL) || 2,
     allowAggressiveMinLot: false,
     tradeManagement: breakevenService.getDefaultTradeManagement(),
+    strategyDailyStop: getDefaultStrategyDailyStop(),
     isActive: true,
   };
 }
@@ -111,6 +201,21 @@ function normalizeProfilePayload(data = {}, { partial = false, existingProfile =
       errors.push(...err.details);
     } else {
       throw err;
+    }
+  }
+
+  if (!partial || data.strategyDailyStop !== undefined) {
+    try {
+      cleaned.strategyDailyStop = normalizeStrategyDailyStop(
+        data.strategyDailyStop,
+        existingProfile?.strategyDailyStop || null
+      );
+    } catch (err) {
+      if (err?.details) {
+        errors.push(...err.details);
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -248,8 +353,20 @@ const RiskProfile = {
     return existing;
   },
 
+  getDefaultStrategyDailyStop,
+  normalizeStrategyDailyStop,
+
+  getStrategyDailyStop(profile) {
+    try {
+      return normalizeStrategyDailyStop(profile?.strategyDailyStop || null);
+    } catch (_) {
+      return getDefaultStrategyDailyStop();
+    }
+  },
+
   toRuntimeSettings(profile) {
     const breakeven = breakevenService.getProfileBreakeven(profile);
+    const strategyDailyStop = this.getStrategyDailyStop(profile);
     return {
       profile,
       maxRiskPerTrade: (Number(profile?.maxRiskPerTradePct) || 0) / 100,
@@ -262,6 +379,7 @@ const RiskProfile = {
         breakeven,
       },
       breakeven,
+      strategyDailyStop,
     };
   },
 };

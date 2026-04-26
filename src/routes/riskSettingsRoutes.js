@@ -6,6 +6,8 @@ const {
   updateRiskProfile,
   deleteRiskProfile,
   activateRiskProfile,
+  getStrategyDailyStops,
+  resetStrategyDailyStop,
 } = require('../controllers/riskSettingsController');
 
 const router = express.Router();
@@ -17,5 +19,7 @@ router.post('/profiles', createRiskProfile);
 router.put('/profiles/:id', updateRiskProfile);
 router.delete('/profiles/:id', deleteRiskProfile);
 router.post('/profiles/:id/activate', activateRiskProfile);
+router.get('/strategy-daily-stops', getStrategyDailyStops);
+router.post('/strategy-daily-stops/reset', resetStrategyDailyStop);
 
 module.exports = router;

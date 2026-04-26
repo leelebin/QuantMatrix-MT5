@@ -56,11 +56,13 @@ jest.mock('../src/services/mt5Service', () => ({
   ensureLiveTradingAllowed: jest.fn(),
   ensurePaperTradingAccount: jest.fn(),
   getPrice: jest.fn(),
+  getCandles: jest.fn(),
   isOrderAllowed: jest.fn(),
   getPreflightMessage: jest.fn(),
   preflightOrder: jest.fn(),
   placeOrder: jest.fn(),
   closePosition: jest.fn(),
+  partialClosePosition: jest.fn(),
   getPositionDealSummary: jest.fn(),
   getPositions: jest.fn(),
   isConnected: jest.fn(),
@@ -146,6 +148,7 @@ describe('MT5 mock integration flows', () => {
     mt5Service.getAccountModeName.mockImplementation((accountInfo = {}) => accountInfo.tradeModeName || 'UNKNOWN');
     mt5Service.ensureLiveTradingAllowed.mockImplementation(() => {});
     mt5Service.getPrice.mockResolvedValue({ ask: 1.1005, bid: 1.1003 });
+    mt5Service.getCandles.mockResolvedValue([]);
     mt5Service.isOrderAllowed.mockImplementation((preflight = {}) => preflight.allowed === true);
     mt5Service.getPreflightMessage.mockImplementation((preflight = {}) => preflight.comment || 'MT5 order preflight rejected');
     mt5Service.preflightOrder.mockResolvedValue({
@@ -218,6 +221,10 @@ describe('MT5 mock integration flows', () => {
     expect(positionsDb.insert).toHaveBeenCalledWith(expect.objectContaining({
       symbol: 'EURUSD',
       entryPrice: 1.10072,
+      originalLotSize: 0.2,
+      exitPlan: expect.any(Object),
+      partialsExecutedIndices: [],
+      maxFavourablePrice: 1.10072,
       mt5PositionId: '7001',
       mt5EntryDealId: '9001',
       mt5Comment: 'QM|TrendFollowing|BUY|0.88',
@@ -233,6 +240,43 @@ describe('MT5 mock integration flows', () => {
       mt5EntryDealId: '9001',
       mt5Comment: 'QM|TrendFollowing|BUY|0.88',
       comment: expect.stringContaining('Reason=Trend breakout'),
+    }));
+  });
+
+  test('persists structure and higher-timeframe snapshots when the signal carries them', async () => {
+    const signal = {
+      symbol: 'XAUUSD',
+      signal: 'BUY',
+      confidence: 0.91,
+      sl: 2280.5,
+      tp: 2298.5,
+      reason: 'Multi-timeframe continuation',
+      indicatorsSnapshot: {
+        atr: 3.2,
+        structureLevel: 2284.75,
+        higherTfTrend: {
+          trend: 'BULLISH',
+          ema200: 2271.4,
+          price: 2289.8,
+          timeframe: '4h',
+        },
+      },
+      strategy: 'MultiTimeframe',
+    };
+
+    mt5Service.getPrice.mockResolvedValue({ ask: 2289.9, bid: 2289.6 });
+
+    await tradeExecutor.executeTrade(signal);
+
+    expect(positionsDb.insert).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'XAUUSD',
+      structureAnchor: 2284.75,
+      higherTfTrend: expect.objectContaining({
+        trend: 'BULLISH',
+        ema200: 2271.4,
+        price: 2289.8,
+        timeframe: '4h',
+      }),
     }));
   });
 

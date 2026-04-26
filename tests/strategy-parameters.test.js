@@ -1,7 +1,10 @@
 const indicatorService = require('../src/services/indicatorService');
 const BreakoutStrategy = require('../src/strategies/BreakoutStrategy');
 const MeanReversionStrategy = require('../src/strategies/MeanReversionStrategy');
-const { resolveStrategyParameters } = require('../src/config/strategyParameters');
+const {
+  getOptimizerParameterRanges,
+  resolveStrategyParameters,
+} = require('../src/config/strategyParameters');
 
 function makeRangeCandles(closes) {
   return closes.map((close, index) => ({
@@ -166,5 +169,19 @@ describe('strategy parameter wiring', () => {
 
     expect(permissive.signal).toBe('BUY');
     expect(strict.signal).toBe('NONE');
+  });
+
+  test('VolumeFlowHybrid publishes a tractable default optimizer grid', () => {
+    const ranges = getOptimizerParameterRanges('VolumeFlowHybrid');
+    const combinationCount = Object.values(ranges).reduce((product, range) => {
+      const span = Number(range.max) - Number(range.min);
+      const steps = span <= 0 ? 1 : Math.floor((span / Number(range.step)) + 0.000001) + 1;
+      return product * steps;
+    }, 1);
+
+    expect(ranges.volume_avg_period).toEqual({ min: 20, max: 20, step: 10 });
+    expect(ranges.reversal_sl_atr).toEqual({ min: 1, max: 1, step: 0.1 });
+    expect(ranges.reversal_tp_atr).toEqual({ min: 1.5, max: 1.5, step: 0.1 });
+    expect(combinationCount).toBe(6561);
   });
 });

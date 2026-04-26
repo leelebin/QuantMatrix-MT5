@@ -1,3 +1,20 @@
+jest.mock('../src/config/db', () => ({
+  backtestsDb: {
+    insert: jest.fn(),
+    find: jest.fn(() => ({
+      sort: jest.fn(() => ({
+        limit: jest.fn().mockResolvedValue([]),
+      })),
+    })),
+    findOne: jest.fn(),
+    remove: jest.fn(),
+  },
+}));
+
+jest.mock('../src/models/Strategy', () => ({
+  findAll: jest.fn().mockResolvedValue([]),
+}));
+
 const indicatorService = require('../src/services/indicatorService');
 const volumeFeatures = require('../src/services/volumeFeatureService');
 const VolumeFlowHybridStrategy = require('../src/strategies/VolumeFlowHybridStrategy');
@@ -6,6 +23,7 @@ const { getStrategyExecutionConfig } = require('../src/config/strategyExecution'
 const { getInstrument, STRATEGY_TYPES } = require('../src/config/instruments');
 const strategyEngine = require('../src/services/strategyEngine');
 const backtestEngine = require('../src/services/backtestEngine');
+const { backtestsDb } = require('../src/config/db');
 
 function buildBaselineCandles({
   symbol = 'XAUUSD',
@@ -88,6 +106,24 @@ describe('volumeFeatureService', () => {
     expect(typeof features.wickUpperRatio).toBe('number');
     expect(typeof features.wickLowerRatio).toBe('number');
   });
+
+  test('buildFeatureSeries matches computeLatestFeatures for eligible candles', () => {
+    const candles = buildBaselineCandles({ count: 80 });
+    const series = volumeFeatures.buildFeatureSeries(candles, {
+      volumeAvgPeriod: 20,
+      deltaSmoothing: 8,
+    });
+
+    for (let i = 21; i < candles.length; i++) {
+      const fromSeries = series[i];
+      const direct = volumeFeatures.computeLatestFeatures(candles.slice(0, i + 1), {
+        volumeAvgPeriod: 20,
+        deltaSmoothing: 8,
+      });
+
+      expect(fromSeries).toEqual(direct);
+    }
+  });
 });
 
 describe('VolumeFlowHybridStrategy', () => {
@@ -159,5 +195,71 @@ describe('VolumeFlowHybrid registration', () => {
     });
     expect(result.summary.totalTrades).toBeGreaterThanOrEqual(0);
     expect(result.parameters).toHaveProperty('rvol_continuation');
+  });
+
+  test('backtest engine skips lower timeframe indicator builds for VolumeFlowHybrid', async () => {
+    const setupCandles = buildBaselineCandles({ count: 320, drift: 0.2 });
+    const entryCandles = buildBaselineCandles({
+      count: 320,
+      drift: 0.05,
+      baseVol: 80,
+    });
+    const calcSpy = jest.spyOn(indicatorService, 'calculateForStrategy');
+
+    await backtestEngine.simulate({
+      symbol: 'XAUUSD',
+      strategyType: 'VolumeFlowHybrid',
+      timeframe: '5m',
+      candles: setupCandles,
+      lowerTfCandles: entryCandles,
+      initialBalance: 10000,
+      tradeStartTime: setupCandles[0].time,
+      tradeEndTime: setupCandles[setupCandles.length - 1].time,
+    });
+
+    const vfhCalls = calcSpy.mock.calls.filter(([strategyType]) => strategyType === 'VolumeFlowHybrid');
+    expect(vfhCalls).toHaveLength(1);
+  });
+
+  test('backtest engine returns chartData for VolumeFlowHybrid without persisting it', async () => {
+    backtestsDb.insert.mockResolvedValue({ _id: 'bt-1' });
+    const candles = buildBaselineCandles({ count: 700, drift: 0.2 });
+    for (let i = 300; i < candles.length; i += 80) {
+      candles[i].volume = 1500;
+      candles[i].tickVolume = 1500;
+      candles[i].close = candles[i].open + 6;
+      candles[i].high = candles[i].close + 0.4;
+    }
+
+    const result = await backtestEngine.run({
+      symbol: 'XAUUSD',
+      strategyType: 'VolumeFlowHybrid',
+      timeframe: '5m',
+      candles,
+      initialBalance: 10000,
+      tradeStartTime: candles[100].time,
+      tradeEndTime: candles[candles.length - 1].time,
+      includeChartData: true,
+      parameterPreset: 'default',
+      parameterPresetResolution: {
+        preset: 'default',
+        fallbackUsed: false,
+        resolvedFrom: 'instance',
+      },
+    });
+
+    expect(result.chartData).toEqual(expect.objectContaining({
+      strategy: 'VolumeFlowHybrid',
+      effectiveTimeframe: '5m',
+      candles: expect.any(Array),
+      tradeEvents: expect.any(Array),
+      panels: expect.any(Array),
+    }));
+    expect(result.chartData.panels.some((panel) =>
+      panel.series.some((series) => series.id === 'sessionVwap' || series.id === 'cumulativeDelta' || series.id === 'rvol')
+    )).toBe(true);
+    expect(backtestsDb.insert).toHaveBeenCalledWith(expect.not.objectContaining({
+      chartData: expect.anything(),
+    }));
   });
 });

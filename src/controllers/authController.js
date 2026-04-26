@@ -6,11 +6,22 @@ const {
   verifyRefreshToken,
 } = require('../config/jwt');
 const sendEmail = require('../utils/sendEmail');
+const {
+  buildResetPasswordUrl,
+  isSelfRegistrationAllowed,
+} = require('../services/remoteAccessService');
 
 // @desc    Register user
 // @route   POST /api/auth/register
 exports.register = async (req, res) => {
   try {
+    if (!isSelfRegistrationAllowed()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Self-registration is disabled. Please use an existing account.',
+      });
+    }
+
     const { name, email, password } = req.body;
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -47,6 +58,17 @@ exports.register = async (req, res) => {
       message: 'Server error',
     });
   }
+};
+
+// @desc    Auth UI configuration
+// @route   GET /api/auth/config
+exports.getAuthConfig = async (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      allowSelfRegistration: isSelfRegistrationAllowed(),
+    },
+  });
 };
 
 // @desc    Login user
@@ -186,7 +208,7 @@ exports.forgotPassword = async (req, res) => {
       resetPasswordExpire,
     });
 
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const resetUrl = await buildResetPasswordUrl(resetToken);
 
     const html = `
       <h1>Password Reset Request</h1>

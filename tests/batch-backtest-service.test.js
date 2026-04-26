@@ -22,6 +22,10 @@ jest.mock('../src/models/RiskProfile', () => ({
   getActive: jest.fn().mockResolvedValue(null),
 }));
 
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
+}));
+
 const mockJobs = new Map();
 let mockJobCounter = 0;
 
@@ -71,6 +75,7 @@ const Strategy = require('../src/models/Strategy');
 const { getAllSymbols } = require('../src/config/instruments');
 const { getStrategyExecutionConfig } = require('../src/config/strategyExecution');
 const batchBacktestService = require('../src/services/batchBacktestService');
+const { getStrategyInstance } = require('../src/services/strategyInstanceService');
 
 function createCandles(startIso, stepMinutes, count) {
   const startMs = new Date(startIso).getTime();
@@ -123,6 +128,11 @@ describe('batch backtest service', () => {
       { name: 'TrendFollowing', enabled: true, symbols: ['EURUSD', 'USDJPY'], parameters: { ema_fast: 20 } },
       { name: 'Momentum', enabled: true, symbols: ['EURUSD', 'USDJPY'], parameters: { ema_period: 34 } },
     ]);
+    getStrategyInstance.mockImplementation(async (symbol, strategyName) => ({
+      parameters: { seed: `${strategyName}:${symbol}` },
+      enabled: true,
+      source: 'instance',
+    }));
 
     getAllSymbols.mockReturnValue(['EURUSD', 'USDJPY']);
     getStrategyExecutionConfig.mockImplementation((symbol, strategy) => ({
@@ -155,6 +165,7 @@ describe('batch backtest service', () => {
       endDate: '2025-04-10',
       initialBalance: 10000,
       timeframeMode: 'strategy_default',
+      runModel: 'independent',
     });
 
     const completedJob = await waitForJobCompletion(job._id);
@@ -202,6 +213,7 @@ describe('batch backtest service', () => {
       endDate: '2025-04-10',
       initialBalance: 10000,
       timeframeMode: 'strategy_default',
+      runModel: 'independent',
     });
 
     const completedJob = await waitForJobCompletion(job._id);
@@ -242,6 +254,7 @@ describe('batch backtest service', () => {
       endDate: '2025-04-10',
       initialBalance: 10000,
       timeframeMode: 'strategy_default',
+      runModel: 'independent',
     });
 
     const completedJob = await waitForJobCompletion(job._id);
@@ -270,6 +283,11 @@ describe('batch backtest service', () => {
       { name: 'TrendFollowing', enabled: false, symbols: ['EURUSD'], parameters: {} },
       { name: 'Momentum', enabled: true, symbols: [], parameters: {} },
     ]);
+    getStrategyInstance.mockImplementation(async (symbol, strategyName) => ({
+      parameters: {},
+      enabled: strategyName !== 'TrendFollowing',
+      source: 'instance',
+    }));
 
     await expect(batchBacktestService.startJob({
       startDate: '2025-04-01',

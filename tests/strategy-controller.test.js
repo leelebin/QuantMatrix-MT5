@@ -15,9 +15,15 @@ jest.mock('../src/models/RiskProfile', () => ({
   getActive: jest.fn().mockResolvedValue(null),
 }));
 
+jest.mock('../src/models/StrategyInstance', () => ({
+  upsert: jest.fn(),
+  findByStrategyName: jest.fn().mockResolvedValue([]),
+}));
+
 const strategyController = require('../src/controllers/strategyController');
 const Strategy = require('../src/models/Strategy');
 const RiskProfile = require('../src/models/RiskProfile');
+const StrategyInstance = require('../src/models/StrategyInstance');
 
 function createRes() {
   return {
@@ -37,6 +43,8 @@ function createRes() {
 describe('strategy controller breakeven support', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    StrategyInstance.findByStrategyName.mockResolvedValue([]);
+    StrategyInstance.upsert.mockResolvedValue({});
     RiskProfile.getActive.mockResolvedValue({
       _id: 'risk-1',
       name: 'Aggressive Default',
@@ -91,9 +99,10 @@ describe('strategy controller breakeven support', () => {
         }),
       ],
     }));
+    expect(res.payload.data[0]).not.toHaveProperty('resolvedParameters');
   });
 
-  test('updateStrategy persists sparse breakeven override and returns effective config', async () => {
+  test('updateStrategy rejects runtime tradeManagement writes in favor of assignment instances', async () => {
     Strategy.findById.mockResolvedValue({
       _id: 'strat-1',
       name: 'TrendFollowing',
@@ -102,20 +111,6 @@ describe('strategy controller breakeven support', () => {
       symbols: ['EURUSD'],
       parameters: {},
       tradeManagement: null,
-    });
-    Strategy.update.mockResolvedValue({
-      _id: 'strat-1',
-      name: 'TrendFollowing',
-      displayName: 'Trend Following',
-      enabled: true,
-      symbols: ['EURUSD'],
-      parameters: {},
-      tradeManagement: {
-        breakevenOverride: {
-          enabled: false,
-          triggerAtrMultiple: 1.2,
-        },
-      },
     });
 
     const req = {
@@ -133,26 +128,12 @@ describe('strategy controller breakeven support', () => {
 
     await strategyController.updateStrategy(req, res);
 
-    expect(Strategy.update).toHaveBeenCalledWith('strat-1', {
-      tradeManagement: {
-        breakevenOverride: {
-          enabled: false,
-          triggerAtrMultiple: 1.2,
-        },
-      },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.payload.data.effectiveBreakeven).toEqual({
-      enabled: false,
-      triggerAtrMultiple: 1.2,
-      includeSpreadCompensation: true,
-      extraBufferPips: 0,
-      trailStartAtrMultiple: 1.6,
-      trailDistanceAtrMultiple: 1.1,
-    });
+    expect(Strategy.update).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(409);
+    expect(res.payload.message).toContain('/api/strategy-instances/:strategyName/:symbol');
   });
 
-  test('updateStrategy rejects invalid breakeven override values', async () => {
+  test('updateStrategy rejects runtime parameter writes in favor of assignment instances', async () => {
     Strategy.findById.mockResolvedValue({
       _id: 'strat-1',
       name: 'TrendFollowing',
@@ -166,11 +147,8 @@ describe('strategy controller breakeven support', () => {
     const req = {
       params: { id: 'strat-1' },
       body: {
-        tradeManagement: {
-          breakevenOverride: {
-            triggerAtrMultiple: 1.4,
-            trailStartAtrMultiple: 1.2,
-          },
+        parameters: {
+          ema_fast: 34,
         },
       },
     };
@@ -179,14 +157,88 @@ describe('strategy controller breakeven support', () => {
     await strategyController.updateStrategy(req, res);
 
     expect(Strategy.update).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.payload).toEqual(expect.objectContaining({
-      success: false,
-      errors: expect.arrayContaining([
-        expect.objectContaining({
-          field: 'tradeManagement.breakeven.trailStartAtrMultiple',
-        }),
-      ]),
-    }));
+    expect(StrategyInstance.upsert).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(409);
+    expect(res.payload.message).toContain('/api/strategy-instances/:strategyName/:symbol');
+  });
+
+  test('updateStrategy rejects legacy enabled writes in favor of assignment instances', async () => {
+    Strategy.findById.mockResolvedValue({
+      _id: 'strat-1',
+      name: 'TrendFollowing',
+      displayName: 'Trend Following',
+      enabled: true,
+      symbols: ['EURUSD'],
+      parameters: { ema_fast: 20 },
+      tradeManagement: null,
+    });
+
+    const req = {
+      params: { id: 'strat-1' },
+      body: {
+        enabled: false,
+      },
+    };
+    const res = createRes();
+
+    await strategyController.updateStrategy(req, res);
+
+    expect(Strategy.update).not.toHaveBeenCalled();
+    expect(StrategyInstance.upsert).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(409);
+    expect(res.payload.message).toContain('/api/strategy-instances/:strategyName/:symbol');
+  });
+
+  test('updateStrategy still supports symbol assignment changes and seeds instances', async () => {
+    Strategy.findById.mockResolvedValue({
+      _id: 'strat-1',
+      name: 'TrendFollowing',
+      displayName: 'Trend Following',
+      enabled: true,
+      symbols: ['EURUSD'],
+      parameters: {},
+      tradeManagement: null,
+    });
+    Strategy.update.mockResolvedValue({
+      _id: 'strat-1',
+      name: 'TrendFollowing',
+      displayName: 'Trend Following',
+      enabled: true,
+      symbols: ['EURUSD', 'GBPUSD'],
+      parameters: {},
+      tradeManagement: null,
+    });
+
+    const updateRes = createRes();
+    await strategyController.updateStrategy({
+      params: { id: 'strat-1' },
+      body: { symbols: ['EURUSD', 'GBPUSD'] },
+    }, updateRes);
+
+    expect(updateRes.statusCode).toBe(200);
+    expect(Strategy.update).toHaveBeenCalledWith('strat-1', {
+      symbols: ['EURUSD', 'GBPUSD'],
+    });
+    expect(StrategyInstance.upsert).toHaveBeenCalledTimes(2);
+    expect(StrategyInstance.upsert).toHaveBeenCalledWith('TrendFollowing', 'EURUSD', {});
+    expect(StrategyInstance.upsert).toHaveBeenCalledWith('TrendFollowing', 'GBPUSD', {});
+  });
+
+  test('toggleStrategy rejects legacy global toggles in favor of assignment instances', async () => {
+    Strategy.findById.mockResolvedValue({
+      _id: 'strat-1',
+      name: 'TrendFollowing',
+      displayName: 'Trend Following',
+      enabled: true,
+      symbols: ['EURUSD'],
+      parameters: {},
+      tradeManagement: null,
+    });
+    const toggleRes = createRes();
+    await strategyController.toggleStrategy({ params: { id: 'strat-1' } }, toggleRes);
+
+    expect(StrategyInstance.upsert).not.toHaveBeenCalled();
+    expect(toggleRes.statusCode).toBe(409);
+    expect(toggleRes.payload.message).toContain('/api/strategy-instances/:strategyName/:symbol');
   });
 });

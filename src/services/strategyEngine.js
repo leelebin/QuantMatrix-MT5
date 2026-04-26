@@ -4,6 +4,7 @@
  */
 
 const indicatorService = require('./indicatorService');
+const volumeFeatureService = require('./volumeFeatureService');
 const Strategy = require('../models/Strategy');
 const { instruments, getInstrumentsByStrategy, STRATEGY_TYPES } = require('../config/instruments');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
@@ -18,6 +19,26 @@ const MomentumStrategy = require('../strategies/MomentumStrategy');
 const BreakoutStrategy = require('../strategies/BreakoutStrategy');
 const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy');
 const auditService = require('./auditService');
+const { getStrategyInstance } = require('./strategyInstanceService');
+const economicCalendarService = require('./economicCalendarService');
+const { calculateExecutionScore } = require('./executionPolicyService');
+
+function strategyNeedsEntryIndicators(strategyType) {
+  return strategyType === STRATEGY_TYPES.TREND_FOLLOWING
+    || strategyType === STRATEGY_TYPES.MULTI_TIMEFRAME;
+}
+
+function buildVolumeFeatureSnapshot(strategyType, candles, resolvedParams) {
+  if (strategyType !== STRATEGY_TYPES.VOLUME_FLOW_HYBRID) {
+    return null;
+  }
+
+  const series = volumeFeatureService.buildFeatureSeries(candles, {
+    volumeAvgPeriod: Math.max(5, Math.round(Number(resolvedParams.volume_avg_period) || 20)),
+    deltaSmoothing: Math.max(2, Math.round(Number(resolvedParams.cumulative_delta_smoothing) || 8)),
+  });
+  return series.length > 0 ? series[series.length - 1] : null;
+}
 
 class StrategyEngine {
   constructor() {
@@ -89,7 +110,7 @@ class StrategyEngine {
     const seen = new Set();
     const tasks = [];
     for (const strategyRecord of strategyRecords) {
-      if (!strategyRecord.enabled || !Array.isArray(strategyRecord.symbols)) {
+      if (!Array.isArray(strategyRecord.symbols)) {
         continue;
       }
 
@@ -117,8 +138,11 @@ class StrategyEngine {
     return tasks;
   }
 
-  analyzeSymbol(symbol, strategyType, candles, higherTfCandles = null, entryCandles = null, strategyParameters = null) {
-    const runtime = this._buildRuntimeInstrument(symbol, strategyType, strategyParameters);
+  analyzeSymbol(symbol, strategyType, candles, higherTfCandles = null, entryCandles = null, strategyContext = null) {
+    const runtimeParameters = strategyContext && typeof strategyContext === 'object' && strategyContext.parameters
+      ? strategyContext.parameters
+      : strategyContext;
+    const runtime = this._buildRuntimeInstrument(symbol, strategyType, runtimeParameters);
     if (!runtime) {
       return { signal: 'NONE', symbol, strategy: null, reason: 'Unknown symbol' };
     }
@@ -150,10 +174,11 @@ class StrategyEngine {
       };
     }
 
-    const ind = indicatorService.calculateAll(closedCandles, resolvedParams);
-    const entryInd = closedEntryCandles.length > 0
-      ? indicatorService.calculateAll(closedEntryCandles, resolvedParams)
+    const ind = indicatorService.calculateForStrategy(strategyType, closedCandles, resolvedParams);
+    const entryInd = strategyNeedsEntryIndicators(strategyType) && closedEntryCandles.length > 0
+      ? indicatorService.calculateForStrategy(strategyType, closedEntryCandles, resolvedParams)
       : null;
+    const volumeFeatureSnapshot = buildVolumeFeatureSnapshot(strategyType, closedCandles, resolvedParams);
 
     if (strategyType === STRATEGY_TYPES.MULTI_TIMEFRAME && closedHigherTfCandles.length > 0) {
       const htfCloses = closedHigherTfCandles.map((c) => c.close);
@@ -173,6 +198,7 @@ class StrategyEngine {
       higherTfCandles: closedHigherTfCandles,
       entryCandles: closedEntryCandles,
       entryIndicators: entryInd,
+      volumeFeatureSnapshot,
       strategyParams: resolvedParams,
     });
 
@@ -183,6 +209,7 @@ class StrategyEngine {
       strategy: strategyType,
       signal: result.signal,
       confidence: result.confidence,
+      rawConfidence: result.confidence,
       sl: result.sl,
       tp: result.tp,
       reason: result.reason,
@@ -202,7 +229,22 @@ class StrategyEngine {
       entryCandleTime: result.entryCandleTime || latestEntryCandle?.time || null,
       timestamp: result.entryCandleTime || latestEntryCandle?.time || analyzedCandle.time,
       candleTime: analyzedCandle.time,
+      executionPolicy: strategyContext?.executionPolicy || null,
+      scanMode: strategyContext?.scanMode || 'signal',
+      scanReason: strategyContext?.scanReason || 'cadence',
+      category: strategyContext?.category || runtimeInstrument.category || null,
+      categoryFallback: strategyContext?.categoryFallback === true,
     };
+
+    if (signalRecord.signal !== 'NONE' || signalRecord.setupActive || signalRecord.filterReason) {
+      const execution = calculateExecutionScore(signalRecord, strategyContext?.executionPolicy || undefined, {
+        sameDirectionSymbolPositions: 0,
+        sameDirectionCategoryPositions: 0,
+      });
+      signalRecord.executionScore = execution.score;
+      signalRecord.executionScoreDetails = execution.details;
+      signalRecord.rawConfidence = execution.rawConfidence;
+    }
 
     if (result.signal !== 'NONE' || result.setupActive || Boolean(result.filterReason)) {
       const signalKey = [
@@ -241,17 +283,29 @@ class StrategyEngine {
 
   async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null, options = {}) {
     const scope = options.scope || 'live';
+    const mode = options.mode || scope || 'live';
     const symbolsToAnalyze = enabledSymbols || Object.keys(instruments);
-    const strategyRecords = await Strategy.findAll();
-    const parametersByStrategy = new Map(
-      strategyRecords.map((strategy) => [strategy.name, strategy.parameters || {}])
-    );
-    const analysisTasks = this._buildAnalysisTasks(strategyRecords, symbolsToAnalyze);
+    const strategyRecords = options.analysisTasks ? null : await Strategy.findAll();
+    const analysisTasks = Array.isArray(options.analysisTasks)
+      ? options.analysisTasks
+      : this._buildAnalysisTasks(strategyRecords, symbolsToAnalyze);
     const candleCache = new Map();
+    const results = [];
 
     for (const task of analysisTasks) {
       try {
         const { symbol, strategyType } = task;
+        const strategyInstance = task.strategyInstance || await getStrategyInstance(
+          symbol,
+          strategyType,
+          { activeProfile: options.activeProfile }
+        );
+        if (strategyInstance.enabled === false) {
+          console.log(`[Engine] Skipping disabled strategy instance ${symbol}/${strategyType}`);
+          continue;
+        }
+
+        console.log(`[Engine] Using strategy parameters for ${symbol}/${strategyType} source='${strategyInstance.source}'`);
         const executionConfig = this._getExecutionConfig(symbol, strategyType);
         if (!executionConfig) continue;
 
@@ -278,6 +332,67 @@ class StrategyEngine {
           continue;
         }
 
+        const candleTimeValue = candles.length > 1
+          ? candles[candles.length - 2]?.time || candles[candles.length - 1]?.time
+          : candles[candles.length - 1]?.time;
+        const candleTime = candleTimeValue ? new Date(candleTimeValue) : null;
+
+        const blackoutCfg = strategyInstance.newsBlackout;
+        if (
+          blackoutCfg
+          && blackoutCfg.enabled
+          && mode !== 'backtest'
+          && candleTime
+          && !Number.isNaN(candleTime.getTime())
+        ) {
+          await economicCalendarService.ensureCalendar();
+          const blackout = economicCalendarService.isInBlackout(symbol, candleTime, blackoutCfg);
+          if (blackout.blocked) {
+            const blackoutResult = {
+              symbol,
+              strategy: strategyType,
+              signal: 'NONE',
+              reason: 'NEWS_BLACKOUT',
+              status: 'INFO',
+              candleTime: candleTime.toISOString(),
+              timestamp: candleTime.toISOString(),
+              blackoutEvent: blackout.event,
+              parameterSource: strategyInstance.source,
+            };
+
+            auditService.record({
+              type: 'NEWS_BLACKOUT',
+              stage: 'NEWS_BLACKOUT',
+              status: 'INFO',
+              symbol,
+              strategy: strategyType,
+              module: 'strategyEngine',
+              scope,
+              signal: 'NONE',
+              reasonCode: auditService.REASON.NEWS_BLACKOUT,
+              reasonText: `Blocked by scheduled ${blackout.event.impact} ${blackout.event.currency} event: ${blackout.event.title}`,
+              timestamp: candleTime.toISOString(),
+              setupCandleTime: candleTime.toISOString(),
+              details: {
+                candleTime: candleTime.toISOString(),
+                event: blackout.event,
+              },
+            });
+
+            this.signals.unshift(blackoutResult);
+            if (this.signals.length > this.maxSignalHistory) {
+              this.signals = this.signals.slice(0, this.maxSignalHistory);
+            }
+
+            console.log(
+              `[Engine] News blackout blocked ${symbol}/${strategyType} `
+              + `for event "${blackout.event.title}" at ${blackout.event.time}`
+            );
+            results.push(blackoutResult);
+            continue;
+          }
+        }
+
         let higherTfCandles = null;
         if (executionConfig.higherTimeframe) {
           higherTfCandles = await fetchCachedCandles(executionConfig.higherTimeframe);
@@ -288,16 +403,34 @@ class StrategyEngine {
           entryCandles = await fetchCachedCandles(executionConfig.entryTimeframe);
         }
 
-        const result = this.analyzeSymbol(
-          symbol,
-          strategyType,
-          candles,
-          higherTfCandles,
-          entryCandles,
-          parametersByStrategy.get(strategyType) || null
-        );
+        const result = {
+          ...this.analyzeSymbol(
+            symbol,
+            strategyType,
+            candles,
+            higherTfCandles,
+            entryCandles,
+            {
+              ...strategyInstance,
+              scanMode: task.scanMode || 'signal',
+              scanReason: task.scanReason || 'cadence',
+              category: task.category || executionConfig.category || null,
+              categoryFallback: task.categoryFallback === true,
+            }
+          ),
+          parameterSource: strategyInstance.source,
+          executionPolicy: strategyInstance.executionPolicy || null,
+          effectiveBreakeven: strategyInstance.effectiveBreakeven || null,
+          effectiveExitPlan: strategyInstance.effectiveExitPlan || null,
+          effectiveTradeManagement: strategyInstance.effectiveTradeManagement || null,
+          scanMode: task.scanMode || 'signal',
+          scanReason: task.scanReason || 'cadence',
+          category: task.category || executionConfig.category || null,
+          categoryFallback: task.categoryFallback === true,
+        };
 
         this._auditAnalysisResult(result, { scope });
+        results.push(result);
 
         if (result.signal !== 'NONE' && onSignalFn) {
           await onSignalFn(result);
@@ -316,6 +449,8 @@ class StrategyEngine {
         });
       }
     }
+
+    return results;
   }
 
   _auditAnalysisResult(result, { scope = 'live' } = {}) {
@@ -345,6 +480,10 @@ class StrategyEngine {
       indicatorsSnapshot: result.indicatorsSnapshot || null,
       reasonText: result.reason || '',
       timestamp: result.timestamp || null,
+      category: result.category || null,
+      categoryFallback: result.categoryFallback === true,
+      scanMode: result.scanMode || null,
+      scanReason: result.scanReason || null,
     };
 
     const status = result.status || (result.signal !== 'NONE' ? 'TRIGGERED' : 'NO_SETUP');

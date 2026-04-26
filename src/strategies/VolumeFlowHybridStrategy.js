@@ -101,7 +101,7 @@ class VolumeFlowHybridStrategy extends BaseStrategy {
       return this.noSignal({ ...baseResponse, status: 'NO_SETUP', reason: 'Missing ATR' });
     }
 
-    const features = volumeFeatures.computeLatestFeatures(setupCandles, {
+    const features = context?.volumeFeatureSnapshot || volumeFeatures.computeLatestFeatures(setupCandles, {
       volumeAvgPeriod,
       deltaSmoothing,
     });
@@ -109,9 +109,10 @@ class VolumeFlowHybridStrategy extends BaseStrategy {
       return this.noSignal({ ...baseResponse, status: 'NO_SETUP', reason: 'Volume features unavailable' });
     }
 
-    const lookback = setupCandles.slice(-(breakoutLookback + 1), -1);
-    const structureHigh = Math.max(...lookback.map((c) => c.high));
-    const structureLow = Math.min(...lookback.map((c) => c.low));
+    const { structureHigh, structureLow } = this._computeStructureBounds(
+      setupCandles,
+      breakoutLookback
+    );
 
     const fastEma = this.latest(ema20);
     const slowEma = this.latest(ema50);
@@ -507,6 +508,21 @@ class VolumeFlowHybridStrategy extends BaseStrategy {
     else if (wickRatio >= 2.0) bump += 0.08;
     if (features.spreadEfficiency <= 0.35) bump += 0.05;
     return Math.min(bump, 0.4);
+  }
+
+  _computeStructureBounds(candles, breakoutLookback) {
+    const start = Math.max(0, candles.length - breakoutLookback - 1);
+    const end = candles.length - 1;
+    let structureHigh = -Infinity;
+    let structureLow = Infinity;
+
+    for (let index = start; index < end; index++) {
+      const candle = candles[index];
+      if (candle.high > structureHigh) structureHigh = candle.high;
+      if (candle.low < structureLow) structureLow = candle.low;
+    }
+
+    return { structureHigh, structureLow };
   }
 }
 

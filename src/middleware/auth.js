@@ -1,6 +1,31 @@
 const { verifyAccessToken } = require('../config/jwt');
 const User = require('../models/User');
 
+const authenticateAccessToken = async (token) => {
+  if (!token) {
+    const error = new Error('Not authorized to access this route');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const decoded = verifyAccessToken(token);
+  const user = await User.findById(decoded.id);
+
+  if (!user) {
+    const error = new Error('User not found');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (!user.isActive) {
+    const error = new Error('Account has been deactivated');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return user;
+};
+
 const protect = async (req, res, next) => {
   let token;
 
@@ -19,28 +44,12 @@ const protect = async (req, res, next) => {
   }
 
   try {
-    const decoded = verifyAccessToken(token);
-    req.user = await User.findById(decoded.id);
-
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found',
-      });
-    }
-
-    if (!req.user.isActive) {
-      return res.status(401).json({
-        success: false,
-        message: 'Account has been deactivated',
-      });
-    }
-
+    req.user = await authenticateAccessToken(token);
     next();
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: 'Not authorized to access this route',
+      message: error.message || 'Not authorized to access this route',
     });
   }
 };
@@ -57,4 +66,4 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { protect, authorize };
+module.exports = { protect, authorize, authenticateAccessToken };

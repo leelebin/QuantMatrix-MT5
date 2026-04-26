@@ -62,6 +62,7 @@ function buildComboState({
   candles,
   higherTfCandles,
   lowerTfCandles,
+  strategyInstance,
   storedStrategyParameters,
   breakevenConfig,
   forcedTimeframe,
@@ -75,7 +76,7 @@ function buildComboState({
     ? getForcedTimeframeExecutionConfig(combo.symbol, combo.strategy, forcedTimeframe)
     : getStrategyExecutionConfig(combo.symbol, combo.strategy);
 
-  const resolvedParams = resolveStrategyParameters({
+  const resolvedParams = strategyInstance?.parameters || resolveStrategyParameters({
     strategyType: combo.strategy,
     instrument,
     storedParameters: storedStrategyParameters || {},
@@ -89,20 +90,32 @@ function buildComboState({
     forcedTimeframe ? executionConfig : null
   );
 
-  const effectiveBreakeven = breakevenConfig
+  const effectiveBreakeven = strategyInstance?.effectiveBreakeven
+    || strategyInstance?.effectiveTradeManagement?.breakeven
+    || (breakevenConfig
     ? breakevenService.normalizeBreakevenConfig(breakevenConfig, {
         partial: false,
         defaults: breakevenService.DEFAULT_BREAKEVEN_CONFIG,
         baseConfig: breakevenService.DEFAULT_BREAKEVEN_CONFIG,
       })
-    : breakevenService.getDefaultBreakevenConfig();
+    : breakevenService.getDefaultBreakevenConfig());
 
   const strategy = backtestEngine._createStrategy(combo.strategy);
-  const fullIndicators = backtestEngine._buildIndicators(candles, resolvedParams);
+  const fullIndicators = backtestEngine._buildIndicators(candles, resolvedParams, combo.strategy);
+  const preparedIndicators = backtestEngine._prepareIndicatorSeries(fullIndicators, candles.length);
+  const fullVolumeFeatureSeries = backtestEngine._buildVolumeFeatureSeries(
+    candles,
+    resolvedParams,
+    combo.strategy
+  );
   const candleTimes = candles.map((candle) => toTimeMs(candle.time));
   const lowerTfTimes = lowerTfCandles ? lowerTfCandles.map((c) => toTimeMs(c.time)) : null;
-  const fullLowerIndicators = lowerTfCandles && tradingInstrument.entryTimeframe
-    ? backtestEngine._buildIndicators(lowerTfCandles, resolvedParams)
+  const needsEntryIndicators = backtestEngine._strategyNeedsEntryIndicators(combo.strategy);
+  const fullLowerIndicators = lowerTfCandles && tradingInstrument.entryTimeframe && needsEntryIndicators
+    ? backtestEngine._buildIndicators(lowerTfCandles, resolvedParams, combo.strategy)
+    : null;
+  const preparedLowerIndicators = fullLowerIndicators
+    ? backtestEngine._prepareIndicatorSeries(fullLowerIndicators, lowerTfCandles.length)
     : null;
   const higherTfTimes = higherTfCandles ? higherTfCandles.map((c) => toTimeMs(c.time)) : null;
   const higherTrendSeries = backtestEngine._buildHigherTimeframeTrendSeries(
@@ -115,6 +128,7 @@ function buildComboState({
 
   return {
     combo,
+    strategyInstance: strategyInstance || null,
     instrument,
     executionConfig,
     resolvedParams,
@@ -129,9 +143,21 @@ function buildComboState({
     lowerTfCandles,
     lowerTfTimes,
     fullIndicators,
+    preparedIndicators,
+    fullVolumeFeatureSeries,
     fullLowerIndicators,
+    preparedLowerIndicators,
+    needsEntryIndicators,
     spread,
     slippage,
+    historyWindowState: backtestEngine._createRollingArrayWindowState(candles),
+    indicatorWindowState: backtestEngine._createRollingIndicatorWindowState(preparedIndicators),
+    lowerHistoryWindowState: lowerTfCandles && tradingInstrument.entryTimeframe
+      ? backtestEngine._createRollingArrayWindowState(lowerTfCandles)
+      : null,
+    lowerIndicatorWindowState: preparedLowerIndicators
+      ? backtestEngine._createRollingIndicatorWindowState(preparedLowerIndicators)
+      : null,
     lowerCursor: -1,
     higherCursor: -1,
     openPosition: null,
@@ -152,6 +178,10 @@ function markToMarketEquity(state) {
     eq += priceDiff * pos.lotSize * s.tradingInstrument.contractSize;
   });
   return eq;
+}
+
+function isEquityBust(state, ruinThreshold) {
+  return markToMarketEquity(state) <= ruinThreshold;
 }
 
 function recordEquityPoint(state, time, equity) {
@@ -180,6 +210,35 @@ function closePositionForCombo(state, comboIdx, exitPrice, reason, exitTime) {
   s.openPosition = null;
   if (state.balance > state.peakBalance) state.peakBalance = state.balance;
   return trade;
+}
+
+function triggerBustAndHalt(state, ruinThreshold, currentCandleTime, eventIndex, totalEvents) {
+  const equityAtBust = round2(markToMarketEquity(state));
+  let forcedCloseCount = 0;
+
+  Array.from(state.openPositionComboIdx).forEach((comboIdx) => {
+    const s = state.combos[comboIdx];
+    const latest = state.latestCandleBySymbol[s.combo.symbol];
+    if (!s.openPosition || !latest) return;
+
+    const exitPrice = s.openPosition.type === 'BUY'
+      ? latest.close - s.spread / 2
+      : latest.close + s.spread / 2;
+    const trade = closePositionForCombo(state, comboIdx, exitPrice, 'BUST', currentCandleTime);
+    if (trade) forcedCloseCount += 1;
+  });
+
+  state.bust = {
+    triggered: true,
+    time: currentCandleTime,
+    balance: round2(state.balance),
+    equityAtBust,
+    forcedCloseCount,
+    remainingEventsSkipped: Math.max(0, totalEvents - (eventIndex + 1)),
+    reason: 'RUIN_EQUITY',
+  };
+
+  recordEquityPoint(state, currentCandleTime, state.balance);
 }
 
 function processEvent(state, comboIdx, barIdx) {
@@ -235,28 +294,31 @@ function processEvent(state, comboIdx, barIdx) {
 
   let pendingEntry = null;
   if (!s.openPosition && nextCandle) {
-    const historyStart = Math.max(0, barIdx - 250);
-    const historyEnd = barIdx + 1;
-    const historicalCandles = s.candles.slice(historyStart, historyEnd);
-    const ind = backtestEngine._sliceIndicatorWindow(
-      s.fullIndicators,
-      s.candles.length,
-      historyStart,
-      historyEnd
+    const historicalCandles = backtestEngine._advanceRollingArrayWindowState(
+      s.historyWindowState,
+      barIdx
+    );
+    const ind = backtestEngine._advanceRollingIndicatorWindowState(
+      s.indicatorWindowState,
+      barIdx
     );
 
     let lowerHistoricalCandles = null;
     let lowerInd = null;
     if (s.lowerTfCandles && s.tradingInstrument.entryTimeframe && s.lowerCursor >= 0) {
-      const lowerStart = Math.max(0, s.lowerCursor - 250);
-      const lowerEnd = s.lowerCursor + 1;
-      lowerHistoricalCandles = s.lowerTfCandles.slice(lowerStart, lowerEnd);
-      lowerInd = backtestEngine._sliceIndicatorWindow(
-        s.fullLowerIndicators,
-        s.lowerTfCandles.length,
-        lowerStart,
-        lowerEnd
+      lowerHistoricalCandles = backtestEngine._advanceRollingArrayWindowState(
+        s.lowerHistoryWindowState,
+        s.lowerCursor
       );
+      if (s.preparedLowerIndicators) {
+        lowerInd = backtestEngine._advanceRollingIndicatorWindowState(
+          s.lowerIndicatorWindowState,
+          s.lowerCursor
+        );
+      }
+      if (s.needsEntryIndicators && lowerHistoricalCandles.length > 1) {
+        lowerInd = lowerInd || {};
+      }
     }
 
     let result = null;
@@ -264,7 +326,8 @@ function processEvent(state, comboIdx, barIdx) {
       result = s.strategy.analyze(historicalCandles, ind, s.tradingInstrument, {
         higherTfCandles: s.higherTfCandles,
         entryCandles: lowerHistoricalCandles,
-        entryIndicators: lowerInd,
+        entryIndicators: s.needsEntryIndicators ? lowerInd : null,
+        volumeFeatureSnapshot: s.fullVolumeFeatureSeries ? s.fullVolumeFeatureSeries[barIdx] : null,
         strategyParams: s.resolvedParams,
       });
     } catch (err) {
@@ -423,11 +486,11 @@ function buildSummary(state, initialBalance) {
 async function runSharedPortfolioBacktest({
   combinations,
   initialBalance,
+  ruinThreshold = 0,
   start,
   endExclusive,
   fetchCandles,
-  storedParametersByStrategy,
-  breakevenByStrategy,
+  strategyInstancesByCombination,
   forcedTimeframe = null,
   maxConcurrentPositions = null,
   onProgress = null,
@@ -440,6 +503,7 @@ async function runSharedPortfolioBacktest({
   }
 
   const safeInitialBalance = Number(initialBalance) || 10000;
+  const safeRuinThreshold = Math.max(0, Number(ruinThreshold) || 0);
   const tradeStartMs = start ? toTimeMs(start) : null;
 
   const state = {
@@ -454,6 +518,15 @@ async function runSharedPortfolioBacktest({
     rejectedSignals: { noCapacity: 0, zeroSize: 0 },
     errors: [],
     combos: [],
+    bust: {
+      triggered: false,
+      time: null,
+      balance: null,
+      equityAtBust: null,
+      forcedCloseCount: 0,
+      remainingEventsSkipped: 0,
+      reason: null,
+    },
     maxConcurrentPositions: Number(maxConcurrentPositions)
       || Math.min(combinations.length, DEFAULT_MAX_CONCURRENT_POSITIONS),
   };
@@ -512,12 +585,11 @@ async function runSharedPortfolioBacktest({
         candles: primary.candles,
         higherTfCandles: higher,
         lowerTfCandles: lower,
-        storedStrategyParameters: storedParametersByStrategy
-          ? storedParametersByStrategy.get(combo.strategy)
+        strategyInstance: strategyInstancesByCombination
+          ? strategyInstancesByCombination.get(`${combo.symbol}:${combo.strategy}`)
           : null,
-        breakevenConfig: breakevenByStrategy
-          ? breakevenByStrategy.get(combo.strategy)
-          : null,
+        storedStrategyParameters: null,
+        breakevenConfig: null,
         forcedTimeframe,
       });
       prepared.push({ comboState, primaryCandles: primary.candles });
@@ -576,6 +648,23 @@ async function runSharedPortfolioBacktest({
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
     processEvent(state, ev.comboIdx, ev.barIdx);
+    if (isEquityBust(state, safeRuinThreshold)) {
+      const currentCandleTime = state.combos[ev.comboIdx]?.candles?.[ev.barIdx]?.time || null;
+      triggerBustAndHalt(state, safeRuinThreshold, currentCandleTime, i, events.length);
+      if (typeof onProgress === 'function') {
+        onProgress({
+          phase: 'bust',
+          processedEvents: i + 1,
+          totalEvents: events.length,
+          percent: Math.round(((i + 1) / events.length) * 100),
+          balance: state.bust.balance,
+          openPositions: 0,
+          trades: state.trades.length,
+          bust: state.bust,
+        });
+      }
+      break;
+    }
     if (typeof onProgress === 'function' && i % progressEvery === 0) {
       onProgress({
         phase: 'simulate',
@@ -589,18 +678,20 @@ async function runSharedPortfolioBacktest({
     }
   }
 
-  // Close any remaining open positions at their combo's last candle
-  state.openPositionComboIdx.forEach((cIdx) => {
-    const s = state.combos[cIdx];
-    const lastCandle = s.candles[s.candles.length - 1];
-    if (!lastCandle || !s.openPosition) return;
-    const exitPrice = s.openPosition.type === 'BUY'
-      ? lastCandle.close - s.spread / 2
-      : lastCandle.close + s.spread / 2;
-    closePositionForCombo(state, cIdx, exitPrice, 'END_OF_DATA', lastCandle.time);
-  });
-  if (state.openPositionComboIdx.size > 0) state.openPositionComboIdx.clear();
-  recordEquityPoint(state, state.equityCurve[state.equityCurve.length - 1].time, state.balance);
+  if (!state.bust.triggered) {
+    // Close any remaining open positions at their combo's last candle
+    state.openPositionComboIdx.forEach((cIdx) => {
+      const s = state.combos[cIdx];
+      const lastCandle = s.candles[s.candles.length - 1];
+      if (!lastCandle || !s.openPosition) return;
+      const exitPrice = s.openPosition.type === 'BUY'
+        ? lastCandle.close - s.spread / 2
+        : lastCandle.close + s.spread / 2;
+      closePositionForCombo(state, cIdx, exitPrice, 'END_OF_DATA', lastCandle.time);
+    });
+    if (state.openPositionComboIdx.size > 0) state.openPositionComboIdx.clear();
+    recordEquityPoint(state, state.equityCurve[state.equityCurve.length - 1].time, state.balance);
+  }
 
   const summary = buildSummary(state, safeInitialBalance);
   const contributions = buildContributions(state.trades);
@@ -616,6 +707,7 @@ async function runSharedPortfolioBacktest({
     perStrategyContribution: contributions.perStrategy,
     perSymbolContribution: contributions.perSymbol,
     rejectedSignals: state.rejectedSignals,
+    bust: state.bust,
     skipped,
     errors: state.errors,
     combinationsUsed: readiedComboInfo,

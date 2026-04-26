@@ -19,8 +19,16 @@ jest.mock('../src/models/Strategy', () => ({
   findByName: jest.fn(),
 }));
 
+jest.mock('../src/models/OptimizerRun', () => ({
+  findLatestBestResult: jest.fn(),
+}));
+
 jest.mock('../src/models/RiskProfile', () => ({
   getActive: jest.fn(),
+}));
+
+jest.mock('../src/services/strategyInstanceService', () => ({
+  getStrategyInstance: jest.fn(),
 }));
 
 jest.mock('../src/services/mt5Service', () => ({
@@ -39,6 +47,8 @@ const strategyEngine = require('../src/services/strategyEngine');
 const mt5Service = require('../src/services/mt5Service');
 const RiskProfile = require('../src/models/RiskProfile');
 const Strategy = require('../src/models/Strategy');
+const OptimizerRun = require('../src/models/OptimizerRun');
+const { getStrategyInstance } = require('../src/services/strategyInstanceService');
 
 function createRes() {
   return {
@@ -85,9 +95,23 @@ describe('backtest controller', () => {
       name: 'TrendFollowing',
       parameters: { ema_fast: 25, ema_slow: 60 },
     });
+    getStrategyInstance.mockImplementation(async (_symbol, strategyType) => ({
+      parameters: strategyType === 'TrendFollowing'
+        ? { ema_fast: 25, ema_slow: 60 }
+        : {},
+      enabled: true,
+      newsBlackout: {
+        enabled: false,
+        beforeMinutes: 15,
+        afterMinutes: 15,
+        impactLevels: ['High'],
+      },
+      source: 'instance',
+    }));
     backtestEngine.run.mockResolvedValue({
       summary: { totalTrades: 1, winRate: 0.5, profitFactor: 1.2 },
     });
+    OptimizerRun.findLatestBestResult.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -157,6 +181,126 @@ describe('backtest controller', () => {
     }));
   });
 
+  test('runBacktest derives coherent higher and entry timeframes from an explicit forced timeframe', async () => {
+    Strategy.findByName.mockResolvedValue({
+      name: 'VolumeFlowHybrid',
+      parameters: {},
+    });
+
+    const mainCandles = createCandles('2026-03-29T09:30:00.000Z', 15, 800);
+    const higherCandles = createCandles('2026-03-21T14:00:00.000Z', 60, 360);
+    const lowerCandles = createCandles('2026-03-31T09:00:00.000Z', 5, 2400);
+
+    mt5Service.getCandles
+      .mockResolvedValueOnce(mainCandles)
+      .mockResolvedValueOnce(higherCandles)
+      .mockResolvedValueOnce(lowerCandles);
+
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'VolumeFlowHybrid',
+        timeframe: '15m',
+        startDate: '2026-04-01',
+        endDate: '2026-04-05',
+        initialBalance: 10000,
+      },
+    };
+    const res = createRes();
+
+    await backtestController.runBacktest(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual(expect.objectContaining({ success: true }));
+
+    const fetchedTfs = mt5Service.getCandles.mock.calls.map((args) => args[1]);
+    expect(fetchedTfs).toEqual(['15m', '1h', '5m']);
+    expect(backtestEngine.run).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'EURUSD',
+      strategyType: 'VolumeFlowHybrid',
+      timeframe: '15m',
+    }));
+  });
+
+  test('runBacktest uses the latest optimized best result when parameterPreset=optimized', async () => {
+    const hourlyCandles = createCandles('2026-03-21T14:00:00.000Z', 60, 360);
+    const entryCandles = createCandles('2026-03-31T09:00:00.000Z', 15, 1400);
+
+    mt5Service.getCandles
+      .mockResolvedValueOnce(hourlyCandles)
+      .mockResolvedValueOnce(entryCandles);
+    OptimizerRun.findLatestBestResult.mockResolvedValue({
+      _id: 'opt-history-1',
+      symbol: 'EURUSD',
+      strategy: 'TrendFollowing',
+      timeframe: '1h',
+      optimizeFor: 'profitFactor',
+      completedAt: '2026-04-12T12:00:00.000Z',
+      bestResult: {
+        parameters: { ema_fast: 18, ema_slow: 45 },
+      },
+    });
+
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        timeframe: '1h',
+        startDate: '2026-04-01',
+        endDate: '2026-04-05',
+        initialBalance: 10000,
+        parameterPreset: 'optimized',
+      },
+    };
+    const res = createRes();
+
+    await backtestController.runBacktest(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(OptimizerRun.findLatestBestResult).toHaveBeenCalledWith('EURUSD', 'TrendFollowing');
+    expect(backtestEngine.run).toHaveBeenCalledWith(expect.objectContaining({
+      parameterPreset: 'optimized',
+      strategyParams: { ema_fast: 18, ema_slow: 45 },
+      parameterPresetResolution: expect.objectContaining({
+        preset: 'optimized',
+        fallbackUsed: false,
+        resolvedFrom: 'optimizer_best_result',
+        optimizerHistoryId: 'opt-history-1',
+      }),
+      includeChartData: true,
+    }));
+  });
+
+  test('getBacktestParameterPreset falls back to default when no optimizer result exists', async () => {
+    const req = {
+      query: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        preset: 'optimized',
+      },
+    };
+    const res = createRes();
+
+    await backtestController.getBacktestParameterPreset(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        parameterPreset: 'optimized',
+        parameterPresetResolution: expect.objectContaining({
+          preset: 'optimized',
+          fallbackUsed: true,
+          resolvedFrom: 'instance',
+        }),
+        parameters: expect.objectContaining({
+          ema_fast: 25,
+          ema_slow: 60,
+        }),
+      }),
+    }));
+  });
+
   describe('runAllStrategies', () => {
     beforeEach(() => {
       strategyEngine.getStrategiesInfo.mockReturnValue([
@@ -166,6 +310,17 @@ describe('backtest controller', () => {
       Strategy.findByName.mockImplementation(async (name) => ({
         name,
         parameters: { seed: name },
+      }));
+      getStrategyInstance.mockImplementation(async (_symbol, strategyType) => ({
+        parameters: { seed: strategyType },
+        enabled: true,
+        newsBlackout: {
+          enabled: false,
+          beforeMinutes: 15,
+          afterMinutes: 15,
+          impactLevels: ['High'],
+        },
+        source: 'instance',
       }));
     });
 

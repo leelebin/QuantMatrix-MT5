@@ -4,6 +4,11 @@ jest.mock('../src/models/Strategy', () => ({
   update: jest.fn(),
 }));
 
+jest.mock('../src/models/StrategyInstance', () => ({
+  upsert: jest.fn().mockResolvedValue({}),
+  findByStrategyName: jest.fn().mockResolvedValue([]),
+}));
+
 jest.mock('../src/services/strategyEngine', () => ({
   getStrategiesInfo: jest.fn(() => []),
 }));

@@ -3,34 +3,24 @@ const strategyEngine = require('../services/strategyEngine');
 const tradeExecutor = require('../services/tradeExecutor');
 const positionMonitor = require('../services/positionMonitor');
 const riskManager = require('../services/riskManager');
+const strategyDailyStopService = require('../services/strategyDailyStopService');
 const indicatorService = require('../services/indicatorService');
 const websocketService = require('../services/websocketService');
+const notificationService = require('../services/notificationService');
 const Strategy = require('../models/Strategy');
 const ExecutionAudit = require('../models/ExecutionAudit');
+const { positionsDb, tradesDb } = require('../config/db');
+const {
+  CadenceScheduler,
+  buildAssignmentStats,
+  buildSignalScanBucketStatus,
+  listActiveAssignments,
+} = require('../services/assignmentRuntimeService');
 const { getAllSymbols, getInstrument, instruments, INSTRUMENT_CATEGORIES } = require('../config/instruments');
+const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
 const symbolResolver = require('../services/symbolResolver');
 
-let tradingLoopInterval = null;
-
-function getActiveAssignmentStats(strategies) {
-  const activeSymbols = new Set();
-  let activeAssignments = 0;
-
-  for (const strategy of strategies) {
-    if (!strategy.enabled || !Array.isArray(strategy.symbols)) {
-      continue;
-    }
-
-    const uniqueSymbols = [...new Set(strategy.symbols)];
-    activeAssignments += uniqueSymbols.length;
-    uniqueSymbols.forEach((symbol) => activeSymbols.add(symbol));
-  }
-
-  return {
-    activeAssignments,
-    activeSymbols: activeSymbols.size,
-  };
-}
+let tradingScheduler = null;
 
 function getPricePrecision(instrument) {
   const pipSize = String(instrument?.pipSize || '0.01');
@@ -44,6 +34,72 @@ function getPricePrecision(instrument) {
 
 function roundPrice(value, instrument) {
   return parseFloat(Number(value).toFixed(getPricePrecision(instrument)));
+}
+
+function getLotPrecision(instrument) {
+  const lotStep = String(instrument?.lotStep || instrument?.minLot || '0.01');
+  if (lotStep.includes('e-')) {
+    return parseInt(lotStep.split('e-')[1], 10);
+  }
+
+  const decimalPart = lotStep.split('.')[1];
+  return decimalPart ? decimalPart.length : 2;
+}
+
+function createHttpError(message, statusCode = 400, details = null) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  if (details) error.details = details;
+  return error;
+}
+
+function ensureDebugTradingAllowed(accountInfo = {}) {
+  const mode = mt5Service.getAccountModeName(accountInfo);
+  const isPaperLike = accountInfo.isDemo === true
+    || accountInfo.isContest === true
+    || mode === 'DEMO'
+    || mode === 'CONTEST';
+
+  if (isPaperLike) {
+    mt5Service.ensurePaperTradingAccount(accountInfo);
+    return {
+      mode,
+      scope: 'paper',
+    };
+  }
+
+  mt5Service.ensureLiveTradingAllowed(accountInfo);
+  return {
+    mode,
+    scope: 'live',
+  };
+}
+
+function normalizeManualVolume(volume, instrument) {
+  const numericVolume = Number(volume);
+  if (!Number.isFinite(numericVolume) || numericVolume <= 0) {
+    throw createHttpError('Lot size must be a positive number.');
+  }
+
+  const lotStep = Number(instrument?.lotStep) || 0.01;
+  const minLot = Number(instrument?.minLot) || lotStep;
+  const precision = getLotPrecision(instrument);
+  const normalizedVolume = parseFloat(numericVolume.toFixed(precision));
+  const stepRatio = normalizedVolume / lotStep;
+
+  if (normalizedVolume < minLot) {
+    throw createHttpError(
+      `Lot size must be at least ${minLot.toFixed(precision)} for ${instrument.symbol}.`
+    );
+  }
+
+  if (Math.abs(stepRatio - Math.round(stepRatio)) > 1e-8) {
+    throw createHttpError(
+      `Lot size must follow step ${lotStep.toFixed(precision)} for ${instrument.symbol}.`
+    );
+  }
+
+  return normalizedVolume;
 }
 
 async function recordTestOrderAudit(stage, status, signal, extra = {}) {
@@ -73,12 +129,12 @@ async function recordTestOrderAudit(stage, status, signal, extra = {}) {
 async function buildProtectedTestSignal(symbol, direction, priceData) {
   const instrument = getInstrument(symbol);
   if (!instrument) {
-    throw new Error(`Unknown instrument: ${symbol}`);
+    throw createHttpError(`Unknown instrument: ${symbol}`);
   }
 
   const entryPrice = direction === 'BUY' ? Number(priceData.ask) : Number(priceData.bid);
   if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
-    throw new Error(`Cannot determine entry price for ${symbol}`);
+    throw createHttpError(`Cannot determine entry price for ${symbol}`);
   }
 
   let atr = null;
@@ -124,6 +180,121 @@ async function buildProtectedTestSignal(symbol, direction, priceData) {
   };
 }
 
+async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
+  const executedEntryPrice = order.entryDeal?.price || order.price || signal.entryPrice;
+  const openedAt = order.entryDeal?.time ? new Date(order.entryDeal.time) : new Date();
+  const mt5PositionId = order.positionId || order.orderId || null;
+  const mt5EntryDealId = order.entryDeal?.id || order.dealId || null;
+  const mt5Comment = order.entryDeal?.comment || brokerComment;
+  const tradeComment = buildTradeComment(signal, mt5Comment);
+  const entryCommission = Number(order.entryDeal?.commission) || 0;
+  const entrySwap = Number(order.entryDeal?.swap) || 0;
+  const entryFee = Number(order.entryDeal?.fee) || 0;
+
+  const position = await positionsDb.insert({
+    symbol: signal.symbol,
+    type: signal.signal,
+    entryPrice: executedEntryPrice,
+    currentPrice: executedEntryPrice,
+    currentSl: signal.sl,
+    currentTp: signal.tp,
+    lotSize: volume,
+    originalLotSize: volume,
+    mt5PositionId,
+    mt5EntryDealId,
+    mt5Comment,
+    strategy: signal.strategy,
+    comment: tradeComment,
+    confidence: signal.confidence,
+    reason: signal.reason,
+    atrAtEntry: signal.indicatorsSnapshot?.atr || 0,
+    partialsExecutedIndices: [],
+    maxFavourablePrice: executedEntryPrice,
+    indicatorsSnapshot: signal.indicatorsSnapshot || {},
+    unrealizedPl: 0,
+    openedAt,
+    status: 'OPEN',
+  });
+
+  await tradesDb.insert({
+    symbol: signal.symbol,
+    type: signal.signal,
+    entryPrice: executedEntryPrice,
+    sl: signal.sl,
+    tp: signal.tp,
+    lotSize: volume,
+    strategy: signal.strategy,
+    confidence: signal.confidence,
+    reason: signal.reason,
+    indicatorsSnapshot: signal.indicatorsSnapshot || {},
+    commission: entryCommission,
+    swap: entrySwap,
+    fee: entryFee,
+    mt5PositionId,
+    mt5OrderId: order.orderId || null,
+    mt5EntryDealId,
+    mt5Comment,
+    comment: tradeComment,
+    positionDbId: position._id,
+    status: 'OPEN',
+    openedAt,
+    closedAt: null,
+    exitPrice: null,
+    exitReason: null,
+    profitLoss: null,
+    profitPips: null,
+  });
+
+  websocketService.broadcast('trades', 'trade_opened', position);
+  websocketService.broadcast('positions', 'position_update', { action: 'opened', position });
+  await notificationService.notifyTradeOpened(position);
+
+  return position;
+}
+
+async function getLiveAssignments(activeProfile = null) {
+  await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+  return listActiveAssignments({ activeProfile });
+}
+
+function getTradingScheduler() {
+  if (!tradingScheduler) {
+    tradingScheduler = new CadenceScheduler({
+      name: 'live-trading',
+      buildAssignments: async (bucket) => {
+        const assignments = await getLiveAssignments();
+        return assignments
+          .filter((assignment) => assignment.cadenceMs === bucket.cadenceMs)
+          .map((assignment) => ({
+            symbol: assignment.symbol,
+            strategyType: assignment.strategyType,
+            strategyInstance: assignment.strategyInstance,
+            category: assignment.category,
+            categoryFallback: assignment.categoryFallback,
+            scanMode: 'signal',
+            scanReason: 'cadence',
+          }));
+      },
+      runAssignments: async (analysisTasks) => {
+        await strategyEngine.analyzeAll(
+          async (symbol, timeframe, count) => await mt5Service.getCandles(symbol, timeframe, null, count),
+          async (signal) => {
+            await tradeExecutor.executeTrade(signal);
+          },
+          null,
+          { scope: 'live', mode: 'live', analysisTasks }
+        );
+        await positionMonitor.syncNow('forced_sync');
+      },
+      onError: (error, bucket) => {
+        console.error(`[Trading Loop ${bucket.timeframe}] Error:`, error.message);
+      },
+    });
+  }
+
+  return tradingScheduler;
+}
+
 // @desc    Start automated trading
 // @route   POST /api/trading/start
 exports.startTrading = async (req, res) => {
@@ -135,33 +306,13 @@ exports.startTrading = async (req, res) => {
     const accountInfo = await mt5Service.getAccountInfo();
     mt5Service.ensureLiveTradingAllowed(accountInfo);
 
-    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
     process.env.TRADING_ENABLED = 'true';
-    positionMonitor.start(30000);
+    const assignments = await getLiveAssignments();
+    const assignmentStats = buildAssignmentStats(assignments);
+    positionMonitor.start();
+    getTradingScheduler().start();
 
-    if (!tradingLoopInterval) {
-      tradingLoopInterval = setInterval(async () => {
-        try {
-          const strategies = await Strategy.findAll();
-          const assignmentStats = getActiveAssignmentStats(strategies);
-          if (assignmentStats.activeAssignments === 0) return;
-
-          await strategyEngine.analyzeAll(
-            async (symbol, timeframe, count) => await mt5Service.getCandles(symbol, timeframe, null, count),
-            async (signal) => {
-              await tradeExecutor.executeTrade(signal);
-            },
-            null,
-            { scope: 'live' }
-          );
-        } catch (err) {
-          console.error('[Trading Loop] Error:', err.message);
-        }
-      }, 5 * 60 * 1000);
-    }
-
-    const strategies = await Strategy.findAll();
-    const assignmentStats = getActiveAssignmentStats(strategies);
+    const signalScanBuckets = buildSignalScanBucketStatus(assignments, getTradingScheduler().getBucketStates());
 
     res.json({
       success: true,
@@ -177,6 +328,9 @@ exports.startTrading = async (req, res) => {
         activeAssignments: assignmentStats.activeAssignments,
         activeSymbols: assignmentStats.activeSymbols,
         monitorRunning: true,
+        signalScanBuckets,
+        scanBuckets: signalScanBuckets,
+        positionMonitor: positionMonitor.getStatus(),
       },
     });
   } catch (err) {
@@ -191,9 +345,9 @@ exports.stopTrading = async (req, res) => {
   try {
     process.env.TRADING_ENABLED = 'false';
 
-    if (tradingLoopInterval) {
-      clearInterval(tradingLoopInterval);
-      tradingLoopInterval = null;
+    if (tradingScheduler) {
+      tradingScheduler.stop();
+      tradingScheduler = null;
     }
 
     positionMonitor.stop();
@@ -214,9 +368,8 @@ exports.getStatus = async (req, res) => {
 
     let riskStatus = null;
     let account = null;
-    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
-    const strategies = await Strategy.findAll();
-    const assignmentStats = getActiveAssignmentStats(strategies);
+    const assignments = await getLiveAssignments();
+    const assignmentStats = buildAssignmentStats(assignments);
     if (connected) {
       const accountInfo = await mt5Service.getAccountInfo();
       riskStatus = await riskManager.getRiskStatus(accountInfo);
@@ -228,17 +381,41 @@ exports.getStatus = async (req, res) => {
       };
     }
 
+    let strategyDailyStopStatus = null;
+    try {
+      const config = await strategyDailyStopService.getActiveConfig();
+      const { tradingDay, resetAt } = strategyDailyStopService.resolveTradingDay(new Date(), config);
+      const todayStoppedStrategies = await strategyDailyStopService.getTodayStoppedStrategies({}, config);
+      strategyDailyStopStatus = {
+        enabled: config?.enabled !== false,
+        tradingDay,
+        resetAt,
+        todayStoppedStrategies,
+        todayStoppedStrategiesCount: todayStoppedStrategies.length,
+        blockedEntriesTodayByStrategyDailyStop: strategyDailyStopService.getBlockedEntriesToday(tradingDay),
+      };
+    } catch (_) {
+      strategyDailyStopStatus = null;
+    }
+
     res.json({
       success: true,
       data: {
         mt5Connected: connected,
         account,
+        wsClients: websocketService.getClientCount(),
         tradingEnabled,
-        tradingLoopActive: tradingLoopInterval !== null,
+        tradingLoopActive: Boolean(tradingScheduler && tradingScheduler.isRunning()),
         activeAssignments: assignmentStats.activeAssignments,
         activeSymbols: assignmentStats.activeSymbols,
+        signalScanBuckets: buildSignalScanBucketStatus(assignments, tradingScheduler ? tradingScheduler.getBucketStates() : new Map()),
+        scanBuckets: buildSignalScanBucketStatus(assignments, tradingScheduler ? tradingScheduler.getBucketStates() : new Map()),
+        positionMonitor: monitorStatus,
         monitor: monitorStatus,
         risk: riskStatus,
+        strategyDailyStop: strategyDailyStopStatus,
+        todayStoppedStrategiesCount: strategyDailyStopStatus?.todayStoppedStrategiesCount || 0,
+        blockedEntriesTodayByStrategyDailyStop: strategyDailyStopStatus?.blockedEntriesTodayByStrategyDailyStop || 0,
         recentSignals: strategyEngine.getRecentSignals(null, 10),
       },
     });
@@ -247,7 +424,7 @@ exports.getStatus = async (req, res) => {
   }
 };
 
-// @desc    Test order placement - places a protected order, then immediately closes
+// @desc    Test/debug order placement - supports manual lot size and optional auto-close
 // @route   POST /api/trading/test-order
 exports.testOrder = async (req, res) => {
   let order = null;
@@ -258,45 +435,74 @@ exports.testOrder = async (req, res) => {
     }
 
     const accountInfo = await mt5Service.getAccountInfo();
-    mt5Service.ensureLiveTradingAllowed(accountInfo);
+    const debugAccount = ensureDebugTradingAllowed(accountInfo);
 
-    const { symbol = 'EURUSD', type = 'BUY' } = req.body || {};
+    const {
+      symbol = 'EURUSD',
+      type = 'BUY',
+      volume,
+      autoClose,
+    } = req.body || {};
     const direction = type.toUpperCase() === 'SELL' ? 'SELL' : 'BUY';
+    const instrument = getInstrument(symbol);
+    if (!instrument) {
+      return res.status(400).json({ success: false, message: `Unknown instrument: ${symbol}` });
+    }
+
+    const manualVolumeRequested = volume !== undefined && volume !== null && String(volume).trim() !== '';
+    const autoCloseExplicit = autoClose === true || String(autoClose).toLowerCase() === 'true';
+    const shouldAutoClose = autoClose === undefined ? !manualVolumeRequested : autoCloseExplicit;
     const price = await mt5Service.getPrice(symbol);
     if (!price || (!price.bid && !price.ask)) {
       return res.status(400).json({ success: false, message: `Cannot get price for ${symbol}` });
     }
 
-    const signal = await buildProtectedTestSignal(symbol, direction, price);
-    const riskCheck = await riskManager.validateTrade(signal, accountInfo, { scope: 'live' });
-    if (!riskCheck.allowed) {
-      await recordTestOrderAudit('risk', 'BLOCKED', signal, {
-        message: riskCheck.reason,
-        code: 'RISK_RULE',
-        codeName: 'RISK_RULE',
-        volume: riskCheck.lotSize || null,
-        accountInfo,
-        details: { riskCheck },
-      });
-      return res.status(400).json({ success: false, message: riskCheck.reason });
+    const baseSignal = await buildProtectedTestSignal(symbol, direction, price);
+    const signal = {
+      ...baseSignal,
+      strategy: manualVolumeRequested ? 'ManualDebug' : 'TestOrder',
+      reason: manualVolumeRequested
+        ? 'Manual debug order from Settings'
+        : baseSignal.reason,
+    };
+
+    let finalVolume = null;
+
+    if (manualVolumeRequested) {
+      finalVolume = normalizeManualVolume(volume, instrument);
+    } else {
+      const riskCheck = await riskManager.validateTrade(signal, accountInfo, { scope: 'live' });
+      if (!riskCheck.allowed) {
+        await recordTestOrderAudit('risk', 'BLOCKED', signal, {
+          message: riskCheck.reason,
+          code: 'RISK_RULE',
+          codeName: 'RISK_RULE',
+          volume: riskCheck.lotSize || null,
+          accountInfo,
+          details: { riskCheck },
+        });
+        return res.status(400).json({ success: false, message: riskCheck.reason });
+      }
+
+      if (riskCheck.overrideApplied && riskCheck.auditMessage) {
+        await recordTestOrderAudit('risk', 'INFO', signal, {
+          message: riskCheck.auditMessage,
+          code: 'AGGRESSIVE_MIN_LOT',
+          codeName: 'AGGRESSIVE_MIN_LOT',
+          volume: riskCheck.lotSize,
+          accountInfo,
+          details: { riskCheck },
+        });
+      }
+
+      finalVolume = riskCheck.lotSize;
     }
 
-    if (riskCheck.overrideApplied && riskCheck.auditMessage) {
-      await recordTestOrderAudit('risk', 'INFO', signal, {
-        message: riskCheck.auditMessage,
-        code: 'AGGRESSIVE_MIN_LOT',
-        codeName: 'AGGRESSIVE_MIN_LOT',
-        volume: riskCheck.lotSize,
-        accountInfo,
-        details: { riskCheck },
-      });
-    }
-
-    const brokerComment = 'QM-TEST-ORDER';
+    const brokerComment = buildBrokerComment(signal, 'QM');
     const preflight = await mt5Service.preflightOrder(
       symbol,
       direction,
-      riskCheck.lotSize,
+      finalVolume,
       signal.sl,
       signal.tp,
       brokerComment
@@ -307,19 +513,19 @@ exports.testOrder = async (req, res) => {
         message: preflightMessage,
         code: preflight.retcode,
         codeName: preflight.retcodeName,
-        volume: riskCheck.lotSize,
+        volume: finalVolume,
         accountInfo,
         details: preflight,
       });
       return res.status(400).json({ success: false, message: preflightMessage });
     }
 
-    console.log(`[Test Order] Placing protected ${direction} ${riskCheck.lotSize} ${symbol}...`);
+    console.log(`[Test Order] Placing protected ${direction} ${finalVolume} ${symbol}...`);
 
     order = await mt5Service.placeOrder(
       symbol,
       direction,
-      riskCheck.lotSize,
+      finalVolume,
       signal.sl,
       signal.tp,
       brokerComment
@@ -327,82 +533,118 @@ exports.testOrder = async (req, res) => {
 
     console.log('[Test Order] Order placed:', JSON.stringify(order));
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (shouldAutoClose) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    if (order && order.positionId) {
-      try {
-        const closeResult = await mt5Service.closePosition(String(order.positionId));
-        console.log('[Test Order] Position closed.');
+      if (order && order.positionId) {
+        try {
+          const closeResult = await mt5Service.closePosition(String(order.positionId));
+          console.log('[Test Order] Position closed.');
 
-        return res.json({
-          success: true,
-          message: `Test order completed: ${direction} ${riskCheck.lotSize} ${symbol} opened and closed with protection`,
-          data: {
-            symbol,
-            type: direction,
-            volume: riskCheck.lotSize,
-            openPrice: order?.price || signal.entryPrice,
-            accountMode: mt5Service.getAccountModeName(accountInfo),
-            stopLoss: signal.sl,
-            takeProfit: signal.tp,
-            order,
-            closeResult,
-          },
-        });
-      } catch (closeErr) {
-        const message = `Test order opened with protective SL/TP, but auto-close failed: ${closeErr.message}`;
-        await recordTestOrderAudit('test_order_close', 'ERROR', signal, {
-          message,
-          code: closeErr.code ?? closeErr.details?.retcode ?? null,
-          codeName: closeErr.codeName ?? closeErr.details?.retcodeName ?? null,
-          volume: riskCheck.lotSize,
-          accountInfo,
-          details: {
-            order,
-            stopLoss: signal.sl,
-            takeProfit: signal.tp,
-            error: closeErr.message,
-          },
-        });
+          return res.json({
+            success: true,
+            message: `Test order completed: ${direction} ${finalVolume} ${symbol} opened and closed with protection`,
+            data: {
+              symbol,
+              type: direction,
+              volume: finalVolume,
+              openPrice: order?.price || signal.entryPrice,
+              accountMode: debugAccount.mode,
+              executionScope: debugAccount.scope,
+              stopLoss: signal.sl,
+              takeProfit: signal.tp,
+              autoClose: true,
+              order,
+              closeResult,
+            },
+          });
+        } catch (closeErr) {
+          const message = `Test order opened with protective SL/TP, but auto-close failed: ${closeErr.message}`;
+          await recordTestOrderAudit('test_order_close', 'ERROR', signal, {
+            message,
+            code: closeErr.code ?? closeErr.details?.retcode ?? null,
+            codeName: closeErr.codeName ?? closeErr.details?.retcodeName ?? null,
+            volume: finalVolume,
+            accountInfo,
+            details: {
+              order,
+              stopLoss: signal.sl,
+              takeProfit: signal.tp,
+              error: closeErr.message,
+            },
+          });
 
-        return res.status(500).json({
-          success: false,
-          message,
-          data: {
-            symbol,
-            type: direction,
-            volume: riskCheck.lotSize,
-            stopLoss: signal.sl,
-            takeProfit: signal.tp,
-            order,
-          },
-        });
+          return res.status(500).json({
+            success: false,
+            message,
+            data: {
+              symbol,
+              type: direction,
+              volume: finalVolume,
+              stopLoss: signal.sl,
+              takeProfit: signal.tp,
+              order,
+            },
+          });
+        }
       }
+
+      const message = 'Test order was placed with protective SL/TP, but no position id was returned for auto-close.';
+      await recordTestOrderAudit('test_order_close', 'ERROR', signal, {
+        message,
+        volume: finalVolume,
+        accountInfo,
+        details: { order, stopLoss: signal.sl, takeProfit: signal.tp },
+      });
+
+      return res.status(500).json({
+        success: false,
+        message,
+        data: {
+          symbol,
+          type: direction,
+          volume: finalVolume,
+          stopLoss: signal.sl,
+          takeProfit: signal.tp,
+          order,
+        },
+      });
     }
 
-    const message = 'Test order was placed with protective SL/TP, but no position id was returned for auto-close.';
-    await recordTestOrderAudit('test_order_close', 'ERROR', signal, {
-      message,
-      volume: riskCheck.lotSize,
+    const position = await persistOpenedDebugTrade(signal, finalVolume, order, brokerComment);
+    await recordTestOrderAudit('test_order_open', 'INFO', signal, {
+      message: `Manual debug order opened: ${direction} ${finalVolume} ${symbol}`,
+      volume: finalVolume,
       accountInfo,
-      details: { order, stopLoss: signal.sl, takeProfit: signal.tp },
+      details: {
+        autoClose: false,
+        order,
+        positionId: position._id,
+        stopLoss: signal.sl,
+        takeProfit: signal.tp,
+      },
     });
 
-    return res.status(500).json({
-      success: false,
-      message,
+    return res.json({
+      success: true,
+      message: `Debug order opened: ${direction} ${finalVolume} ${symbol}`,
       data: {
         symbol,
         type: direction,
-        volume: riskCheck.lotSize,
+        volume: finalVolume,
+        openPrice: order?.price || signal.entryPrice,
+        accountMode: debugAccount.mode,
+        executionScope: debugAccount.scope,
         stopLoss: signal.sl,
         takeProfit: signal.tp,
+        autoClose: false,
         order,
+        position,
       },
     });
   } catch (err) {
     console.error('[Test Order] Error:', err.message);
-    res.status(500).json({ success: false, message: err.message, data: order ? { order } : undefined });
+    res.status(err.statusCode || 500).json({ success: false, message: err.message, data: order ? { order } : undefined });
   }
 };
 

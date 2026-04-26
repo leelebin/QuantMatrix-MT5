@@ -1,0 +1,4014 @@
+{
+  "tradingStatus": {
+    "httpStatus": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "mt5Connected": true,
+        "account": {
+          "login": 230044684,
+          "server": "Elev8-Demo2",
+          "mode": "DEMO",
+          "tradeAllowed": true
+        },
+        "wsClients": 0,
+        "tradingEnabled": false,
+        "tradingLoopActive": false,
+        "activeAssignments": 15,
+        "activeSymbols": 11,
+        "signalScanBuckets": [
+          {
+            "timeframe": "15s",
+            "cadenceMs": 15000,
+            "cadenceLabel": "15s",
+            "assignmentCount": 4,
+            "activeSymbols": 4,
+            "lastScanAt": null,
+            "nextScanAt": null,
+            "lastError": null,
+            "running": false,
+            "items": [
+              {
+                "symbol": "NAS100",
+                "strategy": "MultiTimeframe",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "US30",
+                "strategy": "TrendFollowing",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "BTCUSD",
+                "strategy": "TrendFollowing",
+                "category": "crypto",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "XAUUSD",
+                "strategy": "VolumeFlowHybrid",
+                "category": "metals",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              }
+            ]
+          },
+          {
+            "timeframe": "30s",
+            "cadenceMs": 30000,
+            "cadenceLabel": "30s",
+            "assignmentCount": 1,
+            "activeSymbols": 1,
+            "lastScanAt": null,
+            "nextScanAt": null,
+            "lastError": null,
+            "running": false,
+            "items": [
+              {
+                "symbol": "XBRUSD",
+                "strategy": "TrendFollowing",
+                "category": "energy",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              }
+            ]
+          },
+          {
+            "timeframe": "180s",
+            "cadenceMs": 180000,
+            "cadenceLabel": "180s",
+            "assignmentCount": 10,
+            "activeSymbols": 9,
+            "lastScanAt": null,
+            "nextScanAt": null,
+            "lastError": null,
+            "running": false,
+            "items": [
+              {
+                "symbol": "USDCHF",
+                "strategy": "Breakout",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "XAUUSD",
+                "strategy": "Breakout",
+                "category": "metals",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "NAS100",
+                "strategy": "Breakout",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "US30",
+                "strategy": "MeanReversion",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "EURUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "GBPUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "AUDUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "USDCHF",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "USDCAD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "NZDUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              }
+            ]
+          }
+        ],
+        "scanBuckets": [
+          {
+            "timeframe": "15s",
+            "cadenceMs": 15000,
+            "cadenceLabel": "15s",
+            "assignmentCount": 4,
+            "activeSymbols": 4,
+            "lastScanAt": null,
+            "nextScanAt": null,
+            "lastError": null,
+            "running": false,
+            "items": [
+              {
+                "symbol": "NAS100",
+                "strategy": "MultiTimeframe",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "US30",
+                "strategy": "TrendFollowing",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "BTCUSD",
+                "strategy": "TrendFollowing",
+                "category": "crypto",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "XAUUSD",
+                "strategy": "VolumeFlowHybrid",
+                "category": "metals",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              }
+            ]
+          },
+          {
+            "timeframe": "30s",
+            "cadenceMs": 30000,
+            "cadenceLabel": "30s",
+            "assignmentCount": 1,
+            "activeSymbols": 1,
+            "lastScanAt": null,
+            "nextScanAt": null,
+            "lastError": null,
+            "running": false,
+            "items": [
+              {
+                "symbol": "XBRUSD",
+                "strategy": "TrendFollowing",
+                "category": "energy",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              }
+            ]
+          },
+          {
+            "timeframe": "180s",
+            "cadenceMs": 180000,
+            "cadenceLabel": "180s",
+            "assignmentCount": 10,
+            "activeSymbols": 9,
+            "lastScanAt": null,
+            "nextScanAt": null,
+            "lastError": null,
+            "running": false,
+            "items": [
+              {
+                "symbol": "USDCHF",
+                "strategy": "Breakout",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "XAUUSD",
+                "strategy": "Breakout",
+                "category": "metals",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "NAS100",
+                "strategy": "Breakout",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "US30",
+                "strategy": "MeanReversion",
+                "category": "indices",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "EURUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "GBPUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "AUDUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "USDCHF",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "USDCAD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              },
+              {
+                "symbol": "NZDUSD",
+                "strategy": "Momentum",
+                "category": "forex",
+                "categoryFallback": false,
+                "scanMode": "signal",
+                "scanReason": "cadence",
+                "nextScanAt": null
+              }
+            ]
+          }
+        ],
+        "positionMonitor": {
+          "running": false,
+          "intervalMs": 0,
+          "baseTickMs": 15000,
+          "lightCadenceMs": 0,
+          "heavyCadenceMs": 0,
+          "lightDuePositions": [],
+          "heavyDuePositions": [],
+          "fastModePositions": [],
+          "lastScanAt": null,
+          "lastForcedSyncAt": null
+        },
+        "monitor": {
+          "running": false,
+          "intervalMs": 0,
+          "baseTickMs": 15000,
+          "lightCadenceMs": 0,
+          "heavyCadenceMs": 0,
+          "lightDuePositions": [],
+          "heavyDuePositions": [],
+          "fastModePositions": [],
+          "lastScanAt": null,
+          "lastForcedSyncAt": null
+        },
+        "risk": {
+          "balance": 243.83,
+          "equity": 251.12,
+          "peakBalance": 839.58,
+          "peakEquity": 894.08,
+          "todayLoss": 0,
+          "dailyLossLimit": 243.83,
+          "dailyLossPercent": 0,
+          "currentDrawdown": 71.91302791696492,
+          "maxDrawdownLimit": 100,
+          "openPositions": 0,
+          "maxPositions": 100,
+          "maxPositionsPerSymbol": 3,
+          "tradingEnabled": false,
+          "dailyLossReached": false,
+          "drawdownReached": false,
+          "activeRiskProfileName": "Bootstrap Risk",
+          "allowAggressiveMinLot": true,
+          "maxRiskPerTradePct": 5,
+          "maxDailyLossPct": 100,
+          "maxDrawdownPct": 100
+        },
+        "strategyDailyStop": {
+          "enabled": true,
+          "tradingDay": "2026-04-26",
+          "resetAt": "2026-04-26T16:00:00.000Z",
+          "todayStoppedStrategies": [],
+          "todayStoppedStrategiesCount": 0,
+          "blockedEntriesTodayByStrategyDailyStop": 0
+        },
+        "todayStoppedStrategiesCount": 0,
+        "blockedEntriesTodayByStrategyDailyStop": 0,
+        "recentSignals": []
+      }
+    }
+  },
+  "symbols": {
+    "httpStatus": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "symbols": [
+          {
+            "canonical": "EURUSD",
+            "category": "forex_major",
+            "strategyType": "TrendFollowing",
+            "pipSize": 0.0001,
+            "pipValue": 10,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.2,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "EURUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "EURUSD"
+            ]
+          },
+          {
+            "canonical": "GBPUSD",
+            "category": "forex_major",
+            "strategyType": "TrendFollowing",
+            "pipSize": 0.0001,
+            "pipValue": 10,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.5,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "GBPUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "GBPUSD"
+            ]
+          },
+          {
+            "canonical": "USDJPY",
+            "category": "forex_major",
+            "strategyType": "TrendFollowing",
+            "pipSize": 0.01,
+            "pipValue": 6.7,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.3,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "USDJPY",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "USDJPY"
+            ]
+          },
+          {
+            "canonical": "AUDUSD",
+            "category": "forex_major",
+            "strategyType": "TrendFollowing",
+            "pipSize": 0.0001,
+            "pipValue": 10,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.4,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "AUDUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "AUDUSD"
+            ]
+          },
+          {
+            "canonical": "USDCHF",
+            "category": "forex_major",
+            "strategyType": "TrendFollowing",
+            "pipSize": 0.0001,
+            "pipValue": 10,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.5,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "USDCHF",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "USDCHF"
+            ]
+          },
+          {
+            "canonical": "USDCAD",
+            "category": "forex_major",
+            "strategyType": "TrendFollowing",
+            "pipSize": 0.0001,
+            "pipValue": 7.4,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.6,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "USDCAD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "USDCAD"
+            ]
+          },
+          {
+            "canonical": "NZDUSD",
+            "category": "forex_major",
+            "strategyType": "TrendFollowing",
+            "pipSize": 0.0001,
+            "pipValue": 10,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.8,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "NZDUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "NZDUSD"
+            ]
+          },
+          {
+            "canonical": "EURJPY",
+            "category": "forex_cross",
+            "strategyType": "MeanReversion",
+            "pipSize": 0.01,
+            "pipValue": 6.7,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 2,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "EURJPY",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "EURJPY"
+            ]
+          },
+          {
+            "canonical": "GBPJPY",
+            "category": "forex_cross",
+            "strategyType": "MeanReversion",
+            "pipSize": 0.01,
+            "pipValue": 6.7,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 2.5,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "GBPJPY",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "GBPJPY"
+            ]
+          },
+          {
+            "canonical": "EURGBP",
+            "category": "forex_cross",
+            "strategyType": "MeanReversion",
+            "pipSize": 0.0001,
+            "pipValue": 13,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.8,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "EURGBP",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "EURGBP"
+            ]
+          },
+          {
+            "canonical": "AUDNZD",
+            "category": "forex_cross",
+            "strategyType": "MeanReversion",
+            "pipSize": 0.0001,
+            "pipValue": 6.5,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 2.5,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "AUDNZD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "AUDNZD"
+            ]
+          },
+          {
+            "canonical": "XAUUSD",
+            "category": "metals",
+            "strategyType": "MultiTimeframe",
+            "pipSize": 0.01,
+            "pipValue": 1,
+            "contractSize": 100,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 25,
+            "timeframe": "1h",
+            "higherTimeframe": "4h",
+            "entryTimeframe": "15m",
+            "broker": "XAUUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "XAUUSD"
+            ]
+          },
+          {
+            "canonical": "XAGUSD",
+            "category": "metals",
+            "strategyType": "MultiTimeframe",
+            "pipSize": 0.001,
+            "pipValue": 5,
+            "contractSize": 5000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 30,
+            "timeframe": "1h",
+            "higherTimeframe": "4h",
+            "entryTimeframe": "15m",
+            "broker": "XAGUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "XAGUSD"
+            ]
+          },
+          {
+            "canonical": "US30",
+            "category": "indices",
+            "strategyType": "Momentum",
+            "pipSize": 0.01,
+            "pipValue": 0.1,
+            "contractSize": 10,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 3,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "US30",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "US30"
+            ]
+          },
+          {
+            "canonical": "SPX500",
+            "category": "indices",
+            "strategyType": "Momentum",
+            "pipSize": 0.01,
+            "pipValue": 0.1,
+            "contractSize": 10,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 0.8,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "SPX500",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "SPX500"
+            ]
+          },
+          {
+            "canonical": "NAS100",
+            "category": "indices",
+            "strategyType": "Momentum",
+            "pipSize": 0.01,
+            "pipValue": 0.1,
+            "contractSize": 10,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 1.5,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "NAS100",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "NAS100"
+            ]
+          },
+          {
+            "canonical": "XTIUSD",
+            "category": "energy",
+            "strategyType": "Breakout",
+            "pipSize": 0.01,
+            "pipValue": 10,
+            "contractSize": 1000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 4,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "XTIUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "XTIUSD"
+            ]
+          },
+          {
+            "canonical": "XBRUSD",
+            "category": "energy",
+            "strategyType": "Breakout",
+            "pipSize": 0.01,
+            "pipValue": 10,
+            "contractSize": 1000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 4.5,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "XBRUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "XBRUSD"
+            ]
+          },
+          {
+            "canonical": "BTCUSD",
+            "category": "crypto",
+            "strategyType": "Breakout",
+            "pipSize": 0.01,
+            "pipValue": 0.01,
+            "contractSize": 1,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 5000,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "BTCUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "BTCUSD",
+              "BTCUSDm",
+              "BTCUSD.a",
+              "BTCUSD.r",
+              "BTCUSDT",
+              "BTCUSD.",
+              "BTC/USD"
+            ]
+          },
+          {
+            "canonical": "ETHUSD",
+            "category": "crypto",
+            "strategyType": "Breakout",
+            "pipSize": 0.01,
+            "pipValue": 0.1,
+            "contractSize": 10,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 300,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "ETHUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "ETHUSD",
+              "ETHUSDm",
+              "ETHUSD.a",
+              "ETHUSD.r",
+              "ETHUSDT",
+              "ETHUSD.",
+              "ETH/USD"
+            ]
+          },
+          {
+            "canonical": "LTCUSD",
+            "category": "crypto",
+            "strategyType": "Momentum",
+            "pipSize": 0.01,
+            "pipValue": 1,
+            "contractSize": 100,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 50,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "LTCUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "LTCUSD",
+              "LTCUSDm",
+              "LTCUSD.a",
+              "LTCUSD.r",
+              "LTCUSDT",
+              "LTCUSD.",
+              "LTC/USD"
+            ]
+          },
+          {
+            "canonical": "XRPUSD",
+            "category": "crypto",
+            "strategyType": "Breakout",
+            "pipSize": 0.00001,
+            "pipValue": 0.5,
+            "contractSize": 50000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 300,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "XRPUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "XRPUSD",
+              "XRPUSDm",
+              "XRPUSD.a",
+              "XRPUSD.r",
+              "XRPUSDT",
+              "XRPUSD.",
+              "XRP/USD"
+            ]
+          },
+          {
+            "canonical": "BCHUSD",
+            "category": "crypto",
+            "strategyType": "Momentum",
+            "pipSize": 0.01,
+            "pipValue": 0.1,
+            "contractSize": 10,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 150,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "BCHUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "BCHUSD",
+              "BCHUSDm",
+              "BCHUSD.a",
+              "BCHUSD.r",
+              "BCHUSDT",
+              "BCHUSD.",
+              "BCH/USD"
+            ]
+          },
+          {
+            "canonical": "SOLUSD",
+            "category": "crypto",
+            "strategyType": "Breakout",
+            "pipSize": 0.01,
+            "pipValue": 1,
+            "contractSize": 100,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 30,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": "15m",
+            "broker": "SOLUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "SOLUSD",
+              "SOLUSDm",
+              "SOLUSD.a",
+              "SOLUSD.r",
+              "SOLUSDT",
+              "SOLUSD.",
+              "SOL/USD"
+            ]
+          },
+          {
+            "canonical": "ADAUSD",
+            "category": "crypto",
+            "strategyType": "Momentum",
+            "pipSize": 0.00001,
+            "pipValue": 0.1,
+            "contractSize": 10000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 200,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "ADAUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "ADAUSD",
+              "ADAUSDm",
+              "ADAUSD.a",
+              "ADAUSD.r",
+              "ADAUSDT",
+              "ADAUSD.",
+              "ADA/USD"
+            ]
+          },
+          {
+            "canonical": "DOGEUSD",
+            "category": "crypto",
+            "strategyType": "Breakout",
+            "pipSize": 0.00001,
+            "pipValue": 1,
+            "contractSize": 100000,
+            "minLot": 0.01,
+            "lotStep": 0.01,
+            "spread": 200,
+            "timeframe": "1h",
+            "higherTimeframe": null,
+            "entryTimeframe": null,
+            "broker": "DOGEUSD",
+            "resolutionStatus": "ok",
+            "resolutionError": null,
+            "candidates": [
+              "DOGEUSD",
+              "DOGEUSDm",
+              "DOGEUSD.a",
+              "DOGEUSD.r",
+              "DOGEUSDT",
+              "DOGEUSD.",
+              "DOGE/USD"
+            ]
+          }
+        ],
+        "categories": {
+          "FOREX_MAJOR": "forex_major",
+          "FOREX_CROSS": "forex_cross",
+          "METALS": "metals",
+          "INDICES": "indices",
+          "ENERGY": "energy",
+          "CRYPTO": "crypto"
+        },
+        "byCategory": {
+          "forex_major": [
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY",
+            "AUDUSD",
+            "USDCHF",
+            "USDCAD",
+            "NZDUSD"
+          ],
+          "forex_cross": [
+            "EURJPY",
+            "GBPJPY",
+            "EURGBP",
+            "AUDNZD"
+          ],
+          "metals": [
+            "XAUUSD",
+            "XAGUSD"
+          ],
+          "indices": [
+            "US30",
+            "SPX500",
+            "NAS100"
+          ],
+          "energy": [
+            "XTIUSD",
+            "XBRUSD"
+          ],
+          "crypto": [
+            "BTCUSD",
+            "ETHUSD",
+            "LTCUSD",
+            "XRPUSD",
+            "BCHUSD",
+            "SOLUSD",
+            "ADAUSD",
+            "DOGEUSD"
+          ]
+        },
+        "mt5Connected": true
+      }
+    }
+  },
+  "strategies": {
+    "httpStatus": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "name": "Breakout",
+          "displayName": "Breakout",
+          "description": "ATR channel breakout strategy for energy",
+          "symbols": [
+            "USDCHF",
+            "XAUUSD",
+            "NAS100"
+          ],
+          "enabled": true,
+          "createdAt": "2026-04-09T15:18:36.738Z",
+          "updatedAt": "2026-04-25T14:44:58.180Z",
+          "_id": "4KPN1Pv6a2rz0oDH",
+          "parameters": {
+            "lookback_period": 15,
+            "body_multiplier": 1.5,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "slMultiplier": 3,
+            "tpMultiplier": 4.5,
+            "riskPercent": 0.01
+          },
+          "parameterDefinitions": [
+            {
+              "key": "lookback_period",
+              "strategyType": "Breakout",
+              "label": "Lookback Period",
+              "inputType": "number",
+              "defaultValue": 20,
+              "optimize": {
+                "enabled": true,
+                "min": 15,
+                "max": 25,
+                "step": 5
+              }
+            },
+            {
+              "key": "body_multiplier",
+              "strategyType": "Breakout",
+              "label": "Body Multiplier",
+              "inputType": "number",
+              "defaultValue": 1.2,
+              "optimize": {
+                "enabled": true,
+                "min": 1,
+                "max": 2,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "rsi_period",
+              "strategyType": "Breakout",
+              "label": "RSI Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "atr_period",
+              "strategyType": "Breakout",
+              "label": "ATR Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "slMultiplier",
+              "strategyType": "Breakout",
+              "label": "SL Multiplier",
+              "inputType": "number",
+              "defaultValue": 2,
+              "optimize": {
+                "enabled": true,
+                "min": 1.5,
+                "max": 2.5,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "tpMultiplier",
+              "strategyType": "Breakout",
+              "label": "TP Multiplier",
+              "inputType": "number",
+              "defaultValue": 4,
+              "optimize": {
+                "enabled": true,
+                "min": 3,
+                "max": 5,
+                "step": 1
+              }
+            },
+            {
+              "key": "riskPercent",
+              "strategyType": "Breakout",
+              "label": "Risk Percent",
+              "inputType": "number",
+              "defaultValue": 0.02,
+              "optimize": {
+                "enabled": false
+              }
+            }
+          ],
+          "effectiveBreakeven": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "effectiveExitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          }
+        },
+        {
+          "name": "MeanReversion",
+          "displayName": "MeanReversion",
+          "description": "Bollinger Band mean reversion for Forex crosses",
+          "symbols": [
+            "US30"
+          ],
+          "enabled": true,
+          "createdAt": "2026-04-09T15:18:36.734Z",
+          "updatedAt": "2026-04-25T14:44:58.180Z",
+          "_id": "abtqPLRGBxzIDSn2",
+          "parameters": {
+            "bb_period": 30,
+            "bb_stddev": 1.5,
+            "rsi_period": 14,
+            "rsi_oversold": 35,
+            "rsi_overbought": 75,
+            "atr_period": 14,
+            "slMultiplier": 1,
+            "tpMultiplier": 1.5,
+            "riskPercent": 0.01
+          },
+          "parameterDefinitions": [
+            {
+              "key": "bb_period",
+              "strategyType": "MeanReversion",
+              "label": "BB Period",
+              "inputType": "number",
+              "defaultValue": 20,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "bb_stddev",
+              "strategyType": "MeanReversion",
+              "label": "BB StdDev",
+              "inputType": "number",
+              "defaultValue": 2,
+              "optimize": {
+                "enabled": true,
+                "min": 1.8,
+                "max": 2.4,
+                "step": 0.3
+              }
+            },
+            {
+              "key": "rsi_period",
+              "strategyType": "MeanReversion",
+              "label": "RSI Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "rsi_oversold",
+              "strategyType": "MeanReversion",
+              "label": "RSI Oversold",
+              "inputType": "number",
+              "defaultValue": 30,
+              "optimize": {
+                "enabled": true,
+                "min": 25,
+                "max": 35,
+                "step": 5
+              }
+            },
+            {
+              "key": "rsi_overbought",
+              "strategyType": "MeanReversion",
+              "label": "RSI Overbought",
+              "inputType": "number",
+              "defaultValue": 70,
+              "optimize": {
+                "enabled": true,
+                "min": 65,
+                "max": 75,
+                "step": 5
+              }
+            },
+            {
+              "key": "atr_period",
+              "strategyType": "MeanReversion",
+              "label": "ATR Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "slMultiplier",
+              "strategyType": "MeanReversion",
+              "label": "SL Multiplier",
+              "inputType": "number",
+              "defaultValue": 1.5,
+              "optimize": {
+                "enabled": true,
+                "min": 1.5,
+                "max": 2.5,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "tpMultiplier",
+              "strategyType": "MeanReversion",
+              "label": "TP Multiplier",
+              "inputType": "number",
+              "defaultValue": 2,
+              "optimize": {
+                "enabled": true,
+                "min": 1.5,
+                "max": 3,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "riskPercent",
+              "strategyType": "MeanReversion",
+              "label": "Risk Percent",
+              "inputType": "number",
+              "defaultValue": 0.02,
+              "optimize": {
+                "enabled": false
+              }
+            }
+          ],
+          "effectiveBreakeven": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "effectiveExitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          }
+        },
+        {
+          "name": "Momentum",
+          "displayName": "Momentum",
+          "description": "RSI + MACD momentum strategy for indices",
+          "symbols": [
+            "EURUSD",
+            "GBPUSD",
+            "AUDUSD",
+            "USDCHF",
+            "USDCAD",
+            "NZDUSD"
+          ],
+          "enabled": true,
+          "createdAt": "2026-04-09T15:18:36.737Z",
+          "updatedAt": "2026-04-25T14:44:58.180Z",
+          "_id": "WfYzMX2XDQ9xC76N",
+          "parameters": {
+            "ema_period": 30,
+            "rsi_period": 10,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "slMultiplier": 1,
+            "tpMultiplier": 5,
+            "riskPercent": 0.01
+          },
+          "parameterDefinitions": [
+            {
+              "key": "ema_period",
+              "strategyType": "Momentum",
+              "label": "EMA Period",
+              "inputType": "number",
+              "defaultValue": 50,
+              "optimize": {
+                "enabled": true,
+                "min": 30,
+                "max": 70,
+                "step": 20
+              }
+            },
+            {
+              "key": "rsi_period",
+              "strategyType": "Momentum",
+              "label": "RSI Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": true,
+                "min": 10,
+                "max": 18,
+                "step": 4
+              }
+            },
+            {
+              "key": "atr_period",
+              "strategyType": "Momentum",
+              "label": "ATR Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "macd_fast",
+              "strategyType": "Momentum",
+              "label": "MACD Fast",
+              "inputType": "number",
+              "defaultValue": 12,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "macd_slow",
+              "strategyType": "Momentum",
+              "label": "MACD Slow",
+              "inputType": "number",
+              "defaultValue": 26,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "macd_signal",
+              "strategyType": "Momentum",
+              "label": "MACD Signal",
+              "inputType": "number",
+              "defaultValue": 9,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "slMultiplier",
+              "strategyType": "Momentum",
+              "label": "SL Multiplier",
+              "inputType": "number",
+              "defaultValue": 1.5,
+              "optimize": {
+                "enabled": true,
+                "min": 1.5,
+                "max": 2.5,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "tpMultiplier",
+              "strategyType": "Momentum",
+              "label": "TP Multiplier",
+              "inputType": "number",
+              "defaultValue": 3,
+              "optimize": {
+                "enabled": true,
+                "min": 2,
+                "max": 4,
+                "step": 1
+              }
+            },
+            {
+              "key": "riskPercent",
+              "strategyType": "Momentum",
+              "label": "Risk Percent",
+              "inputType": "number",
+              "defaultValue": 0.02,
+              "optimize": {
+                "enabled": false
+              }
+            }
+          ],
+          "effectiveBreakeven": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "effectiveExitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          }
+        },
+        {
+          "name": "MultiTimeframe",
+          "displayName": "MultiTimeframe",
+          "description": "Multi-timeframe MACD + Stochastic for metals",
+          "symbols": [
+            "NAS100"
+          ],
+          "enabled": true,
+          "createdAt": "2026-04-09T15:18:36.736Z",
+          "updatedAt": "2026-04-25T14:44:58.180Z",
+          "_id": "mR4zT8wmMo9wKSTT",
+          "parameters": {
+            "ema_trend": 200,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "stoch_period": 12,
+            "stoch_signal": 3,
+            "slMultiplier": 3,
+            "tpMultiplier": 6,
+            "riskPercent": 0.01
+          },
+          "parameterDefinitions": [
+            {
+              "key": "ema_trend",
+              "strategyType": "MultiTimeframe",
+              "label": "Trend EMA",
+              "inputType": "number",
+              "defaultValue": 200,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "atr_period",
+              "strategyType": "MultiTimeframe",
+              "label": "ATR Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "macd_fast",
+              "strategyType": "MultiTimeframe",
+              "label": "MACD Fast",
+              "inputType": "number",
+              "defaultValue": 12,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "macd_slow",
+              "strategyType": "MultiTimeframe",
+              "label": "MACD Slow",
+              "inputType": "number",
+              "defaultValue": 26,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "macd_signal",
+              "strategyType": "MultiTimeframe",
+              "label": "MACD Signal",
+              "inputType": "number",
+              "defaultValue": 9,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "stoch_period",
+              "strategyType": "MultiTimeframe",
+              "label": "Stochastic Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": true,
+                "min": 12,
+                "max": 16,
+                "step": 4
+              }
+            },
+            {
+              "key": "stoch_signal",
+              "strategyType": "MultiTimeframe",
+              "label": "Stochastic Signal",
+              "inputType": "number",
+              "defaultValue": 3,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "slMultiplier",
+              "strategyType": "MultiTimeframe",
+              "label": "SL Multiplier",
+              "inputType": "number",
+              "defaultValue": 2,
+              "optimize": {
+                "enabled": true,
+                "min": 1.5,
+                "max": 2.5,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "tpMultiplier",
+              "strategyType": "MultiTimeframe",
+              "label": "TP Multiplier",
+              "inputType": "number",
+              "defaultValue": 4,
+              "optimize": {
+                "enabled": true,
+                "min": 3,
+                "max": 5,
+                "step": 1
+              }
+            },
+            {
+              "key": "riskPercent",
+              "strategyType": "MultiTimeframe",
+              "label": "Risk Percent",
+              "inputType": "number",
+              "defaultValue": 0.015,
+              "optimize": {
+                "enabled": false
+              }
+            }
+          ],
+          "effectiveBreakeven": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "effectiveExitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          }
+        },
+        {
+          "name": "TrendFollowing",
+          "displayName": "TrendFollowing",
+          "description": "Medium-frequency H1 trend continuation with EMA20 pullback + breakout trigger",
+          "symbols": [
+            "US30",
+            "XBRUSD",
+            "BTCUSD"
+          ],
+          "enabled": true,
+          "createdAt": "2026-04-09T15:18:36.732Z",
+          "updatedAt": "2026-04-25T14:44:58.180Z",
+          "_id": "VnsCeB85J8R51jqr",
+          "parameters": {
+            "ema_fast": 30,
+            "ema_slow": 60,
+            "rsi_period": 18,
+            "atr_period": 14,
+            "slMultiplier": 1,
+            "tpMultiplier": 5,
+            "riskPercent": 0.01
+          },
+          "tradeManagement": {
+            "breakevenOverride": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0,
+              "trailStartAtrMultiple": 1.5,
+              "trailDistanceAtrMultiple": 1
+            }
+          },
+          "parameterDefinitions": [
+            {
+              "key": "ema_fast",
+              "strategyType": "TrendFollowing",
+              "label": "Fast EMA (pullback anchor)",
+              "inputType": "number",
+              "defaultValue": 20,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "ema_slow",
+              "strategyType": "TrendFollowing",
+              "label": "Slow EMA (trend body)",
+              "inputType": "number",
+              "defaultValue": 50,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "ema_trend",
+              "strategyType": "TrendFollowing",
+              "label": "Trend EMA (regime)",
+              "inputType": "number",
+              "defaultValue": 200,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "rsi_period",
+              "strategyType": "TrendFollowing",
+              "label": "RSI Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "atr_period",
+              "strategyType": "TrendFollowing",
+              "label": "ATR Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "breakout_lookback",
+              "strategyType": "TrendFollowing",
+              "label": "H1 breakout lookback (bars)",
+              "inputType": "number",
+              "defaultValue": 3,
+              "optimize": {
+                "enabled": true,
+                "min": 2,
+                "max": 4,
+                "step": 1
+              }
+            },
+            {
+              "key": "pullback_atr_max",
+              "strategyType": "TrendFollowing",
+              "label": "Max distance from EMA20 (xATR)",
+              "inputType": "number",
+              "defaultValue": 1,
+              "optimize": {
+                "enabled": true,
+                "min": 0.7,
+                "max": 1.4,
+                "step": 0.35
+              }
+            },
+            {
+              "key": "rsi_buy_min",
+              "strategyType": "TrendFollowing",
+              "label": "RSI floor for BUY (mirrored for SELL)",
+              "inputType": "number",
+              "defaultValue": 52,
+              "optimize": {
+                "enabled": true,
+                "min": 50,
+                "max": 56,
+                "step": 3
+              }
+            },
+            {
+              "key": "slMultiplier",
+              "strategyType": "TrendFollowing",
+              "label": "SL Multiplier (ATR)",
+              "inputType": "number",
+              "defaultValue": 1.5,
+              "optimize": {
+                "enabled": true,
+                "min": 1,
+                "max": 2,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "tpMultiplier",
+              "strategyType": "TrendFollowing",
+              "label": "TP Multiplier (ATR)",
+              "inputType": "number",
+              "defaultValue": 2,
+              "optimize": {
+                "enabled": true,
+                "min": 1.5,
+                "max": 3,
+                "step": 0.5
+              }
+            },
+            {
+              "key": "riskPercent",
+              "strategyType": "TrendFollowing",
+              "label": "Risk Percent",
+              "inputType": "number",
+              "defaultValue": 0.02,
+              "optimize": {
+                "enabled": false
+              }
+            }
+          ],
+          "effectiveBreakeven": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "effectiveExitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          }
+        },
+        {
+          "name": "VolumeFlowHybrid",
+          "displayName": "VolumeFlowHybrid",
+          "description": "Volume/order-flow hybrid: breakout continuation + exhaustion reversal (metals + oil)",
+          "symbols": [
+            "XAUUSD"
+          ],
+          "enabled": true,
+          "createdAt": "2026-04-19T15:34:04.501Z",
+          "updatedAt": "2026-04-25T14:44:58.180Z",
+          "_id": "IOyMJneSfQ6yhsvO",
+          "parameters": {
+            "rvol_continuation": 1.8,
+            "rvol_reversal": 2.2,
+            "volume_avg_period": 20,
+            "breakout_lookback": 10,
+            "body_atr_threshold": 0.7,
+            "wick_ratio_threshold": 1.8,
+            "vwap_reclaim_tolerance_atr": 0.25,
+            "cumulative_delta_smoothing": 8,
+            "ema_fast": 20,
+            "ema_slow": 50,
+            "atr_period": 14,
+            "slMultiplier": 1.4,
+            "tpMultiplier": 1.6,
+            "reversal_sl_atr": 1,
+            "reversal_tp_atr": 1.5,
+            "min_confidence": 0.55,
+            "riskPercent": 0.015,
+            "small_account_profile": 0
+          },
+          "parameterDefinitions": [
+            {
+              "key": "rvol_continuation",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "RVOL Continuation (x avg)",
+              "inputType": "number",
+              "defaultValue": 1.8,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "rvol_reversal",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "RVOL Reversal (x avg)",
+              "inputType": "number",
+              "defaultValue": 2.2,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "volume_avg_period",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Volume MA Period",
+              "inputType": "number",
+              "defaultValue": 20,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "breakout_lookback",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Breakout Lookback Bars",
+              "inputType": "number",
+              "defaultValue": 12,
+              "optimize": {
+                "enabled": true,
+                "min": 10,
+                "max": 14,
+                "step": 2
+              }
+            },
+            {
+              "key": "body_atr_threshold",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Body vs ATR (continuation)",
+              "inputType": "number",
+              "defaultValue": 0.6,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "wick_ratio_threshold",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Wick/Body Ratio (reversal)",
+              "inputType": "number",
+              "defaultValue": 1.8,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "vwap_reclaim_tolerance_atr",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "VWAP Reclaim Tolerance (ATR)",
+              "inputType": "number",
+              "defaultValue": 0.35,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "cumulative_delta_smoothing",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Cumulative Delta Smoothing",
+              "inputType": "number",
+              "defaultValue": 8,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "ema_fast",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Fast Trend EMA",
+              "inputType": "number",
+              "defaultValue": 20,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "ema_slow",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Slow Trend EMA",
+              "inputType": "number",
+              "defaultValue": 50,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "atr_period",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "ATR Period",
+              "inputType": "number",
+              "defaultValue": 14,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "slMultiplier",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "SL Multiplier (ATR)",
+              "inputType": "number",
+              "defaultValue": 1.2,
+              "optimize": {
+                "enabled": true,
+                "min": 1,
+                "max": 1.4,
+                "step": 0.2
+              }
+            },
+            {
+              "key": "tpMultiplier",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "TP Multiplier (ATR)",
+              "inputType": "number",
+              "defaultValue": 2,
+              "optimize": {
+                "enabled": true,
+                "min": 1.6,
+                "max": 2.4,
+                "step": 0.4
+              }
+            },
+            {
+              "key": "reversal_sl_atr",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Reversal SL (ATR)",
+              "inputType": "number",
+              "defaultValue": 1,
+              "optimize": {
+                "enabled": true,
+                "min": 1,
+                "max": 1,
+                "step": 0.1
+              }
+            },
+            {
+              "key": "reversal_tp_atr",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Reversal TP (ATR)",
+              "inputType": "number",
+              "defaultValue": 1.5,
+              "optimize": {
+                "enabled": true,
+                "min": 1.5,
+                "max": 1.5,
+                "step": 0.1
+              }
+            },
+            {
+              "key": "min_confidence",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Min Confidence",
+              "inputType": "number",
+              "defaultValue": 0.55,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "riskPercent",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Risk Percent",
+              "inputType": "number",
+              "defaultValue": 0.0075,
+              "optimize": {
+                "enabled": false
+              }
+            },
+            {
+              "key": "small_account_profile",
+              "strategyType": "VolumeFlowHybrid",
+              "label": "Small-Account Profile (0/1)",
+              "inputType": "number",
+              "defaultValue": 0,
+              "optimize": {
+                "enabled": false
+              }
+            }
+          ],
+          "effectiveBreakeven": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "effectiveExitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          }
+        }
+      ]
+    }
+  },
+  "instances": {
+    "httpStatus": 200,
+    "body": {
+      "success": true,
+      "data": [
+        {
+          "_id": "Breakout:AUDUSD",
+          "strategyName": "Breakout",
+          "symbol": "AUDUSD",
+          "createdAt": "2026-04-25T14:43:04.460Z",
+          "updatedAt": "2026-04-25T14:43:06.512Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "Breakout:BTCUSD",
+          "strategyName": "Breakout",
+          "symbol": "BTCUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.784Z",
+          "updatedAt": "2026-04-25T14:43:18.900Z"
+        },
+        {
+          "_id": "Breakout:ETHUSD",
+          "strategyName": "Breakout",
+          "symbol": "ETHUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.785Z",
+          "updatedAt": "2026-04-25T14:43:20.975Z"
+        },
+        {
+          "_id": "Breakout:EURUSD",
+          "strategyName": "Breakout",
+          "symbol": "EURUSD",
+          "createdAt": "2026-04-23T03:37:28.611Z",
+          "updatedAt": "2026-04-25T14:43:00.351Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "Breakout:GBPUSD",
+          "strategyName": "Breakout",
+          "symbol": "GBPUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.782Z",
+          "updatedAt": "2026-04-25T14:43:02.425Z"
+        },
+        {
+          "_id": "Breakout:LTCUSD",
+          "strategyName": "Breakout",
+          "symbol": "LTCUSD",
+          "parameters": {
+            "lookback_period": 15,
+            "body_multiplier": 1.5,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "slMultiplier": 3,
+            "tpMultiplier": 4.5,
+            "riskPercent": 0.01
+          },
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.785Z",
+          "updatedAt": "2026-04-25T08:16:07.997Z"
+        },
+        {
+          "_id": "Breakout:NAS100",
+          "strategyName": "Breakout",
+          "symbol": "NAS100",
+          "parameters": {
+            "lookback_period": 25,
+            "body_multiplier": 1,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "slMultiplier": 2.5,
+            "tpMultiplier": 4,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.784Z",
+          "updatedAt": "2026-04-25T14:43:23.036Z"
+        },
+        {
+          "_id": "Breakout:NZDUSD",
+          "strategyName": "Breakout",
+          "symbol": "NZDUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.782Z",
+          "updatedAt": "2026-04-25T14:43:12.709Z"
+        },
+        {
+          "_id": "Breakout:SPX500",
+          "strategyName": "Breakout",
+          "symbol": "SPX500",
+          "parameters": {
+            "lookback_period": 15,
+            "body_multiplier": 2,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 3,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.783Z",
+          "updatedAt": "2026-04-25T08:16:08.000Z"
+        },
+        {
+          "_id": "Breakout:US30",
+          "strategyName": "Breakout",
+          "symbol": "US30",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.783Z",
+          "updatedAt": "2026-04-25T14:43:25.116Z"
+        },
+        {
+          "_id": "Breakout:USDCAD",
+          "strategyName": "Breakout",
+          "symbol": "USDCAD",
+          "createdAt": "2026-04-25T14:43:08.574Z",
+          "updatedAt": "2026-04-25T14:43:10.633Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "Breakout:USDCHF",
+          "strategyName": "Breakout",
+          "symbol": "USDCHF",
+          "parameters": {
+            "lookback_period": 15,
+            "body_multiplier": 1,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 5,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.782Z",
+          "updatedAt": "2026-04-25T14:43:08.572Z"
+        },
+        {
+          "_id": "Breakout:USDJPY",
+          "strategyName": "Breakout",
+          "symbol": "USDJPY",
+          "createdAt": "2026-04-25T14:43:02.426Z",
+          "updatedAt": "2026-04-25T14:43:04.459Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "Breakout:XAGUSD",
+          "strategyName": "Breakout",
+          "symbol": "XAGUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.783Z",
+          "updatedAt": "2026-04-25T14:43:16.815Z"
+        },
+        {
+          "_id": "Breakout:XAUUSD",
+          "strategyName": "Breakout",
+          "symbol": "XAUUSD",
+          "parameters": {
+            "lookback_period": 25,
+            "body_multiplier": 1,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "slMultiplier": 2,
+            "tpMultiplier": 5,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.783Z",
+          "updatedAt": "2026-04-25T14:43:14.778Z"
+        },
+        {
+          "_id": "Breakout:XBRUSD",
+          "strategyName": "Breakout",
+          "symbol": "XBRUSD",
+          "parameters": {
+            "lookback_period": 15,
+            "body_multiplier": 2,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "slMultiplier": 3,
+            "tpMultiplier": 5,
+            "riskPercent": 0.01
+          },
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.784Z",
+          "updatedAt": "2026-04-25T08:16:08.005Z"
+        },
+        {
+          "_id": "Breakout:XTIUSD",
+          "strategyName": "Breakout",
+          "symbol": "XTIUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.784Z",
+          "updatedAt": "2026-04-25T14:43:27.174Z"
+        },
+        {
+          "_id": "MeanReversion:AUDUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "AUDUSD",
+          "createdAt": "2026-04-25T14:42:06.798Z",
+          "updatedAt": "2026-04-25T14:42:08.841Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:BTCUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "BTCUSD",
+          "createdAt": "2026-04-25T14:42:19.077Z",
+          "updatedAt": "2026-04-25T14:42:21.160Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:ETHUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "ETHUSD",
+          "createdAt": "2026-04-25T14:42:21.162Z",
+          "updatedAt": "2026-04-25T14:42:23.223Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:EURUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "EURUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.785Z",
+          "updatedAt": "2026-04-25T14:42:02.729Z"
+        },
+        {
+          "_id": "MeanReversion:GBPUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "GBPUSD",
+          "createdAt": "2026-04-25T14:42:02.731Z",
+          "updatedAt": "2026-04-25T14:42:04.763Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:NAS100",
+          "strategyName": "MeanReversion",
+          "symbol": "NAS100",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.786Z",
+          "updatedAt": "2026-04-25T14:42:25.258Z"
+        },
+        {
+          "_id": "MeanReversion:NZDUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "NZDUSD",
+          "createdAt": "2026-04-25T14:42:12.927Z",
+          "updatedAt": "2026-04-25T14:42:14.968Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:SPX500",
+          "strategyName": "MeanReversion",
+          "symbol": "SPX500",
+          "parameters": {
+            "bb_period": 30,
+            "bb_stddev": 1.5,
+            "rsi_period": 14,
+            "rsi_oversold": 35,
+            "rsi_overbought": 75,
+            "atr_period": 14,
+            "slMultiplier": 1,
+            "tpMultiplier": 1.5,
+            "riskPercent": 0.01
+          },
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.786Z",
+          "updatedAt": "2026-04-25T08:16:08.008Z"
+        },
+        {
+          "_id": "MeanReversion:US30",
+          "strategyName": "MeanReversion",
+          "symbol": "US30",
+          "parameters": {
+            "bb_period": 30,
+            "bb_stddev": 2.1,
+            "rsi_period": 14,
+            "rsi_oversold": 35,
+            "rsi_overbought": 75,
+            "atr_period": 14,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 1.5,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.785Z",
+          "updatedAt": "2026-04-25T14:42:27.340Z"
+        },
+        {
+          "_id": "MeanReversion:USDCAD",
+          "strategyName": "MeanReversion",
+          "symbol": "USDCAD",
+          "createdAt": "2026-04-25T14:42:10.882Z",
+          "updatedAt": "2026-04-25T14:42:12.926Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:USDCHF",
+          "strategyName": "MeanReversion",
+          "symbol": "USDCHF",
+          "createdAt": "2026-04-22T13:10:25.154Z",
+          "updatedAt": "2026-04-25T14:42:10.880Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "MeanReversion:USDJPY",
+          "strategyName": "MeanReversion",
+          "symbol": "USDJPY",
+          "createdAt": "2026-04-25T14:42:04.765Z",
+          "updatedAt": "2026-04-25T14:42:06.796Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:XAGUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "XAGUSD",
+          "createdAt": "2026-04-25T14:42:17.041Z",
+          "updatedAt": "2026-04-25T14:42:19.074Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:XAUUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "XAUUSD",
+          "createdAt": "2026-04-25T14:42:14.970Z",
+          "updatedAt": "2026-04-25T14:42:17.039Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MeanReversion:XTIUSD",
+          "strategyName": "MeanReversion",
+          "symbol": "XTIUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.786Z",
+          "updatedAt": "2026-04-25T14:42:29.378Z"
+        },
+        {
+          "_id": "Momentum:AUDUSD",
+          "strategyName": "Momentum",
+          "symbol": "AUDUSD",
+          "createdAt": "2026-04-25T14:42:35.559Z",
+          "updatedAt": "2026-04-25T14:42:37.627Z",
+          "parameters": {
+            "ema_period": 30,
+            "rsi_period": 10,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 4,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "Momentum:BTCUSD",
+          "strategyName": "Momentum",
+          "symbol": "BTCUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.788Z",
+          "updatedAt": "2026-04-25T14:42:50.038Z"
+        },
+        {
+          "_id": "Momentum:ETHUSD",
+          "strategyName": "Momentum",
+          "symbol": "ETHUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.788Z",
+          "updatedAt": "2026-04-25T14:42:52.094Z"
+        },
+        {
+          "_id": "Momentum:EURUSD",
+          "strategyName": "Momentum",
+          "symbol": "EURUSD",
+          "parameters": {
+            "ema_period": 30,
+            "rsi_period": 18,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 4,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.786Z",
+          "updatedAt": "2026-04-25T14:42:31.450Z"
+        },
+        {
+          "_id": "Momentum:GBPUSD",
+          "strategyName": "Momentum",
+          "symbol": "GBPUSD",
+          "parameters": {
+            "ema_period": 30,
+            "rsi_period": 10,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 4,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.786Z",
+          "updatedAt": "2026-04-25T14:42:33.516Z"
+        },
+        {
+          "_id": "Momentum:NAS100",
+          "strategyName": "Momentum",
+          "symbol": "NAS100",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.787Z",
+          "updatedAt": "2026-04-25T14:42:54.159Z"
+        },
+        {
+          "_id": "Momentum:NZDUSD",
+          "strategyName": "Momentum",
+          "symbol": "NZDUSD",
+          "parameters": {
+            "ema_period": 30,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 4,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.787Z",
+          "updatedAt": "2026-04-25T14:42:43.856Z"
+        },
+        {
+          "_id": "Momentum:US30",
+          "strategyName": "Momentum",
+          "symbol": "US30",
+          "createdAt": "2026-04-22T11:35:17.497Z",
+          "updatedAt": "2026-04-25T14:42:56.218Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "Momentum:USDCAD",
+          "strategyName": "Momentum",
+          "symbol": "USDCAD",
+          "createdAt": "2026-04-25T14:42:39.689Z",
+          "updatedAt": "2026-04-25T14:42:41.785Z",
+          "parameters": {
+            "ema_period": 70,
+            "rsi_period": 14,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 4,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "Momentum:USDCHF",
+          "strategyName": "Momentum",
+          "symbol": "USDCHF",
+          "parameters": {
+            "ema_period": 30,
+            "rsi_period": 18,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 4,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.787Z",
+          "updatedAt": "2026-04-25T14:42:39.687Z"
+        },
+        {
+          "_id": "Momentum:USDJPY",
+          "strategyName": "Momentum",
+          "symbol": "USDJPY",
+          "createdAt": "2026-04-25T14:42:33.519Z",
+          "updatedAt": "2026-04-25T14:42:35.557Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "Momentum:XAGUSD",
+          "strategyName": "Momentum",
+          "symbol": "XAGUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.787Z",
+          "updatedAt": "2026-04-25T14:42:47.961Z"
+        },
+        {
+          "_id": "Momentum:XAUUSD",
+          "strategyName": "Momentum",
+          "symbol": "XAUUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.787Z",
+          "updatedAt": "2026-04-25T14:42:45.919Z"
+        },
+        {
+          "_id": "Momentum:XTIUSD",
+          "strategyName": "Momentum",
+          "symbol": "XTIUSD",
+          "createdAt": "2026-04-25T14:42:56.219Z",
+          "updatedAt": "2026-04-25T14:42:58.279Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:AUDUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "AUDUSD",
+          "createdAt": "2026-04-25T14:44:33.512Z",
+          "updatedAt": "2026-04-25T14:44:35.627Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:BTCUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "BTCUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.789Z",
+          "updatedAt": "2026-04-25T14:44:48.419Z"
+        },
+        {
+          "_id": "MultiTimeframe:ETHUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "ETHUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.789Z",
+          "updatedAt": "2026-04-25T14:44:50.583Z"
+        },
+        {
+          "_id": "MultiTimeframe:EURUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "EURUSD",
+          "createdAt": "2026-04-25T14:44:27.148Z",
+          "updatedAt": "2026-04-25T14:44:29.277Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:GBPJPY",
+          "strategyName": "MultiTimeframe",
+          "symbol": "GBPJPY",
+          "createdAt": "2026-04-22T13:20:03.739Z",
+          "updatedAt": "2026-04-25T08:16:08.022Z",
+          "parameters": {
+            "ema_trend": 200,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "stoch_period": 12,
+            "stoch_signal": 3,
+            "slMultiplier": 3,
+            "tpMultiplier": 6,
+            "riskPercent": 0.01
+          },
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "MultiTimeframe:GBPUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "GBPUSD",
+          "createdAt": "2026-04-25T14:44:29.278Z",
+          "updatedAt": "2026-04-25T14:44:31.399Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:NAS100",
+          "strategyName": "MultiTimeframe",
+          "symbol": "NAS100",
+          "parameters": {
+            "ema_trend": 200,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "stoch_period": 12,
+            "stoch_signal": 3,
+            "slMultiplier": 2,
+            "tpMultiplier": 3,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.788Z",
+          "updatedAt": "2026-04-25T14:44:52.762Z"
+        },
+        {
+          "_id": "MultiTimeframe:NZDUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "NZDUSD",
+          "createdAt": "2026-04-25T14:44:39.868Z",
+          "updatedAt": "2026-04-25T14:44:42.065Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:SPX500",
+          "strategyName": "MultiTimeframe",
+          "symbol": "SPX500",
+          "parameters": {
+            "ema_trend": 200,
+            "atr_period": 14,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "stoch_period": 12,
+            "stoch_signal": 5,
+            "slMultiplier": 3,
+            "tpMultiplier": 3.5,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.788Z",
+          "updatedAt": "2026-04-25T08:16:08.023Z"
+        },
+        {
+          "_id": "MultiTimeframe:US30",
+          "strategyName": "MultiTimeframe",
+          "symbol": "US30",
+          "createdAt": "2026-04-22T13:20:24.466Z",
+          "updatedAt": "2026-04-25T14:44:54.875Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "MultiTimeframe:USDCAD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "USDCAD",
+          "createdAt": "2026-04-25T14:44:37.750Z",
+          "updatedAt": "2026-04-25T14:44:39.865Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:USDCHF",
+          "strategyName": "MultiTimeframe",
+          "symbol": "USDCHF",
+          "createdAt": "2026-04-22T13:10:25.213Z",
+          "updatedAt": "2026-04-25T14:44:37.748Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "MultiTimeframe:USDJPY",
+          "strategyName": "MultiTimeframe",
+          "symbol": "USDJPY",
+          "createdAt": "2026-04-25T14:44:31.400Z",
+          "updatedAt": "2026-04-25T14:44:33.509Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:XAGUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "XAGUSD",
+          "createdAt": "2026-04-25T14:44:44.172Z",
+          "updatedAt": "2026-04-25T14:44:46.271Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "MultiTimeframe:XAUUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "XAUUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.788Z",
+          "updatedAt": "2026-04-25T14:44:44.170Z"
+        },
+        {
+          "_id": "MultiTimeframe:XTIUSD",
+          "strategyName": "MultiTimeframe",
+          "symbol": "XTIUSD",
+          "createdAt": "2026-04-25T14:44:54.878Z",
+          "updatedAt": "2026-04-25T14:44:58.174Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:ADAUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "ADAUSD",
+          "createdAt": "2026-04-25T14:03:49.827Z",
+          "updatedAt": "2026-04-25T14:42:00.475Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:AUDNZD",
+          "strategyName": "TrendFollowing",
+          "symbol": "AUDNZD",
+          "createdAt": "2026-04-25T14:03:02.117Z",
+          "updatedAt": "2026-04-25T14:42:00.476Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:AUDUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "AUDUSD",
+          "createdAt": "2026-04-25T12:39:34.414Z",
+          "updatedAt": "2026-04-25T13:35:25.501Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:BCHUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "BCHUSD",
+          "createdAt": "2026-04-25T14:03:35.105Z",
+          "updatedAt": "2026-04-25T14:42:00.477Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:BTCUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "BTCUSD",
+          "createdAt": "2026-04-25T12:42:10.451Z",
+          "updatedAt": "2026-04-25T13:35:59.615Z",
+          "parameters": {
+            "ema_fast": 30,
+            "ema_slow": 60,
+            "ema_trend": 200,
+            "rsi_period": 18,
+            "atr_period": 14,
+            "breakout_lookback": 4,
+            "pullback_atr_max": 1.05,
+            "rsi_buy_min": 53,
+            "slMultiplier": 2,
+            "tpMultiplier": 2,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:DOGEUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "DOGEUSD",
+          "createdAt": "2026-04-25T14:03:59.205Z",
+          "updatedAt": "2026-04-25T14:42:00.477Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:ETHUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "ETHUSD",
+          "createdAt": "2026-04-25T12:42:15.598Z",
+          "updatedAt": "2026-04-25T13:36:07.801Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:EURGBP",
+          "strategyName": "TrendFollowing",
+          "symbol": "EURGBP",
+          "createdAt": "2026-04-25T14:02:56.983Z",
+          "updatedAt": "2026-04-25T14:42:00.477Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:EURJPY",
+          "strategyName": "TrendFollowing",
+          "symbol": "EURJPY",
+          "createdAt": "2026-04-25T14:02:46.311Z",
+          "updatedAt": "2026-04-25T14:42:00.477Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:EURUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "EURUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.789Z",
+          "updatedAt": "2026-04-25T13:35:10.120Z"
+        },
+        {
+          "_id": "TrendFollowing:GBPJPY",
+          "strategyName": "TrendFollowing",
+          "symbol": "GBPJPY",
+          "createdAt": "2026-04-25T14:02:51.670Z",
+          "updatedAt": "2026-04-25T14:42:00.478Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:GBPUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "GBPUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.789Z",
+          "updatedAt": "2026-04-25T13:35:15.237Z"
+        },
+        {
+          "_id": "TrendFollowing:LTCUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "LTCUSD",
+          "createdAt": "2026-04-25T14:03:17.584Z",
+          "updatedAt": "2026-04-25T14:42:00.478Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:NAS100",
+          "strategyName": "TrendFollowing",
+          "symbol": "NAS100",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.790Z",
+          "updatedAt": "2026-04-25T13:36:12.989Z"
+        },
+        {
+          "_id": "TrendFollowing:NZDUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "NZDUSD",
+          "createdAt": "2026-04-25T12:39:43.693Z",
+          "updatedAt": "2026-04-25T13:35:40.951Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:SOLUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "SOLUSD",
+          "createdAt": "2026-04-25T12:42:41.139Z",
+          "updatedAt": "2026-04-25T14:03:49.823Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:SPX500",
+          "strategyName": "TrendFollowing",
+          "symbol": "SPX500",
+          "createdAt": "2026-04-25T14:03:07.269Z",
+          "updatedAt": "2026-04-25T14:42:00.478Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:US30",
+          "strategyName": "TrendFollowing",
+          "symbol": "US30",
+          "parameters": {
+            "ema_fast": 30,
+            "ema_slow": 60,
+            "ema_trend": 200,
+            "rsi_period": 18,
+            "atr_period": 14,
+            "breakout_lookback": 2,
+            "pullback_atr_max": 1.05,
+            "rsi_buy_min": 53,
+            "slMultiplier": 1.5,
+            "tpMultiplier": 2.5,
+            "riskPercent": 0.01
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.790Z",
+          "updatedAt": "2026-04-25T13:36:18.179Z"
+        },
+        {
+          "_id": "TrendFollowing:USDCAD",
+          "strategyName": "TrendFollowing",
+          "symbol": "USDCAD",
+          "createdAt": "2026-04-25T12:39:40.604Z",
+          "updatedAt": "2026-04-25T13:35:35.817Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:USDCHF",
+          "strategyName": "TrendFollowing",
+          "symbol": "USDCHF",
+          "createdAt": "2026-04-22T13:10:24.787Z",
+          "updatedAt": "2026-04-25T13:35:30.604Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "TrendFollowing:USDJPY",
+          "strategyName": "TrendFollowing",
+          "symbol": "USDJPY",
+          "createdAt": "2026-04-25T12:39:31.306Z",
+          "updatedAt": "2026-04-25T13:35:20.356Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:XAGUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "XAGUSD",
+          "createdAt": "2026-04-25T12:42:36.038Z",
+          "updatedAt": "2026-04-25T13:35:51.225Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:XAUUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "XAUUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.789Z",
+          "updatedAt": "2026-04-25T13:35:46.084Z"
+        },
+        {
+          "_id": "TrendFollowing:XBRUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "XBRUSD",
+          "createdAt": "2026-04-25T14:03:12.416Z",
+          "updatedAt": "2026-04-25T14:42:00.478Z",
+          "parameters": {
+            "breakout_lookback": 2,
+            "pullback_atr_max": 1.4,
+            "rsi_buy_min": 56,
+            "slMultiplier": 1,
+            "tpMultiplier": 1.5,
+            "riskPercent": 0.02
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:XRPUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "XRPUSD",
+          "createdAt": "2026-04-25T14:03:25.761Z",
+          "updatedAt": "2026-04-25T14:42:00.478Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "TrendFollowing:XTIUSD",
+          "strategyName": "TrendFollowing",
+          "symbol": "XTIUSD",
+          "createdAt": "2026-04-25T12:42:30.921Z",
+          "updatedAt": "2026-04-25T13:36:26.324Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:AUDUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "AUDUSD",
+          "createdAt": "2026-04-25T14:43:39.826Z",
+          "updatedAt": "2026-04-25T14:43:44.180Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:BTCUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "BTCUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.792Z",
+          "updatedAt": "2026-04-25T14:44:10.461Z"
+        },
+        {
+          "_id": "VolumeFlowHybrid:ETHUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "ETHUSD",
+          "createdAt": "2026-04-25T14:44:10.466Z",
+          "updatedAt": "2026-04-25T14:44:15.406Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:EURUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "EURUSD",
+          "createdAt": "2026-04-25T14:43:27.176Z",
+          "updatedAt": "2026-04-25T14:43:31.325Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:GBPUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "GBPUSD",
+          "createdAt": "2026-04-25T14:43:31.331Z",
+          "updatedAt": "2026-04-25T14:43:35.429Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:NAS100",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "NAS100",
+          "createdAt": "2026-04-25T14:44:15.411Z",
+          "updatedAt": "2026-04-25T14:44:19.026Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:NZDUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "NZDUSD",
+          "createdAt": "2026-04-25T14:43:52.516Z",
+          "updatedAt": "2026-04-25T14:43:56.639Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:SPX500",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "SPX500",
+          "parameters": {
+            "rvol_continuation": 1.8,
+            "rvol_reversal": 2.2,
+            "volume_avg_period": 20,
+            "breakout_lookback": 10,
+            "body_atr_threshold": 0.7,
+            "wick_ratio_threshold": 1.8,
+            "vwap_reclaim_tolerance_atr": 0.25,
+            "cumulative_delta_smoothing": 8,
+            "ema_fast": 20,
+            "ema_slow": 50,
+            "atr_period": 14,
+            "slMultiplier": 1.4,
+            "tpMultiplier": 1.6,
+            "reversal_sl_atr": 1,
+            "reversal_tp_atr": 1.5,
+            "min_confidence": 0.55,
+            "riskPercent": 0.015,
+            "small_account_profile": 0
+          },
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.791Z",
+          "updatedAt": "2026-04-25T08:16:08.033Z"
+        },
+        {
+          "_id": "VolumeFlowHybrid:US30",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "US30",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.791Z",
+          "updatedAt": "2026-04-25T14:44:22.845Z"
+        },
+        {
+          "_id": "VolumeFlowHybrid:USDCAD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "USDCAD",
+          "createdAt": "2026-04-25T14:43:48.149Z",
+          "updatedAt": "2026-04-25T14:43:52.511Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:USDCHF",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "USDCHF",
+          "createdAt": "2026-04-22T13:10:25.428Z",
+          "updatedAt": "2026-04-25T14:43:48.144Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          }
+        },
+        {
+          "_id": "VolumeFlowHybrid:USDJPY",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "USDJPY",
+          "createdAt": "2026-04-25T14:43:35.434Z",
+          "updatedAt": "2026-04-25T14:43:39.820Z",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": null,
+          "tradeManagement": null,
+          "executionPolicy": null
+        },
+        {
+          "_id": "VolumeFlowHybrid:XAGUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "XAGUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.790Z",
+          "updatedAt": "2026-04-25T14:44:05.401Z"
+        },
+        {
+          "_id": "VolumeFlowHybrid:XAUUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "XAUUSD",
+          "parameters": {
+            "rvol_continuation": 1.8,
+            "rvol_reversal": 2.2,
+            "volume_avg_period": 20,
+            "breakout_lookback": 10,
+            "body_atr_threshold": 0.7,
+            "wick_ratio_threshold": 1.8,
+            "vwap_reclaim_tolerance_atr": 0.25,
+            "cumulative_delta_smoothing": 8,
+            "ema_fast": 20,
+            "ema_slow": 50,
+            "atr_period": 14,
+            "slMultiplier": 1.4,
+            "tpMultiplier": 2.4,
+            "reversal_sl_atr": 1,
+            "reversal_tp_atr": 1.5,
+            "min_confidence": 0.55,
+            "riskPercent": 0.015,
+            "small_account_profile": 0
+          },
+          "enabled": true,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.790Z",
+          "updatedAt": "2026-04-25T14:44:01.203Z"
+        },
+        {
+          "_id": "VolumeFlowHybrid:XBRUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "XBRUSD",
+          "parameters": {
+            "rvol_continuation": 1.8,
+            "rvol_reversal": 2.2,
+            "volume_avg_period": 20,
+            "breakout_lookback": 10,
+            "body_atr_threshold": 0.7,
+            "wick_ratio_threshold": 1.8,
+            "vwap_reclaim_tolerance_atr": 0.25,
+            "cumulative_delta_smoothing": 8,
+            "ema_fast": 20,
+            "ema_slow": 50,
+            "atr_period": 14,
+            "slMultiplier": 1.4,
+            "tpMultiplier": 1.6,
+            "reversal_sl_atr": 1,
+            "reversal_tp_atr": 1.5,
+            "min_confidence": 0.55,
+            "riskPercent": 0.015,
+            "small_account_profile": 0
+          },
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.792Z",
+          "updatedAt": "2026-04-25T08:16:08.037Z"
+        },
+        {
+          "_id": "VolumeFlowHybrid:XTIUSD",
+          "strategyName": "VolumeFlowHybrid",
+          "symbol": "XTIUSD",
+          "parameters": {},
+          "enabled": false,
+          "newsBlackout": {
+            "enabled": true,
+            "beforeMinutes": 40,
+            "afterMinutes": 20,
+            "impactLevels": [
+              "High"
+            ]
+          },
+          "createdAt": "2026-04-22T11:33:47.791Z",
+          "updatedAt": "2026-04-25T14:44:27.142Z"
+        }
+      ]
+    }
+  }
+}

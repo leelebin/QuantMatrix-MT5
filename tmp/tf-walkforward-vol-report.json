@@ -1,0 +1,309 @@
+{
+  "startedAt": "2026-04-25T12:46:02.519Z",
+  "strategy": "TrendFollowing",
+  "period": {
+    "is": {
+      "start": "2025-10-15",
+      "end": "2026-02-15"
+    },
+    "oos": {
+      "start": "2026-02-15",
+      "end": "2026-04-25"
+    }
+  },
+  "initialBalance": 500,
+  "items": [
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "XAUUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 26,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 6,
+          "pf": 1.23,
+          "ret": 5.29,
+          "monthlyReturn": 1.3090599593495933,
+          "wr": 50,
+          "dd": 23.92,
+          "sharpe": 1.3
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS PF=1.23<1.5",
+            "IS mRet=1.3%<8%",
+            "IS WR=50.0%<55%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "BTCUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 24,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 9,
+          "pf": 0.56,
+          "ret": -5.13,
+          "monthlyReturn": -1.269466463414634,
+          "wr": 77.78,
+          "dd": 8.72,
+          "sharpe": -2.91
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS PF=0.56<1.5",
+            "IS mRet=-1.3%<8%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "ETHUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 22,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.02
+        },
+        "metrics": {
+          "trades": 7,
+          "pf": 0.36,
+          "ret": -1.39,
+          "monthlyReturn": -0.3439684959349593,
+          "wr": 71.43,
+          "dd": 2.83,
+          "sharpe": -5.58
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS PF=0.36<1.5",
+            "IS mRet=-0.3%<8%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "NAS100",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 26,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 5,
+          "pf": 0.1,
+          "ret": -6.69,
+          "monthlyReturn": -1.6555030487804878,
+          "wr": 60,
+          "dd": 8.74,
+          "sharpe": -10.74
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=5<6",
+            "IS PF=0.10<1.5",
+            "IS mRet=-1.7%<8%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "US30",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 20,
+          "pullback_atr_max": 0.4,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 5,
+          "pf": 1.85,
+          "ret": 4.39,
+          "monthlyReturn": 1.086346544715447,
+          "wr": 80,
+          "dd": 5.14,
+          "sharpe": 3.78
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=5<6",
+            "IS mRet=1.1%<8%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "XTIUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 20,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 5,
+          "pf": 0.27,
+          "ret": -3.64,
+          "monthlyReturn": -0.9007520325203251,
+          "wr": 40,
+          "dd": 4.96,
+          "sharpe": -8.92
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=5<6",
+            "IS PF=0.27<1.5",
+            "IS mRet=-0.9%<8%",
+            "IS WR=40.0%<55%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "XAGUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 22,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 6,
+          "pf": 3.09,
+          "ret": 37.83,
+          "monthlyReturn": 9.36138719512195,
+          "wr": 66.67,
+          "dd": 30.92,
+          "sharpe": 5.22
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS DD=30.9%>30%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "SOLUSD",
+      "status": "opt_failed",
+      "error": "no best",
+      "decision": "disable",
+      "decisionApplied": true
+    }
+  ],
+  "finishedAt": "2026-04-25T12:47:16.423Z"
+}

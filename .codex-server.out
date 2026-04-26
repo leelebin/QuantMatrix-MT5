@@ -1,10 +1,1520 @@
 [Notify] Telegram notification service enabled
+Database Connected: NeDB (local file storage)
+Data directory: C:\Users\lebin\OneDrive\桌面\claudetrader4\QuantMatrix-MT5-main\data
+[StrategyInstance] migrateFromLegacy migrated=0 skipped=40
+[EconCalendar] fetched 81 events
 Server running on port 5000
 Dashboard: http://localhost:5000
 [WS] WebSocket server initialized on /ws
-Database Connected: NeDB (local file storage)
-Data directory: C:\Users\lebin\OneDrive\桌面\claudetrader4\QuantMatrix-MT5-main\data
 [WS] Client #1 connected from ::1 (total: 1)
-[WS] Client #1 disconnected | code: 1000 | reason: done | duration: 0s
-[WS] Client #2 connected from ::1 (total: 1)
-[WS] Client #2 disconnected | code: 1000 | reason: done | duration: 4s
+[MT5] Starting Python bridge...
+[MT5] Python bridge ready
+[MT5] Connecting to Elev8-Demo2 with login 230044684...
+[MT5] Connected successfully
+[PaperTrading] Connected to account: 230044684 | Server: Elev8-Demo2
+[PaperTrading] Balance: 243.83 USD | Leverage: 1:1000
+[PaperTrading] Position monitor started (base tick: 15s)
+[PaperTrading] Multi-cadence trading loop started
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for GBPUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-09T22:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for USDCHF/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-24T16:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-24T16:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: USDCHF 1h | requested=251 received=251 | first=2026-04-09T22:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for NZDUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Position closed: EURUSD SELL | P/L: -0.33 (-3.3 pips) | Reason: EXTERNAL | Held: 10h 49m
+[WS] Broadcast trades:paper_trade_closed to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-21T14:15:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-21T15:00:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NZDUSD 1h | requested=251 received=251 | first=2026-04-09T22:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for XAGUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-09T22:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: XAGUSD 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for US30/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-24T16:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-21T18:00:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for SPX500/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-21T14:15:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-09T22:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for NAS100/Breakout source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-13T20:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-21T18:00:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for XTIUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-13T16:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: XTIUSD 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for XBRUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-21T18:00:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XBRUSD 1h | requested=251 received=251 | first=2026-04-08T20:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for BTCUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-13T20:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-13T20:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for ETHUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-13T16:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-13T20:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for LTCUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-21T18:00:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: LTCUSD 1h | requested=251 received=251 | first=2026-04-13T20:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for EURUSD/MeanReversion source='instance'
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T11:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-09T22:00:00+00:00 last=2026-04-24T08:00:00+00:00
+[Engine] Using strategy parameters for US30/MeanReversion source='instance'
+[Engine] Using strategy parameters for SPX500/MeanReversion source='instance'
+[Engine] Using strategy parameters for NAS100/MeanReversion source='instance'
+[Engine] Using strategy parameters for XTIUSD/MeanReversion source='instance'
+[Engine] Using strategy parameters for EURUSD/Momentum source='instance'
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-21T14:15:00+00:00 last=2026-04-24T08:30:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast status:execution_audit to 1 client(s)
+[PaperTrading] Trade rejected: EURUSD - Duplicate entry blocked within 1 bar(s) for EURUSD/Momentum
+[WS] Broadcast signals:paper_trade_rejected to 1 client(s)
+[Engine] Using strategy parameters for GBPUSD/Momentum source='instance'
+[Engine] Using strategy parameters for USDCHF/Momentum source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast status:execution_audit to 1 client(s)
+[PaperTrading] Trade rejected: USDCHF - Max same-direction positions for USDCHF reached: 1 >= 1
+[WS] Broadcast signals:paper_trade_rejected to 1 client(s)
+[Engine] Using strategy parameters for NZDUSD/Momentum source='instance'
+[Engine] Using strategy parameters for XAUUSD/Momentum source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XAGUSD/Momentum source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T10:35:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T04:30:00+00:00 last=2026-04-24T18:50:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast status:execution_audit to 1 client(s)
+[PaperTrading] Trade rejected: XAGUSD - Max same-direction positions for XAGUSD reached: 1 >= 1
+[WS] Broadcast signals:paper_trade_rejected to 1 client(s)
+[Engine] Using strategy parameters for US30/Momentum source='instance'
+[Engine] Using strategy parameters for NAS100/Momentum source='instance'
+[Engine] Using strategy parameters for BTCUSD/Momentum source='instance'
+[Engine] Using strategy parameters for ETHUSD/Momentum source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast status:paper_trading_started to 1 client(s)
+[DailyReport] Scheduler started (report at 23:55)
+[PaperTrading] Position closed: USDCHF BUY | P/L: -1.07 (-8.4 pips) | Reason: SL_HIT | Held: 6h 57m
+[WS] Broadcast trades:paper_trade_closed to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Position closed: XAGUSD SELL | P/L: -31.80 (-636.0 pips) | Reason: SL_HIT | Held: 9h 7m
+[WS] Broadcast trades:paper_trade_closed to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Position closed: XAUUSD SELL | P/L: -24.29 (-2429.0 pips) | Reason: SL_HIT | Held: 6h 50m
+[WS] Broadcast trades:paper_trade_closed to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Client #2 connected from ::1 (total: 2)
+[WS] Client #1 disconnected | code: 1001 | reason:  | duration: 18s
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:40:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:41:00+00:00 last=2026-04-24T18:51:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:42:00+00:00 last=2026-04-24T18:52:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for GBPUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for USDCHF/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: USDCHF 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for NZDUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NZDUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XAGUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAGUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for US30/Breakout source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for SPX500/Breakout source='instance'
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for NAS100/Breakout source='instance'
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XTIUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XTIUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XBRUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XBRUSD 1h | requested=251 received=251 | first=2026-04-08T20:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for BTCUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for ETHUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for LTCUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: LTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for EURUSD/MeanReversion source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for US30/MeanReversion source='instance'
+[Engine] Using strategy parameters for SPX500/MeanReversion source='instance'
+[Engine] Using strategy parameters for NAS100/MeanReversion source='instance'
+[Engine] Using strategy parameters for XTIUSD/MeanReversion source='instance'
+[Engine] Using strategy parameters for EURUSD/Momentum source='instance'
+[Engine] Using strategy parameters for GBPUSD/Momentum source='instance'
+[Engine] Using strategy parameters for USDCHF/Momentum source='instance'
+[Engine] Using strategy parameters for NZDUSD/Momentum source='instance'
+[Engine] Using strategy parameters for XAUUSD/Momentum source='instance'
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XAGUSD/Momentum source='instance'
+[Engine] Using strategy parameters for US30/Momentum source='instance'
+[Engine] Using strategy parameters for NAS100/Momentum source='instance'
+[Engine] Using strategy parameters for BTCUSD/Momentum source='instance'
+[Engine] Using strategy parameters for ETHUSD/Momentum source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:43:00+00:00 last=2026-04-24T18:53:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:00:00+00:00 last=2026-04-24T18:50:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:45:00+00:00 last=2026-04-24T18:50:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:44:00+00:00 last=2026-04-24T18:54:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Client #3 connected from ::1 (total: 2)
+[WS] Client #2 disconnected | code: 1001 | reason:  | duration: 4m 36s
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 1 client(s)
+[WS] Client #4 connected from ::1 (total: 2)
+[WS] Client #4 disconnected | code: 1001 | reason:  | duration: 5s
+[WS] Client #5 connected from ::1 (total: 2)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[DailyReport] Generating report for 2026-04-23...
+[DailyReport] Report sent for 2026-04-23
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:45:00+00:00 last=2026-04-24T18:55:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[Engine] Using strategy parameters for GBPUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for USDCHF/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: USDCHF 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for NZDUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NZDUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XAGUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAGUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for US30/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for SPX500/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for NAS100/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XTIUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XTIUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XBRUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XBRUSD 1h | requested=251 received=251 | first=2026-04-08T20:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for BTCUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for ETHUSD/Breakout source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for LTCUSD/Breakout source='instance'
+[PaperTrading] Candles fetched: LTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for EURUSD/MeanReversion source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for US30/MeanReversion source='instance'
+[Engine] Using strategy parameters for SPX500/MeanReversion source='instance'
+[Engine] Using strategy parameters for NAS100/MeanReversion source='instance'
+[Engine] Using strategy parameters for XTIUSD/MeanReversion source='instance'
+[Engine] Using strategy parameters for EURUSD/Momentum source='instance'
+[Engine] Using strategy parameters for GBPUSD/Momentum source='instance'
+[Engine] Using strategy parameters for USDCHF/Momentum source='instance'
+[Engine] Using strategy parameters for NZDUSD/Momentum source='instance'
+[Engine] Using strategy parameters for XAUUSD/Momentum source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[Engine] Using strategy parameters for XAGUSD/Momentum source='instance'
+[Engine] Using strategy parameters for US30/Momentum source='instance'
+[Engine] Using strategy parameters for NAS100/Momentum source='instance'
+[Engine] Using strategy parameters for BTCUSD/Momentum source='instance'
+[Engine] Using strategy parameters for ETHUSD/Momentum source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 2 client(s)
+[WS] Client #6 connected from ::1 (total: 3)
+[Engine] Using strategy parameters for XAUUSD/MultiTimeframe source='instance'
+[Engine] Using strategy parameters for SPX500/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: XAUUSD 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: SPX500 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for EURUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: SPX500 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: EURUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: NAS100 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: EURUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for GBPUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: NAS100 4h | requested=251 received=251 | first=2026-02-25T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: GBPUSD 1h | requested=251 received=251 | first=2026-04-10T08:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: NAS100 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for BTCUSD/MultiTimeframe source='instance'
+[PaperTrading] Candles fetched: GBPUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for XAUUSD/TrendFollowing source='instance'
+[PaperTrading] Candles fetched: BTCUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: BTCUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: BTCUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for ETHUSD/MultiTimeframe source='instance'
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: ETHUSD 1h | requested=251 received=251 | first=2026-04-14T06:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 4h | requested=251 received=251 | first=2026-03-14T00:00:00+00:00 last=2026-04-24T16:00:00+00:00
+[PaperTrading] Candles fetched: ETHUSD 15m | requested=251 received=251 | first=2026-04-22T04:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for US30/TrendFollowing source='instance'
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: US30 1h | requested=251 received=251 | first=2026-04-09T21:00:00+00:00 last=2026-04-24T18:00:00+00:00
+[PaperTrading] Candles fetched: US30 15m | requested=251 received=251 | first=2026-04-22T01:45:00+00:00 last=2026-04-24T18:45:00+00:00
+[Engine] Using strategy parameters for NAS100/TrendFollowing source='instance'
+[Engine] Using strategy parameters for XAUUSD/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: XAUUSD 5m | requested=251 received=251 | first=2026-04-23T21:05:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 15m | requested=251 received=251 | first=2026-04-22T02:15:00+00:00 last=2026-04-24T18:45:00+00:00
+[PaperTrading] Candles fetched: XAUUSD 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for US30/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: US30 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: US30 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[Engine] Using strategy parameters for SPX500/VolumeFlowHybrid source='instance'
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)
+[PaperTrading] Candles fetched: SPX500 5m | requested=251 received=251 | first=2026-04-23T20:50:00+00:00 last=2026-04-24T18:55:00+00:00
+[PaperTrading] Candles fetched: SPX500 1m | requested=251 received=251 | first=2026-04-24T14:46:00+00:00 last=2026-04-24T18:56:00+00:00
+[WS] Broadcast diagnostics:decision_audit to 3 client(s)

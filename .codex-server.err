@@ -1,2 +1,3 @@
 [WARNING] Using default/generated JWT_SECRET. Please set a proper one in .env file.
 [WARNING] Using default/generated JWT_REFRESH_SECRET. Please set a proper one in .env file.
+[Trading] Start error: Live trading is locked. Set ALLOW_LIVE_TRADING=true only after verifying the real account.

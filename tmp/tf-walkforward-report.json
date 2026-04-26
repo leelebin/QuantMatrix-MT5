@@ -1,0 +1,301 @@
+{
+  "startedAt": "2026-04-25T12:39:21.982Z",
+  "strategy": "TrendFollowing",
+  "period": {
+    "is": {
+      "start": "2025-10-15",
+      "end": "2026-02-15"
+    },
+    "oos": {
+      "start": "2026-02-15",
+      "end": "2026-04-25"
+    }
+  },
+  "initialBalance": 500,
+  "items": [
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "EURUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 18,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 9,
+          "pf": 1.19,
+          "ret": 0.49,
+          "monthlyReturn": 0.121255081300813,
+          "wr": 66.67,
+          "dd": 1.76,
+          "sharpe": 1.23
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=9<10",
+            "IS PF=1.19<1.5",
+            "IS mRet=0.1%<10%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "GBPUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 18,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 2.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 6,
+          "pf": 1.1,
+          "ret": 0.07,
+          "monthlyReturn": 0.017322154471544716,
+          "wr": 83.33,
+          "dd": 0.72,
+          "sharpe": 0.53
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=6<10",
+            "IS PF=1.10<1.5",
+            "IS mRet=0.0%<10%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "USDJPY",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 20,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 5,
+          "pf": 999,
+          "ret": 79.1,
+          "monthlyReturn": 19.574034552845525,
+          "wr": 100,
+          "dd": 45.56,
+          "sharpe": 14.88
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=5<10",
+            "IS DD=45.6%>25%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "AUDUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 18,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 5,
+          "pf": 0.02,
+          "ret": -3.58,
+          "monthlyReturn": -0.8859044715447154,
+          "wr": 20,
+          "dd": 3.58,
+          "sharpe": -25.35
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=5<10",
+            "IS PF=0.02<1.5",
+            "IS mRet=-0.9%<10%",
+            "IS WR=20.0%<55%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "USDCHF",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 25,
+          "ema_slow": 40,
+          "ema_trend": 200,
+          "rsi_period": 10,
+          "atr_period": 14,
+          "adx_threshold": 18,
+          "pullback_atr_max": 0.4,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 5,
+          "pf": 999,
+          "ret": 1.18,
+          "monthlyReturn": 0.29200203252032514,
+          "wr": 100,
+          "dd": 0.74,
+          "sharpe": 20.07
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=5<10",
+            "IS mRet=0.3%<10%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "USDCAD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 18,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 6,
+          "pf": 2.51,
+          "ret": 1.13,
+          "monthlyReturn": 0.2796290650406503,
+          "wr": 83.33,
+          "dd": 1.3,
+          "sharpe": 4.45
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=6<10",
+            "IS mRet=0.3%<10%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "NZDUSD",
+      "status": "is_fail",
+      "is": {
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "adx_threshold": 18,
+          "pullback_atr_max": 0.9,
+          "pullback_lookback": 4,
+          "swing_lookback": 5,
+          "slMultiplier": 2,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "metrics": {
+          "trades": 11,
+          "pf": 4,
+          "ret": 2.47,
+          "monthlyReturn": 0.6112245934959349,
+          "wr": 90.91,
+          "dd": 1.04,
+          "sharpe": 5.29
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS mRet=0.6%<10%"
+          ]
+        },
+        "totalCombos": null
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    }
+  ],
+  "finishedAt": "2026-04-25T12:39:43.695Z"
+}

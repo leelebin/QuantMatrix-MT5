@@ -1,0 +1,3849 @@
+{
+  "startedAt": "2026-04-25T07:24:51.902Z",
+  "period": {
+    "start": "2025-10-15",
+    "end": "2026-04-20"
+  },
+  "initialBalance": 10000,
+  "optimizeFor": "profitFactor",
+  "total": 52,
+  "items": [
+    {
+      "strategy": "Breakout",
+      "symbol": "BTCUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 30,
+          "body_multiplier": 1.5,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 2,
+          "tpMultiplier": 4.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 136,
+          "winningTrades": 108,
+          "losingTrades": 28,
+          "winRate": 0.7941,
+          "profitFactor": 1.65,
+          "grossProfitMoney": 4796.38,
+          "grossLossMoney": 2906.83,
+          "totalProfitPips": 6106933,
+          "totalLossPips": -3411778,
+          "netProfitPips": 2695155,
+          "netProfitMoney": 1889.55,
+          "returnPercent": 18.9,
+          "averageWinPips": 56545.7,
+          "averageLossPips": -121849.2,
+          "maxConsecutiveWins": 15,
+          "maxConsecutiveLosses": 4,
+          "maxDrawdownPercent": 4.4,
+          "sharpeRatio": 2.82,
+          "averageHoldingPeriodHours": 5
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "ETHUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 30,
+          "body_multiplier": 1,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 2,
+          "tpMultiplier": 4.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 118,
+          "winningTrades": 87,
+          "losingTrades": 31,
+          "winRate": 0.7373,
+          "profitFactor": 1.54,
+          "grossProfitMoney": 5003.87,
+          "grossLossMoney": 3246.35,
+          "totalProfitPips": 280821.5,
+          "totalLossPips": -175202.5,
+          "netProfitPips": 105619,
+          "netProfitMoney": 1757.52,
+          "returnPercent": 17.58,
+          "averageWinPips": 3227.8,
+          "averageLossPips": -5651.7,
+          "maxConsecutiveWins": 9,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 3.83,
+          "sharpeRatio": 2.58,
+          "averageHoldingPeriodHours": 5.1
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "EURUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 20,
+          "body_multiplier": 1.5,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 5.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 114,
+          "winningTrades": 87,
+          "losingTrades": 27,
+          "winRate": 0.7632,
+          "profitFactor": 2.35,
+          "grossProfitMoney": 7554.94,
+          "grossLossMoney": 3212.65,
+          "totalProfitPips": 1134,
+          "totalLossPips": -553.2,
+          "netProfitPips": 580.8,
+          "netProfitMoney": 4342.29,
+          "returnPercent": 43.42,
+          "averageWinPips": 13,
+          "averageLossPips": -20.5,
+          "maxConsecutiveWins": 9,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 3.49,
+          "sharpeRatio": 4.62,
+          "averageHoldingPeriodHours": 5.1
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "GBPUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 15,
+          "body_multiplier": 2,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 6,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 130,
+          "winningTrades": 100,
+          "losingTrades": 30,
+          "winRate": 0.7692,
+          "profitFactor": 2.46,
+          "grossProfitMoney": 9982.61,
+          "grossLossMoney": 4053.62,
+          "totalProfitPips": 1383.2,
+          "totalLossPips": -917.3,
+          "netProfitPips": 465.9,
+          "netProfitMoney": 5928.99,
+          "returnPercent": 59.29,
+          "averageWinPips": 13.8,
+          "averageLossPips": -30.6,
+          "maxConsecutiveWins": 13,
+          "maxConsecutiveLosses": 4,
+          "maxDrawdownPercent": 4.27,
+          "sharpeRatio": 4.38,
+          "averageHoldingPeriodHours": 4
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "LTCUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 15,
+          "body_multiplier": 1.5,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 3,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 135,
+          "winningTrades": 95,
+          "losingTrades": 40,
+          "winRate": 0.7037,
+          "profitFactor": 0.94,
+          "grossProfitMoney": 3667.54,
+          "grossLossMoney": 3921.24,
+          "totalProfitPips": 9570.5,
+          "totalLossPips": -9993,
+          "netProfitPips": -422.5,
+          "netProfitMoney": -253.7,
+          "returnPercent": -2.54,
+          "averageWinPips": 100.7,
+          "averageLossPips": -249.8,
+          "maxConsecutiveWins": 9,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 8.45,
+          "sharpeRatio": -0.45,
+          "averageHoldingPeriodHours": 10.3
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "NAS100",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 25,
+          "body_multiplier": 2.5,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 3.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 77,
+          "winningTrades": 58,
+          "losingTrades": 19,
+          "winRate": 0.7532,
+          "profitFactor": 1.87,
+          "grossProfitMoney": 3580.63,
+          "grossLossMoney": 1917.22,
+          "totalProfitPips": 458067.1,
+          "totalLossPips": -232411.2,
+          "netProfitPips": 225655.9,
+          "netProfitMoney": 1663.41,
+          "returnPercent": 16.63,
+          "averageWinPips": 7897.7,
+          "averageLossPips": -12232.2,
+          "maxConsecutiveWins": 11,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 3.81,
+          "sharpeRatio": 3.66,
+          "averageHoldingPeriodHours": 10.1
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "NZDUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 20,
+          "body_multiplier": 1,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 114,
+          "winningTrades": 89,
+          "losingTrades": 25,
+          "winRate": 0.7807,
+          "profitFactor": 2.4,
+          "grossProfitMoney": 7388.9,
+          "grossLossMoney": 3081.18,
+          "totalProfitPips": 1125.6,
+          "totalLossPips": -578.5,
+          "netProfitPips": 547.1,
+          "netProfitMoney": 4307.72,
+          "returnPercent": 43.08,
+          "averageWinPips": 12.6,
+          "averageLossPips": -23.1,
+          "maxConsecutiveWins": 20,
+          "maxConsecutiveLosses": 4,
+          "maxDrawdownPercent": 4.39,
+          "sharpeRatio": 5.51,
+          "averageHoldingPeriodHours": 8.6
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "SPX500",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 15,
+          "body_multiplier": 2,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 104,
+          "winningTrades": 73,
+          "losingTrades": 31,
+          "winRate": 0.7019,
+          "profitFactor": 1.3,
+          "grossProfitMoney": 4213.43,
+          "grossLossMoney": 3245,
+          "totalProfitPips": 107333.3,
+          "totalLossPips": -81686.9,
+          "netProfitPips": 25646.4,
+          "netProfitMoney": 968.43,
+          "returnPercent": 9.68,
+          "averageWinPips": 1470.3,
+          "averageLossPips": -2635.1,
+          "maxConsecutiveWins": 8,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 5.49,
+          "sharpeRatio": 1.55,
+          "averageHoldingPeriodHours": 7.3
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "US30",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 15,
+          "body_multiplier": 1,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 3,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 96,
+          "winningTrades": 79,
+          "losingTrades": 17,
+          "winRate": 0.8229,
+          "profitFactor": 1.94,
+          "grossProfitMoney": 2746.14,
+          "grossLossMoney": 1416.93,
+          "totalProfitPips": 1012996.5,
+          "totalLossPips": -656033,
+          "netProfitPips": 356963.5,
+          "netProfitMoney": 1329.21,
+          "returnPercent": 13.29,
+          "averageWinPips": 12822.7,
+          "averageLossPips": -38590.2,
+          "maxConsecutiveWins": 19,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 2.36,
+          "sharpeRatio": 3.81,
+          "averageHoldingPeriodHours": 11.1
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "USDCHF",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 30,
+          "body_multiplier": 2.5,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 87,
+          "winningTrades": 68,
+          "losingTrades": 19,
+          "winRate": 0.7816,
+          "profitFactor": 2.6,
+          "grossProfitMoney": 5458.48,
+          "grossLossMoney": 2103.28,
+          "totalProfitPips": 1039.4,
+          "totalLossPips": -556.3,
+          "netProfitPips": 483.1,
+          "netProfitMoney": 3355.2,
+          "returnPercent": 33.55,
+          "averageWinPips": 15.3,
+          "averageLossPips": -29.3,
+          "maxConsecutiveWins": 13,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 3.15,
+          "sharpeRatio": 6.55,
+          "averageHoldingPeriodHours": 9.1
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "XAGUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 30,
+          "body_multiplier": 1,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 3,
+          "tpMultiplier": 6,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 93,
+          "winningTrades": 77,
+          "losingTrades": 16,
+          "winRate": 0.828,
+          "profitFactor": 2.07,
+          "grossProfitMoney": 4275.15,
+          "grossLossMoney": 2069.41,
+          "totalProfitPips": 81715.5,
+          "totalLossPips": -39707,
+          "netProfitPips": 42008.5,
+          "netProfitMoney": 2205.74,
+          "returnPercent": 22.06,
+          "averageWinPips": 1061.2,
+          "averageLossPips": -2481.7,
+          "maxConsecutiveWins": 14,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 3.44,
+          "sharpeRatio": 3.06,
+          "averageHoldingPeriodHours": 10.4
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "XAUUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 20,
+          "body_multiplier": 1,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 3,
+          "tpMultiplier": 4.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 91,
+          "winningTrades": 74,
+          "losingTrades": 17,
+          "winRate": 0.8132,
+          "profitFactor": 2.23,
+          "grossProfitMoney": 3216.73,
+          "grossLossMoney": 1441.16,
+          "totalProfitPips": 266341,
+          "totalLossPips": -125490.5,
+          "netProfitPips": 140850.5,
+          "netProfitMoney": 1775.57,
+          "returnPercent": 17.76,
+          "averageWinPips": 3599.2,
+          "averageLossPips": -7381.8,
+          "maxConsecutiveWins": 14,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 2.51,
+          "sharpeRatio": 4.62,
+          "averageHoldingPeriodHours": 16.7
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "XBRUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 15,
+          "body_multiplier": 1,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 116,
+          "winningTrades": 77,
+          "losingTrades": 39,
+          "winRate": 0.6638,
+          "profitFactor": 1.24,
+          "grossProfitMoney": 4720.71,
+          "grossLossMoney": 3819.34,
+          "totalProfitPips": 5340.4,
+          "totalLossPips": -3520.5,
+          "netProfitPips": 1819.9,
+          "netProfitMoney": 901.37,
+          "returnPercent": 9.01,
+          "averageWinPips": 69.4,
+          "averageLossPips": -90.3,
+          "maxConsecutiveWins": 11,
+          "maxConsecutiveLosses": 5,
+          "maxDrawdownPercent": 5.7,
+          "sharpeRatio": 1.29,
+          "averageHoldingPeriodHours": 6.2
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Breakout",
+      "symbol": "XTIUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "lookback_period": 15,
+          "body_multiplier": 2,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 3,
+          "tpMultiplier": 5.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 104,
+          "winningTrades": 87,
+          "losingTrades": 17,
+          "winRate": 0.8365,
+          "profitFactor": 1.58,
+          "grossProfitMoney": 2564.45,
+          "grossLossMoney": 1624.35,
+          "totalProfitPips": 5093.5,
+          "totalLossPips": -4218.5,
+          "netProfitPips": 875,
+          "netProfitMoney": 940.1,
+          "returnPercent": 9.4,
+          "averageWinPips": 58.5,
+          "averageLossPips": -248.1,
+          "maxConsecutiveWins": 19,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 3.69,
+          "sharpeRatio": 2.5,
+          "averageHoldingPeriodHours": 10.6
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MeanReversion",
+      "symbol": "EURUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "bb_period": 20,
+          "bb_stddev": 1.5,
+          "rsi_period": 14,
+          "rsi_oversold": 20,
+          "rsi_overbought": 75,
+          "atr_period": 14,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 5,
+          "winningTrades": 4,
+          "losingTrades": 1,
+          "winRate": 0.8,
+          "profitFactor": 2.65,
+          "grossProfitMoney": 268.47,
+          "grossLossMoney": 101.5,
+          "totalProfitPips": 41.2,
+          "totalLossPips": -14.5,
+          "netProfitPips": 26.7,
+          "netProfitMoney": 166.97,
+          "returnPercent": 1.67,
+          "averageWinPips": 10.3,
+          "averageLossPips": -14.5,
+          "maxConsecutiveWins": 4,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 0.99,
+          "sharpeRatio": 7.19,
+          "averageHoldingPeriodHours": 4.4
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MeanReversion",
+      "symbol": "NAS100",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "bb_period": 25,
+          "bb_stddev": 2.5,
+          "rsi_period": 14,
+          "rsi_oversold": 20,
+          "rsi_overbought": 80,
+          "atr_period": 14,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 7,
+          "winningTrades": 5,
+          "losingTrades": 2,
+          "winRate": 0.7143,
+          "profitFactor": 3.59,
+          "grossProfitMoney": 719.44,
+          "grossLossMoney": 200.47,
+          "totalProfitPips": 49976.7,
+          "totalLossPips": -11053.2,
+          "netProfitPips": 38923.5,
+          "netProfitMoney": 518.97,
+          "returnPercent": 5.19,
+          "averageWinPips": 9995.3,
+          "averageLossPips": -5526.6,
+          "maxConsecutiveWins": 4,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 0.99,
+          "sharpeRatio": 6.95,
+          "averageHoldingPeriodHours": 3.9
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MeanReversion",
+      "symbol": "SPX500",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "bb_period": 30,
+          "bb_stddev": 2,
+          "rsi_period": 14,
+          "rsi_oversold": 30,
+          "rsi_overbought": 80,
+          "atr_period": 14,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 15,
+          "winningTrades": 10,
+          "losingTrades": 5,
+          "winRate": 0.6667,
+          "profitFactor": 4.74,
+          "grossProfitMoney": 2475.42,
+          "grossLossMoney": 522.09,
+          "totalProfitPips": 33491.4,
+          "totalLossPips": -6889.6,
+          "netProfitPips": 26601.8,
+          "netProfitMoney": 1953.33,
+          "returnPercent": 19.53,
+          "averageWinPips": 3349.1,
+          "averageLossPips": -1377.9,
+          "maxConsecutiveWins": 4,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 2.34,
+          "sharpeRatio": 8.17,
+          "averageHoldingPeriodHours": 4.7
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MeanReversion",
+      "symbol": "US30",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "bb_period": 30,
+          "bb_stddev": 2.5,
+          "rsi_period": 14,
+          "rsi_oversold": 20,
+          "rsi_overbought": 65,
+          "atr_period": 14,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 30,
+          "winningTrades": 14,
+          "losingTrades": 16,
+          "winRate": 0.4667,
+          "profitFactor": 1.59,
+          "grossProfitMoney": 2491.33,
+          "grossLossMoney": 1571.38,
+          "totalProfitPips": 256671.3,
+          "totalLossPips": -158263.4,
+          "netProfitPips": 98407.9,
+          "netProfitMoney": 919.95,
+          "returnPercent": 9.2,
+          "averageWinPips": 18333.7,
+          "averageLossPips": -9891.5,
+          "maxConsecutiveWins": 2,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 2.93,
+          "sharpeRatio": 2.93,
+          "averageHoldingPeriodHours": 7.6
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MeanReversion",
+      "symbol": "USDCHF",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "bb_period": 30,
+          "bb_stddev": 1.5,
+          "rsi_period": 14,
+          "rsi_oversold": 20,
+          "rsi_overbought": 65,
+          "atr_period": 14,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 19,
+          "winningTrades": 13,
+          "losingTrades": 6,
+          "winRate": 0.6842,
+          "profitFactor": 1.67,
+          "grossProfitMoney": 1031.4,
+          "grossLossMoney": 616.69,
+          "totalProfitPips": 85.3,
+          "totalLossPips": -63.5,
+          "netProfitPips": 21.8,
+          "netProfitMoney": 414.71,
+          "returnPercent": 4.15,
+          "averageWinPips": 6.6,
+          "averageLossPips": -10.6,
+          "maxConsecutiveWins": 4,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 2.96,
+          "sharpeRatio": 3.45,
+          "averageHoldingPeriodHours": 3.6
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MeanReversion",
+      "symbol": "XTIUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "bb_period": 25,
+          "bb_stddev": 2,
+          "rsi_period": 14,
+          "rsi_oversold": 25,
+          "rsi_overbought": 80,
+          "atr_period": 14,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 8,
+          "winningTrades": 6,
+          "losingTrades": 2,
+          "winRate": 0.75,
+          "profitFactor": 8.72,
+          "grossProfitMoney": 1647.94,
+          "grossLossMoney": 189,
+          "totalProfitPips": 2074.2,
+          "totalLossPips": -387.8,
+          "netProfitPips": 1686.4,
+          "netProfitMoney": 1458.94,
+          "returnPercent": 14.59,
+          "averageWinPips": 345.7,
+          "averageLossPips": -193.9,
+          "maxConsecutiveWins": 3,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 0.97,
+          "sharpeRatio": 11.91,
+          "averageHoldingPeriodHours": 18.3
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "BTCUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 70,
+          "rsi_period": 12,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 2,
+          "tpMultiplier": 2.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 38,
+          "winningTrades": 31,
+          "losingTrades": 7,
+          "winRate": 0.8158,
+          "profitFactor": 2.36,
+          "grossProfitMoney": 1609.24,
+          "grossLossMoney": 680.66,
+          "totalProfitPips": 2293716.5,
+          "totalLossPips": -1031185.5,
+          "netProfitPips": 1262531,
+          "netProfitMoney": 928.58,
+          "returnPercent": 9.29,
+          "averageWinPips": 73990.9,
+          "averageLossPips": -147312.2,
+          "maxConsecutiveWins": 17,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 2.72,
+          "sharpeRatio": 5.44,
+          "averageHoldingPeriodHours": 3.9
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "ETHUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 70,
+          "rsi_period": 10,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 2.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 25,
+          "winningTrades": 23,
+          "losingTrades": 2,
+          "winRate": 0.92,
+          "profitFactor": 3.68,
+          "grossProfitMoney": 718.81,
+          "grossLossMoney": 195.44,
+          "totalProfitPips": 65211.5,
+          "totalLossPips": -15780,
+          "netProfitPips": 49431.5,
+          "netProfitMoney": 523.37,
+          "returnPercent": 5.23,
+          "averageWinPips": 2835.3,
+          "averageLossPips": -7890,
+          "maxConsecutiveWins": 14,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 1.28,
+          "sharpeRatio": 6.43,
+          "averageHoldingPeriodHours": 7.2
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "EURUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 50,
+          "rsi_period": 10,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 1,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 44,
+          "winningTrades": 35,
+          "losingTrades": 9,
+          "winRate": 0.7955,
+          "profitFactor": 2.87,
+          "grossProfitMoney": 2936.84,
+          "grossLossMoney": 1022.1,
+          "totalProfitPips": 575.8,
+          "totalLossPips": -173.7,
+          "netProfitPips": 402.1,
+          "netProfitMoney": 1914.74,
+          "returnPercent": 19.15,
+          "averageWinPips": 16.5,
+          "averageLossPips": -19.3,
+          "maxConsecutiveWins": 11,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 1.99,
+          "sharpeRatio": 7.71,
+          "averageHoldingPeriodHours": 3.4
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "GBPUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 40,
+          "rsi_period": 12,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 1,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 70,
+          "winningTrades": 57,
+          "losingTrades": 13,
+          "winRate": 0.8143,
+          "profitFactor": 3.73,
+          "grossProfitMoney": 4930.32,
+          "grossLossMoney": 1321.7,
+          "totalProfitPips": 1034.5,
+          "totalLossPips": -329.8,
+          "netProfitPips": 704.7,
+          "netProfitMoney": 3608.62,
+          "returnPercent": 36.09,
+          "averageWinPips": 18.1,
+          "averageLossPips": -25.4,
+          "maxConsecutiveWins": 14,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 3.5,
+          "sharpeRatio": 9.07,
+          "averageHoldingPeriodHours": 5.8
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "NAS100",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 70,
+          "rsi_period": 12,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 1,
+          "tpMultiplier": 3.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 31,
+          "winningTrades": 21,
+          "losingTrades": 10,
+          "winRate": 0.6774,
+          "profitFactor": 2.55,
+          "grossProfitMoney": 2591.21,
+          "grossLossMoney": 1014.3,
+          "totalProfitPips": 192947.4,
+          "totalLossPips": -95689.7,
+          "netProfitPips": 97257.7,
+          "netProfitMoney": 1576.91,
+          "returnPercent": 15.77,
+          "averageWinPips": 9188,
+          "averageLossPips": -9569,
+          "maxConsecutiveWins": 5,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 2.58,
+          "sharpeRatio": 5.36,
+          "averageHoldingPeriodHours": 11
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "NZDUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 30,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 1,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 114,
+          "winningTrades": 93,
+          "losingTrades": 21,
+          "winRate": 0.8158,
+          "profitFactor": 3.13,
+          "grossProfitMoney": 8062.9,
+          "grossLossMoney": 2575.18,
+          "totalProfitPips": 1358.8,
+          "totalLossPips": -449.7,
+          "netProfitPips": 909.1,
+          "netProfitMoney": 5487.72,
+          "returnPercent": 54.88,
+          "averageWinPips": 14.6,
+          "averageLossPips": -21.4,
+          "maxConsecutiveWins": 20,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 3.39,
+          "sharpeRatio": 7.82,
+          "averageHoldingPeriodHours": 6.5
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "US30",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 60,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 2.5,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 36,
+          "winningTrades": 32,
+          "losingTrades": 4,
+          "winRate": 0.8889,
+          "profitFactor": 3.57,
+          "grossProfitMoney": 1379.62,
+          "grossLossMoney": 386.83,
+          "totalProfitPips": 407880,
+          "totalLossPips": -118911,
+          "netProfitPips": 288969,
+          "netProfitMoney": 992.79,
+          "returnPercent": 9.93,
+          "averageWinPips": 12746.3,
+          "averageLossPips": -29727.8,
+          "maxConsecutiveWins": 12,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 0.99,
+          "sharpeRatio": 6.14,
+          "averageHoldingPeriodHours": 7.6
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "USDCHF",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 70,
+          "rsi_period": 20,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 1,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 54,
+          "winningTrades": 42,
+          "losingTrades": 12,
+          "winRate": 0.7778,
+          "profitFactor": 3.23,
+          "grossProfitMoney": 3824.82,
+          "grossLossMoney": 1183.22,
+          "totalProfitPips": 705.2,
+          "totalLossPips": -180.5,
+          "netProfitPips": 524.7,
+          "netProfitMoney": 2641.6,
+          "returnPercent": 26.42,
+          "averageWinPips": 16.8,
+          "averageLossPips": -15,
+          "maxConsecutiveWins": 8,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 1.2,
+          "sharpeRatio": 7.87,
+          "averageHoldingPeriodHours": 4.9
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "XAGUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 70,
+          "rsi_period": 20,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 2,
+          "tpMultiplier": 2.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 58,
+          "winningTrades": 44,
+          "losingTrades": 14,
+          "winRate": 0.7586,
+          "profitFactor": 2.11,
+          "grossProfitMoney": 2678.59,
+          "grossLossMoney": 1269.92,
+          "totalProfitPips": 44681,
+          "totalLossPips": -19320,
+          "netProfitPips": 25361,
+          "netProfitMoney": 1408.67,
+          "returnPercent": 14.09,
+          "averageWinPips": 1015.5,
+          "averageLossPips": -1380,
+          "maxConsecutiveWins": 8,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 2.83,
+          "sharpeRatio": 3.83,
+          "averageHoldingPeriodHours": 9.3
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "Momentum",
+      "symbol": "XAUUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_period": 30,
+          "rsi_period": 10,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "slMultiplier": 2,
+          "tpMultiplier": 5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 60,
+          "winningTrades": 45,
+          "losingTrades": 15,
+          "winRate": 0.75,
+          "profitFactor": 2.23,
+          "grossProfitMoney": 3018.21,
+          "grossLossMoney": 1355.05,
+          "totalProfitPips": 169460,
+          "totalLossPips": -76318,
+          "netProfitPips": 93142,
+          "netProfitMoney": 1663.16,
+          "returnPercent": 16.63,
+          "averageWinPips": 3765.8,
+          "averageLossPips": -5087.9,
+          "maxConsecutiveWins": 10,
+          "maxConsecutiveLosses": 3,
+          "maxDrawdownPercent": 3.16,
+          "sharpeRatio": 4.78,
+          "averageHoldingPeriodHours": 19.2
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "BTCUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 20,
+          "stoch_signal": 5,
+          "slMultiplier": 2,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 23,
+          "winningTrades": 19,
+          "losingTrades": 4,
+          "winRate": 0.8261,
+          "profitFactor": 2.77,
+          "grossProfitMoney": 1097.28,
+          "grossLossMoney": 395.8,
+          "totalProfitPips": 1308211.9,
+          "totalLossPips": -400387.5,
+          "netProfitPips": 907824.4,
+          "netProfitMoney": 701.48,
+          "returnPercent": 7.01,
+          "averageWinPips": 68853.3,
+          "averageLossPips": -100096.9,
+          "maxConsecutiveWins": 7,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 1.82,
+          "sharpeRatio": 6.34,
+          "averageHoldingPeriodHours": 8.7
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "ETHUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 20,
+          "stoch_signal": 5,
+          "slMultiplier": 2.5,
+          "tpMultiplier": 6,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 25,
+          "winningTrades": 21,
+          "losingTrades": 4,
+          "winRate": 0.84,
+          "profitFactor": 1.96,
+          "grossProfitMoney": 791.17,
+          "grossLossMoney": 404.27,
+          "totalProfitPips": 59836.6,
+          "totalLossPips": -22472.3,
+          "netProfitPips": 37364.3,
+          "netProfitMoney": 386.9,
+          "returnPercent": 3.87,
+          "averageWinPips": 2849.4,
+          "averageLossPips": -5618.1,
+          "maxConsecutiveWins": 7,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 1.46,
+          "sharpeRatio": 3.48,
+          "averageHoldingPeriodHours": 8.9
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "GBPJPY",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 16,
+          "stoch_signal": 3,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 26,
+          "winningTrades": 18,
+          "losingTrades": 8,
+          "winRate": 0.6923,
+          "profitFactor": 0.46,
+          "grossProfitMoney": 17991,
+          "grossLossMoney": 39127,
+          "totalProfitPips": 413.1,
+          "totalLossPips": -350.1,
+          "netProfitPips": 63,
+          "netProfitMoney": -21136,
+          "returnPercent": -211.36,
+          "averageWinPips": 23,
+          "averageLossPips": -43.8,
+          "maxConsecutiveWins": 6,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 133.42,
+          "sharpeRatio": -1.75,
+          "averageHoldingPeriodHours": 5.5
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "NAS100",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 20,
+          "stoch_signal": 3,
+          "slMultiplier": 2.5,
+          "tpMultiplier": 4,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 27,
+          "winningTrades": 22,
+          "losingTrades": 5,
+          "winRate": 0.8148,
+          "profitFactor": 2.36,
+          "grossProfitMoney": 1035.44,
+          "grossLossMoney": 437.85,
+          "totalProfitPips": 244049.3,
+          "totalLossPips": -113013.4,
+          "netProfitPips": 131035.9,
+          "netProfitMoney": 597.59,
+          "returnPercent": 5.98,
+          "averageWinPips": 11093.1,
+          "averageLossPips": -22602.7,
+          "maxConsecutiveWins": 17,
+          "maxConsecutiveLosses": 2,
+          "maxDrawdownPercent": 3.23,
+          "sharpeRatio": 4.85,
+          "averageHoldingPeriodHours": 9.8
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "SPX500",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 12,
+          "stoch_signal": 5,
+          "slMultiplier": 3,
+          "tpMultiplier": 3.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 25,
+          "winningTrades": 22,
+          "losingTrades": 3,
+          "winRate": 0.88,
+          "profitFactor": 3.07,
+          "grossProfitMoney": 923.51,
+          "grossLossMoney": 301.06,
+          "totalProfitPips": 49274.7,
+          "totalLossPips": -12848.6,
+          "netProfitPips": 36426.1,
+          "netProfitMoney": 622.45,
+          "returnPercent": 6.22,
+          "averageWinPips": 2239.8,
+          "averageLossPips": -4282.9,
+          "maxConsecutiveWins": 13,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 1.22,
+          "sharpeRatio": 5.93,
+          "averageHoldingPeriodHours": 8.8
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "US30",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 10,
+          "stoch_signal": 5,
+          "slMultiplier": 3,
+          "tpMultiplier": 6,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 21,
+          "winningTrades": 20,
+          "losingTrades": 1,
+          "winRate": 0.9524,
+          "profitFactor": 12.05,
+          "grossProfitMoney": 1020.19,
+          "grossLossMoney": 84.66,
+          "totalProfitPips": 360169.7,
+          "totalLossPips": -28220.3,
+          "netProfitPips": 331949.4,
+          "netProfitMoney": 935.53,
+          "returnPercent": 9.36,
+          "averageWinPips": 18008.5,
+          "averageLossPips": -28220.3,
+          "maxConsecutiveWins": 11,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 0.81,
+          "sharpeRatio": 12.43,
+          "averageHoldingPeriodHours": 10.8
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "USDCHF",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 10,
+          "stoch_signal": 4,
+          "slMultiplier": 3,
+          "tpMultiplier": 4.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 27,
+          "winningTrades": 24,
+          "losingTrades": 3,
+          "winRate": 0.8889,
+          "profitFactor": 2.58,
+          "grossProfitMoney": 780.69,
+          "grossLossMoney": 302.76,
+          "totalProfitPips": 242.8,
+          "totalLossPips": -92.4,
+          "netProfitPips": 150.4,
+          "netProfitMoney": 477.93,
+          "returnPercent": 4.78,
+          "averageWinPips": 10.1,
+          "averageLossPips": -30.8,
+          "maxConsecutiveWins": 10,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 1.57,
+          "sharpeRatio": 5.02,
+          "averageHoldingPeriodHours": 9.3
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "MultiTimeframe",
+      "symbol": "XAUUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_trend": 200,
+          "atr_period": 14,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "stoch_period": 16,
+          "stoch_signal": 5,
+          "slMultiplier": 3,
+          "tpMultiplier": 4.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 25,
+          "winningTrades": 21,
+          "losingTrades": 4,
+          "winRate": 0.84,
+          "profitFactor": 2.48,
+          "grossProfitMoney": 650.89,
+          "grossLossMoney": 262.14,
+          "totalProfitPips": 52229.3,
+          "totalLossPips": -21614.2,
+          "netProfitPips": 30615.1,
+          "netProfitMoney": 388.75,
+          "returnPercent": 3.89,
+          "averageWinPips": 2487.1,
+          "averageLossPips": -5403.5,
+          "maxConsecutiveWins": 8,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 1.02,
+          "sharpeRatio": 5.07,
+          "averageHoldingPeriodHours": 9.6
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "EURUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_fast": 10,
+          "ema_slow": 60,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 2,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 5,
+          "winningTrades": 5,
+          "losingTrades": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "grossProfitMoney": 256.06,
+          "grossLossMoney": 0,
+          "totalProfitPips": 56,
+          "totalLossPips": 0,
+          "netProfitPips": 56,
+          "netProfitMoney": 256.06,
+          "returnPercent": 2.56,
+          "averageWinPips": 11.2,
+          "averageLossPips": 0,
+          "maxConsecutiveWins": 5,
+          "maxConsecutiveLosses": 0,
+          "maxDrawdownPercent": 0.44,
+          "sharpeRatio": 14.67,
+          "averageHoldingPeriodHours": 14
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "GBPUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_fast": 15,
+          "ema_slow": 60,
+          "rsi_period": 16,
+          "atr_period": 14,
+          "slMultiplier": 2.5,
+          "tpMultiplier": 2,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 5,
+          "winningTrades": 5,
+          "losingTrades": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "grossProfitMoney": 193.63,
+          "grossLossMoney": 0,
+          "totalProfitPips": 98.9,
+          "totalLossPips": 0,
+          "netProfitPips": 98.9,
+          "netProfitMoney": 193.63,
+          "returnPercent": 1.94,
+          "averageWinPips": 19.8,
+          "averageLossPips": 0,
+          "maxConsecutiveWins": 5,
+          "maxConsecutiveLosses": 0,
+          "maxDrawdownPercent": 0.71,
+          "sharpeRatio": 19.08,
+          "averageHoldingPeriodHours": 23.6
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "NAS100",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_fast": 10,
+          "ema_slow": 40,
+          "rsi_period": 20,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 2,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 5,
+          "winningTrades": 5,
+          "losingTrades": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "grossProfitMoney": 359.17,
+          "grossLossMoney": 0,
+          "totalProfitPips": 53380.7,
+          "totalLossPips": 0,
+          "netProfitPips": 53380.7,
+          "netProfitMoney": 359.17,
+          "returnPercent": 3.59,
+          "averageWinPips": 10676.1,
+          "averageLossPips": 0,
+          "maxConsecutiveWins": 5,
+          "maxConsecutiveLosses": 0,
+          "maxDrawdownPercent": 0,
+          "sharpeRatio": 19.41,
+          "averageHoldingPeriodHours": 4
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "US30",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_fast": 10,
+          "ema_slow": 80,
+          "rsi_period": 14,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 2.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 5,
+          "winningTrades": 4,
+          "losingTrades": 1,
+          "winRate": 0.8,
+          "profitFactor": 2.49,
+          "grossProfitMoney": 244.8,
+          "grossLossMoney": 98.24,
+          "totalProfitPips": 86354.5,
+          "totalLossPips": -14034.1,
+          "netProfitPips": 72320.4,
+          "netProfitMoney": 146.56,
+          "returnPercent": 1.47,
+          "averageWinPips": 21588.6,
+          "averageLossPips": -14034.1,
+          "maxConsecutiveWins": 4,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 0.96,
+          "sharpeRatio": 6.55,
+          "averageHoldingPeriodHours": 9.8
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "USDCHF",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_fast": 20,
+          "ema_slow": 40,
+          "rsi_period": 20,
+          "atr_period": 14,
+          "slMultiplier": 1,
+          "tpMultiplier": 3.5,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 5,
+          "winningTrades": 4,
+          "losingTrades": 1,
+          "winRate": 0.8,
+          "profitFactor": 6.4,
+          "grossProfitMoney": 675.26,
+          "grossLossMoney": 105.48,
+          "totalProfitPips": 62.1,
+          "totalLossPips": -14.7,
+          "netProfitPips": 47.4,
+          "netProfitMoney": 569.78,
+          "returnPercent": 5.7,
+          "averageWinPips": 15.5,
+          "averageLossPips": -14.7,
+          "maxConsecutiveWins": 3,
+          "maxConsecutiveLosses": 1,
+          "maxDrawdownPercent": 1.25,
+          "sharpeRatio": 11.62,
+          "averageHoldingPeriodHours": 5.4
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "TrendFollowing",
+      "symbol": "XAUUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "ema_fast": 10,
+          "ema_slow": 40,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 2,
+          "riskPercent": 0.01
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 6,
+          "winningTrades": 6,
+          "losingTrades": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "grossProfitMoney": 289.79,
+          "grossLossMoney": 0,
+          "totalProfitPips": 10481,
+          "totalLossPips": 0,
+          "netProfitPips": 10481,
+          "netProfitMoney": 289.79,
+          "returnPercent": 2.9,
+          "averageWinPips": 1746.8,
+          "averageLossPips": 0,
+          "maxConsecutiveWins": 6,
+          "maxConsecutiveLosses": 0,
+          "maxDrawdownPercent": 0.39,
+          "sharpeRatio": 14.4,
+          "averageHoldingPeriodHours": 5.8
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "BTCUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 2,
+          "rvol_reversal": 2.2,
+          "volume_avg_period": 20,
+          "breakout_lookback": 10,
+          "body_atr_threshold": 0.5,
+          "wick_ratio_threshold": 1.8,
+          "vwap_reclaim_tolerance_atr": 0.25,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.4,
+          "tpMultiplier": 2.4,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 145,
+          "winningTrades": 80,
+          "losingTrades": 65,
+          "winRate": 0.5517,
+          "profitFactor": 0.91,
+          "grossProfitMoney": 8845.65,
+          "grossLossMoney": 9679.98,
+          "totalProfitPips": 1410273.1,
+          "totalLossPips": -1644862.8,
+          "netProfitPips": -234589.7,
+          "netProfitMoney": -834.33,
+          "returnPercent": -8.34,
+          "averageWinPips": 17628.4,
+          "averageLossPips": -25305.6,
+          "maxConsecutiveWins": 7,
+          "maxConsecutiveLosses": 5,
+          "maxDrawdownPercent": 16.35,
+          "sharpeRatio": -0.64,
+          "averageHoldingPeriodHours": 0.1
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "SPX500",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 1.8,
+          "rvol_reversal": 2,
+          "volume_avg_period": 20,
+          "breakout_lookback": 10,
+          "body_atr_threshold": 0.5,
+          "wick_ratio_threshold": 1.8,
+          "vwap_reclaim_tolerance_atr": 0.25,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.4,
+          "tpMultiplier": 2.4,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 367,
+          "winningTrades": 223,
+          "losingTrades": 144,
+          "winRate": 0.6076,
+          "profitFactor": 0.97,
+          "grossProfitMoney": 19516.83,
+          "grossLossMoney": 20057.58,
+          "totalProfitPips": 85174.9,
+          "totalLossPips": -85167.2,
+          "netProfitPips": 7.7,
+          "netProfitMoney": -540.75,
+          "returnPercent": -5.41,
+          "averageWinPips": 382,
+          "averageLossPips": -591.4,
+          "maxConsecutiveWins": 8,
+          "maxConsecutiveLosses": 5,
+          "maxDrawdownPercent": 18.4,
+          "sharpeRatio": -0.17,
+          "averageHoldingPeriodHours": 0.2
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "US30",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 1.6,
+          "rvol_reversal": 2.4,
+          "volume_avg_period": 20,
+          "breakout_lookback": 14,
+          "body_atr_threshold": 0.6,
+          "wick_ratio_threshold": 1.8,
+          "vwap_reclaim_tolerance_atr": 0.25,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.4,
+          "tpMultiplier": 1.6,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 402,
+          "winningTrades": 249,
+          "losingTrades": 153,
+          "winRate": 0.6194,
+          "profitFactor": 1.11,
+          "grossProfitMoney": 25127.3,
+          "grossLossMoney": 22627.19,
+          "totalProfitPips": 662181.5,
+          "totalLossPips": -583791.5,
+          "netProfitPips": 78390,
+          "netProfitMoney": 2500.11,
+          "returnPercent": 25,
+          "averageWinPips": 2659.4,
+          "averageLossPips": -3815.6,
+          "maxConsecutiveWins": 9,
+          "maxConsecutiveLosses": 5,
+          "maxDrawdownPercent": 23.91,
+          "sharpeRatio": 0.71,
+          "averageHoldingPeriodHours": 0.3
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "USDCHF",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 2,
+          "rvol_reversal": 2.4,
+          "volume_avg_period": 20,
+          "breakout_lookback": 14,
+          "body_atr_threshold": 0.5,
+          "wick_ratio_threshold": 1.6,
+          "vwap_reclaim_tolerance_atr": 0.25,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.4,
+          "tpMultiplier": 2.4,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 217,
+          "winningTrades": 111,
+          "losingTrades": 106,
+          "winRate": 0.5115,
+          "profitFactor": 0.58,
+          "grossProfitMoney": 6153.51,
+          "grossLossMoney": 10549.54,
+          "totalProfitPips": 353.9,
+          "totalLossPips": -545.4,
+          "netProfitPips": -191.5,
+          "netProfitMoney": -4396.03,
+          "returnPercent": -43.96,
+          "averageWinPips": 3.2,
+          "averageLossPips": -5.1,
+          "maxConsecutiveWins": 7,
+          "maxConsecutiveLosses": 9,
+          "maxDrawdownPercent": 51.93,
+          "sharpeRatio": -3.85,
+          "averageHoldingPeriodHours": 0.5
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "XAGUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 2,
+          "rvol_reversal": 2,
+          "volume_avg_period": 20,
+          "breakout_lookback": 10,
+          "body_atr_threshold": 0.5,
+          "wick_ratio_threshold": 1.6,
+          "vwap_reclaim_tolerance_atr": 0.25,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.2,
+          "tpMultiplier": 2.4,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 281,
+          "winningTrades": 173,
+          "losingTrades": 108,
+          "winRate": 0.6157,
+          "profitFactor": 1.17,
+          "grossProfitMoney": 19523.37,
+          "grossLossMoney": 16688.36,
+          "totalProfitPips": 28283.5,
+          "totalLossPips": -23399,
+          "netProfitPips": 4884.5,
+          "netProfitMoney": 2835.01,
+          "returnPercent": 28.35,
+          "averageWinPips": 163.5,
+          "averageLossPips": -216.7,
+          "maxConsecutiveWins": 11,
+          "maxConsecutiveLosses": 5,
+          "maxDrawdownPercent": 11.46,
+          "sharpeRatio": 1.05,
+          "averageHoldingPeriodHours": 0.1
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "XAUUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 2,
+          "rvol_reversal": 2.4,
+          "volume_avg_period": 20,
+          "breakout_lookback": 12,
+          "body_atr_threshold": 0.6,
+          "wick_ratio_threshold": 2,
+          "vwap_reclaim_tolerance_atr": 0.25,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.4,
+          "tpMultiplier": 2.4,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 327,
+          "winningTrades": 222,
+          "losingTrades": 105,
+          "winRate": 0.6789,
+          "profitFactor": 1.44,
+          "grossProfitMoney": 34605.78,
+          "grossLossMoney": 24081.96,
+          "totalProfitPips": 177994.1,
+          "totalLossPips": -110274,
+          "netProfitPips": 67720.1,
+          "netProfitMoney": 10523.82,
+          "returnPercent": 105.24,
+          "averageWinPips": 801.8,
+          "averageLossPips": -1050.2,
+          "maxConsecutiveWins": 13,
+          "maxConsecutiveLosses": 6,
+          "maxDrawdownPercent": 13.8,
+          "sharpeRatio": 2.26,
+          "averageHoldingPeriodHours": 0.2
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "XBRUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 1.6,
+          "rvol_reversal": 2,
+          "volume_avg_period": 20,
+          "breakout_lookback": 10,
+          "body_atr_threshold": 0.7,
+          "wick_ratio_threshold": 1.6,
+          "vwap_reclaim_tolerance_atr": 0.25,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.4,
+          "tpMultiplier": 2.4,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 474,
+          "winningTrades": 246,
+          "losingTrades": 228,
+          "winRate": 0.519,
+          "profitFactor": 0.62,
+          "grossProfitMoney": 11389.68,
+          "grossLossMoney": 18459.1,
+          "totalProfitPips": 3583.9,
+          "totalLossPips": -6018.6,
+          "netProfitPips": -2434.7,
+          "netProfitMoney": -7069.42,
+          "returnPercent": -70.69,
+          "averageWinPips": 14.6,
+          "averageLossPips": -26.4,
+          "maxConsecutiveWins": 7,
+          "maxConsecutiveLosses": 8,
+          "maxDrawdownPercent": 72.98,
+          "sharpeRatio": -3.25,
+          "averageHoldingPeriodHours": 0.3
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "strategy": "VolumeFlowHybrid",
+      "symbol": "XTIUSD",
+      "status": "ok",
+      "totalCombos": null,
+      "best": {
+        "parameters": {
+          "rvol_continuation": 2,
+          "rvol_reversal": 2,
+          "volume_avg_period": 20,
+          "breakout_lookback": 14,
+          "body_atr_threshold": 0.7,
+          "wick_ratio_threshold": 1.6,
+          "vwap_reclaim_tolerance_atr": 0.45,
+          "cumulative_delta_smoothing": 8,
+          "ema_fast": 20,
+          "ema_slow": 50,
+          "atr_period": 14,
+          "slMultiplier": 1.4,
+          "tpMultiplier": 2.4,
+          "reversal_sl_atr": 1,
+          "reversal_tp_atr": 1.5,
+          "min_confidence": 0.55,
+          "riskPercent": 0.015,
+          "small_account_profile": 0
+        },
+        "parameterSource": {
+          "hasStoredParameters": true,
+          "hasRuntimeOverrides": true,
+          "preset": "default",
+          "resolvedFrom": "runtime_overrides",
+          "fallbackUsed": false,
+          "optimizerHistoryId": null,
+          "optimizerCompletedAt": null,
+          "optimizerTimeframe": null,
+          "optimizerOptimizeFor": null
+        },
+        "breakevenConfigUsed": {
+          "enabled": true,
+          "triggerAtrMultiple": 0.8,
+          "includeSpreadCompensation": true,
+          "extraBufferPips": 0,
+          "trailStartAtrMultiple": 1.5,
+          "trailDistanceAtrMultiple": 1
+        },
+        "summary": {
+          "totalTrades": 418,
+          "winningTrades": 218,
+          "losingTrades": 200,
+          "winRate": 0.5215,
+          "profitFactor": 0.64,
+          "grossProfitMoney": 10832.12,
+          "grossLossMoney": 17051.39,
+          "totalProfitPips": 3053.4,
+          "totalLossPips": -5170.7,
+          "netProfitPips": -2117.3,
+          "netProfitMoney": -6219.27,
+          "returnPercent": -62.19,
+          "averageWinPips": 14,
+          "averageLossPips": -25.9,
+          "maxConsecutiveWins": 11,
+          "maxConsecutiveLosses": 12,
+          "maxDrawdownPercent": 66.75,
+          "sharpeRatio": -3.14,
+          "averageHoldingPeriodHours": 0.2
+        }
+      },
+      "gate": {
+        "pass": false,
+        "reason": "trades=0 (<25); PF=0.00 (<1.25); return=0.0% (<3%); winRate=0.0% (<40%); sharpe=0.00 (<0.6)",
+        "metrics": {
+          "trades": 0,
+          "pf": 0,
+          "ret": 0,
+          "wr": 0,
+          "dd": 0,
+          "sharpe": 0
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    }
+  ],
+  "finishedAt": "2026-04-25T08:13:51.219Z"
+}

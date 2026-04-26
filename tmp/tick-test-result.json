@@ -1,0 +1,826 @@
+{
+  "start": {
+    "success": true,
+    "message": "Paper trading started",
+    "data": {
+      "account": {
+        "login": 230044684,
+        "balance": 503.83,
+        "equity": 510.13,
+        "currency": "USD",
+        "leverage": 1000,
+        "mode": "DEMO"
+      }
+    }
+  },
+  "finalStatus": {
+    "success": true,
+    "data": {
+      "running": true,
+      "startedAt": "2026-04-26T03:35:25.426Z",
+      "runtime": "0m",
+      "openPositions": 2,
+      "positions": [
+        {
+          "symbol": "NAS100",
+          "type": "BUY",
+          "entryPrice": 27317.9,
+          "currentSl": 27083.6,
+          "currentTp": 27742.5,
+          "lotSize": 0.01,
+          "mt5PositionId": "43157506",
+          "mt5EntryDealId": "42213353",
+          "mt5Comment": "PT|Momentum|BUY|0.70",
+          "strategy": "Momentum",
+          "comment": "Strategy=Momentum | Signal=BUY | Confidence=70% | Reason=BUY momentum confirmed | quality 3/3 | threshold 3 | RSI=69.8",
+          "confidence": 0.7,
+          "rawConfidence": 0.7,
+          "reason": "BUY momentum confirmed | quality 3/3 | threshold 3 | RSI=69.8",
+          "atrAtEntry": 94.12661873948373,
+          "originalLotSize": 0.01,
+          "breakevenConfig": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "exitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          },
+          "exitPlanSnapshot": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          },
+          "partialsExecutedIndices": [],
+          "maxFavourablePrice": 27339.8,
+          "structureAnchor": null,
+          "higherTfTrend": null,
+          "initialSl": 27083.58,
+          "plannedRiskAmount": 23.452,
+          "targetRMultiple": 1.8119,
+          "managementEvents": [],
+          "pendingExitAction": null,
+          "managerActionId": null,
+          "protectiveStopState": null,
+          "executionScore": 0.6,
+          "executionScoreDetails": {
+            "rawConfidence": 0.7,
+            "qualityFactor": 1,
+            "sameDirectionSymbolPositions": 0,
+            "sameDirectionCategoryPositions": 1,
+            "symbolPenalty": 0,
+            "categoryPenalty": 0.1,
+            "duplicatePenalty": 0
+          },
+          "executionPolicy": {
+            "minExecutionScore": 0.6,
+            "cooldownBarsAfterLoss": 3,
+            "maxSameDirectionPositionsPerSymbol": 1,
+            "maxSameDirectionPositionsPerCategory": 2,
+            "duplicateEntryWindowBars": 1
+          },
+          "setupTimeframe": "1h",
+          "entryTimeframe": null,
+          "setupCandleTime": "2026-04-24T20:00:00+00:00",
+          "entryCandleTime": null,
+          "indicatorsSnapshot": {
+            "ema50": 26925.367276494635,
+            "rsi": 69.85,
+            "macdLine": 99.09332144881046,
+            "macdSignal": 69.16363370698328,
+            "macdHistogram": 29.92968774182718,
+            "atr": 94.12661873948373,
+            "avgAtr": 89.17494604163728,
+            "price": 27318.9,
+            "bullishCandles": 3,
+            "bearishCandles": 0,
+            "marketQualityScore": 3,
+            "marketQualityThreshold": 3,
+            "marketQualityDetails": {
+              "ema50SlopeScore": 1,
+              "directionalBodyScore": 1,
+              "momentumPersistenceScore": 1,
+              "ema50SlopeDelta": 49.20655,
+              "ema50SlopeThreshold": 32.94432,
+              "avgDirectionalBody": 73.23333,
+              "avgBody10": 53.25,
+              "currentEma50": 26925.36728,
+              "atrRegimeOk": true
+            }
+          },
+          "openedAt": "2026-04-24T18:00:34.364Z",
+          "status": "OPEN",
+          "_id": "fU8GFZqx9KeAW96q",
+          "currentPrice": 27326.5,
+          "unrealizedPl": 0.86
+        },
+        {
+          "symbol": "SPX500",
+          "type": "BUY",
+          "entryPrice": 7170.4,
+          "currentSl": 7138.6,
+          "currentTp": 7228.3,
+          "lotSize": 0.01,
+          "mt5PositionId": "43134374",
+          "mt5EntryDealId": "42190343",
+          "mt5Comment": "PT|Breakout|BUY|0.60",
+          "strategy": "Breakout",
+          "comment": "Strategy=Breakout | Signal=BUY | Confidence=60% | Reason=BUY breakout confirmed | quality 2/3 | threshold 2 | lookback 15 | body x2 | break 4.40",
+          "confidence": 0.6,
+          "rawConfidence": 0.6,
+          "reason": "BUY breakout confirmed | quality 2/3 | threshold 2 | lookback 15 | body x2 | break 4.40",
+          "atrAtEntry": 19.927255046346186,
+          "originalLotSize": 0.01,
+          "breakevenConfig": {
+            "enabled": true,
+            "triggerAtrMultiple": 0.8,
+            "includeSpreadCompensation": true,
+            "extraBufferPips": 0,
+            "trailStartAtrMultiple": 1.5,
+            "trailDistanceAtrMultiple": 1
+          },
+          "exitPlan": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          },
+          "exitPlanSnapshot": {
+            "breakeven": {
+              "enabled": true,
+              "triggerAtrMultiple": 0.8,
+              "includeSpreadCompensation": true,
+              "extraBufferPips": 0
+            },
+            "trailing": {
+              "enabled": true,
+              "startAtrMultiple": 1.5,
+              "distanceAtrMultiple": 1,
+              "mode": "atr"
+            },
+            "partials": [],
+            "timeExit": null,
+            "adaptiveEvaluator": null
+          },
+          "partialsExecutedIndices": [],
+          "maxFavourablePrice": 7174.3,
+          "structureAnchor": 7164.1,
+          "higherTfTrend": null,
+          "initialSl": 7138.61,
+          "plannedRiskAmount": 3.179,
+          "targetRMultiple": 1.8207,
+          "managementEvents": [],
+          "pendingExitAction": null,
+          "managerActionId": null,
+          "protectiveStopState": null,
+          "executionScore": 0.6,
+          "executionScoreDetails": {
+            "rawConfidence": 0.6,
+            "qualityFactor": 1,
+            "sameDirectionSymbolPositions": 0,
+            "sameDirectionCategoryPositions": 0,
+            "symbolPenalty": 0,
+            "categoryPenalty": 0,
+            "duplicatePenalty": 0
+          },
+          "executionPolicy": {
+            "minExecutionScore": 0.6,
+            "cooldownBarsAfterLoss": 3,
+            "maxSameDirectionPositionsPerSymbol": 1,
+            "maxSameDirectionPositionsPerCategory": 2,
+            "duplicateEntryWindowBars": 1
+          },
+          "setupTimeframe": "1h",
+          "entryTimeframe": null,
+          "setupCandleTime": "2026-04-24T18:00:00+00:00",
+          "entryCandleTime": null,
+          "indicatorsSnapshot": {
+            "rsi": 65.34,
+            "atr": 19.927255046346186,
+            "avgAtr": 19.92454045954988,
+            "highestLookback": 7164.1,
+            "lowestLookback": 7110.1,
+            "lookbackPeriod": 15,
+            "structureMidpoint": 7137.1,
+            "structureLevel": 7164.1,
+            "breakDistance": 4.4,
+            "breakDistanceThreshold": 2.99,
+            "bodyMultiplier": 2,
+            "currentBody": 23.699999999999818,
+            "avgBody": 12.039999999999964,
+            "currentRange": 29.7,
+            "avgRange10": 17.91,
+            "price": 7168.5,
+            "shortTermSlope": 18.8,
+            "marketQualityScore": 2,
+            "marketQualityThreshold": 2,
+            "marketQualityDetails": {
+              "breakDistanceScore": 1,
+              "bodyConvictionScore": 0,
+              "rangeExpansionScore": 1,
+              "breakDistance": 4.4,
+              "breakDistanceThreshold": 2.99,
+              "bodyMultiplier": 2,
+              "currentBody": 23.7,
+              "avgBody": 12.04,
+              "currentRange": 29.7,
+              "avgRange10": 17.91,
+              "slopeAligned": true
+            }
+          },
+          "openedAt": "2026-04-24T16:00:34.028Z",
+          "status": "OPEN",
+          "_id": "pNMo0S78fRktmwb4",
+          "currentPrice": 7170.9,
+          "unrealizedPl": 0.05
+        }
+      ],
+      "todayTrades": 0,
+      "allTimeStats": {
+        "totalTrades": 110,
+        "winningTrades": 56,
+        "losingTrades": 54,
+        "winRate": 0.5091,
+        "totalProfit": -257.58,
+        "totalPips": 358567.4,
+        "averageProfit": -2.34,
+        "averagePips": 3259.7,
+        "profitFactor": 0.57,
+        "maxDrawdown": 266.4,
+        "averageHoldingTimeMs": 14660532,
+        "averageHoldingTime": "4h 4m",
+        "byStrategy": {
+          "Momentum": {
+            "trades": 59,
+            "wins": 26,
+            "profit": -166.84590000000327,
+            "pips": 258763.89999999639
+          },
+          "VolumeFlowHybrid": {
+            "trades": 25,
+            "wins": 12,
+            "profit": -136.24749999997562,
+            "pips": 29869.999999999727
+          },
+          "Breakout": {
+            "trades": 17,
+            "wins": 13,
+            "profit": 71.138599999999,
+            "pips": -12318.500000000537
+          },
+          "MultiTimeframe": {
+            "trades": 7,
+            "wins": 5,
+            "profit": 32.882000000000765,
+            "pips": 101666.00000000007
+          },
+          "TrendFollowing": {
+            "trades": 2,
+            "wins": 0,
+            "profit": -58.51000000000003,
+            "pips": -19414.000000000397
+          }
+        },
+        "bySymbol": {
+          "ETHUSD": {
+            "trades": 13,
+            "wins": 9,
+            "profit": -0.8044000000000217,
+            "pips": 1774.0000000000236
+          },
+          "BTCUSD": {
+            "trades": 15,
+            "wins": 11,
+            "profit": 46.65160000000004,
+            "pips": 466516.00000000035
+          },
+          "GBPUSD": {
+            "trades": 7,
+            "wins": 1,
+            "profit": -16.950000000000244,
+            "pips": -96.00000000000053
+          },
+          "US30": {
+            "trades": 13,
+            "wins": 4,
+            "profit": -114.18999999997467,
+            "pips": -92410.00000000349
+          },
+          "USDCHF": {
+            "trades": 7,
+            "wins": 5,
+            "profit": 6.930000000000229,
+            "pips": 22.00000000000091
+          },
+          "SPX500": {
+            "trades": 7,
+            "wins": 1,
+            "profit": -99.62000000000363,
+            "pips": -6750.000000000091
+          },
+          "XAUUSD": {
+            "trades": 16,
+            "wins": 6,
+            "profit": -131.6700000000001,
+            "pips": -13167.000000000007
+          },
+          "XAGUSD": {
+            "trades": 5,
+            "wins": 2,
+            "profit": -18.200000000000433,
+            "pips": -364.0000000000043
+          },
+          "XBRUSD": {
+            "trades": 5,
+            "wins": 4,
+            "profit": 37.50000000000014,
+            "pips": 375.0000000000014
+          },
+          "NZDUSD": {
+            "trades": 5,
+            "wins": 3,
+            "profit": -0.669999999999803,
+            "pips": -6.699999999998376
+          },
+          "XTIUSD": {
+            "trades": 5,
+            "wins": 5,
+            "profit": 47.40000000000009,
+            "pips": 474.0000000000009
+          },
+          "NAS100": {
+            "trades": 7,
+            "wins": 3,
+            "profit": -4.390000000001599,
+            "pips": 2269.9999999986176
+          },
+          "EURUSD": {
+            "trades": 5,
+            "wins": 2,
+            "profit": -9.56999999999919,
+            "pips": -69.89999999999608
+          }
+        }
+      },
+      "activeAssignments": 15,
+      "activeSymbols": 11,
+      "signalScanBuckets": [
+        {
+          "timeframe": "15s",
+          "cadenceMs": 15000,
+          "cadenceLabel": "15s",
+          "assignmentCount": 4,
+          "activeSymbols": 4,
+          "lastScanAt": "2026-04-26T03:35:55.436Z",
+          "nextScanAt": "2026-04-26T03:36:10.436Z",
+          "lastError": null,
+          "running": false,
+          "items": [
+            {
+              "symbol": "NAS100",
+              "strategy": "MultiTimeframe",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            },
+            {
+              "symbol": "US30",
+              "strategy": "TrendFollowing",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            },
+            {
+              "symbol": "BTCUSD",
+              "strategy": "TrendFollowing",
+              "category": "crypto",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            },
+            {
+              "symbol": "XAUUSD",
+              "strategy": "VolumeFlowHybrid",
+              "category": "metals",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            }
+          ]
+        },
+        {
+          "timeframe": "30s",
+          "cadenceMs": 30000,
+          "cadenceLabel": "30s",
+          "assignmentCount": 1,
+          "activeSymbols": 1,
+          "lastScanAt": "2026-04-26T03:35:55.435Z",
+          "nextScanAt": "2026-04-26T03:36:25.435Z",
+          "lastError": null,
+          "running": false,
+          "items": [
+            {
+              "symbol": "XBRUSD",
+              "strategy": "TrendFollowing",
+              "category": "energy",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:25.435Z"
+            }
+          ]
+        },
+        {
+          "timeframe": "180s",
+          "cadenceMs": 180000,
+          "cadenceLabel": "180s",
+          "assignmentCount": 10,
+          "activeSymbols": 9,
+          "lastScanAt": "2026-04-26T03:35:25.426Z",
+          "nextScanAt": "2026-04-26T03:38:25.426Z",
+          "lastError": null,
+          "running": false,
+          "items": [
+            {
+              "symbol": "USDCHF",
+              "strategy": "Breakout",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "XAUUSD",
+              "strategy": "Breakout",
+              "category": "metals",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "NAS100",
+              "strategy": "Breakout",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "US30",
+              "strategy": "MeanReversion",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "EURUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "GBPUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "AUDUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "USDCHF",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "USDCAD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "NZDUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            }
+          ]
+        }
+      ],
+      "scanBuckets": [
+        {
+          "timeframe": "15s",
+          "cadenceMs": 15000,
+          "cadenceLabel": "15s",
+          "assignmentCount": 4,
+          "activeSymbols": 4,
+          "lastScanAt": "2026-04-26T03:35:55.436Z",
+          "nextScanAt": "2026-04-26T03:36:10.436Z",
+          "lastError": null,
+          "running": false,
+          "items": [
+            {
+              "symbol": "NAS100",
+              "strategy": "MultiTimeframe",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            },
+            {
+              "symbol": "US30",
+              "strategy": "TrendFollowing",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            },
+            {
+              "symbol": "BTCUSD",
+              "strategy": "TrendFollowing",
+              "category": "crypto",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            },
+            {
+              "symbol": "XAUUSD",
+              "strategy": "VolumeFlowHybrid",
+              "category": "metals",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:10.436Z"
+            }
+          ]
+        },
+        {
+          "timeframe": "30s",
+          "cadenceMs": 30000,
+          "cadenceLabel": "30s",
+          "assignmentCount": 1,
+          "activeSymbols": 1,
+          "lastScanAt": "2026-04-26T03:35:55.435Z",
+          "nextScanAt": "2026-04-26T03:36:25.435Z",
+          "lastError": null,
+          "running": false,
+          "items": [
+            {
+              "symbol": "XBRUSD",
+              "strategy": "TrendFollowing",
+              "category": "energy",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:36:25.435Z"
+            }
+          ]
+        },
+        {
+          "timeframe": "180s",
+          "cadenceMs": 180000,
+          "cadenceLabel": "180s",
+          "assignmentCount": 10,
+          "activeSymbols": 9,
+          "lastScanAt": "2026-04-26T03:35:25.426Z",
+          "nextScanAt": "2026-04-26T03:38:25.426Z",
+          "lastError": null,
+          "running": false,
+          "items": [
+            {
+              "symbol": "USDCHF",
+              "strategy": "Breakout",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "XAUUSD",
+              "strategy": "Breakout",
+              "category": "metals",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "NAS100",
+              "strategy": "Breakout",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "US30",
+              "strategy": "MeanReversion",
+              "category": "indices",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "EURUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "GBPUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "AUDUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "USDCHF",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "USDCAD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            },
+            {
+              "symbol": "NZDUSD",
+              "strategy": "Momentum",
+              "category": "forex",
+              "categoryFallback": false,
+              "scanMode": "signal",
+              "scanReason": "cadence",
+              "nextScanAt": "2026-04-26T03:38:25.426Z"
+            }
+          ]
+        }
+      ],
+      "positionMonitor": {
+        "running": true,
+        "intervalMs": 15000,
+        "baseTickMs": 15000,
+        "lightCadenceMs": 15000,
+        "heavyCadenceMs": 60000,
+        "lightDuePositions": [
+          {
+            "symbol": "NAS100",
+            "strategy": "Momentum",
+            "category": "indices",
+            "categoryFallback": false,
+            "state": "normal",
+            "scanMode": "light",
+            "scanReason": "forced_sync",
+            "nextScanAt": "2026-04-26T03:36:10.466Z"
+          },
+          {
+            "symbol": "SPX500",
+            "strategy": "Breakout",
+            "category": "indices",
+            "categoryFallback": false,
+            "state": "normal",
+            "scanMode": "light",
+            "scanReason": "forced_sync",
+            "nextScanAt": "2026-04-26T03:36:10.466Z"
+          }
+        ],
+        "heavyDuePositions": [
+          {
+            "symbol": "NAS100",
+            "strategy": "Momentum",
+            "category": "indices",
+            "categoryFallback": false,
+            "state": "normal",
+            "scanMode": "heavy",
+            "scanReason": "forced_sync",
+            "nextScanAt": "2026-04-26T03:36:55.466Z"
+          },
+          {
+            "symbol": "SPX500",
+            "strategy": "Breakout",
+            "category": "indices",
+            "categoryFallback": false,
+            "state": "normal",
+            "scanMode": "heavy",
+            "scanReason": "forced_sync",
+            "nextScanAt": "2026-04-26T03:36:55.466Z"
+          }
+        ],
+        "fastModePositions": [],
+        "lastScanAt": "2026-04-26T03:35:55.466Z",
+        "lastForcedSyncAt": "2026-04-26T03:35:55.466Z"
+      },
+      "monitorIntervalMs": 15000,
+      "dailyReport": {
+        "running": true,
+        "reportTime": "23:55",
+        "lastReportDate": null
+      }
+    }
+  },
+  "stop": {
+    "success": true,
+    "message": "Paper trading stopped",
+    "runtime": "0m"
+  }
+}

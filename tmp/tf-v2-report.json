@@ -1,0 +1,614 @@
+{
+  "startedAt": "2026-04-25T13:35:04.790Z",
+  "strategy": "TrendFollowing v2",
+  "period": {
+    "full": {
+      "start": "2025-10-15",
+      "end": "2026-04-25"
+    },
+    "oos": {
+      "start": "2026-02-15",
+      "end": "2026-04-25"
+    }
+  },
+  "initialBalance": 500,
+  "items": [
+    {
+      "symbol": "EURUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 11,
+          "pf": 1.26,
+          "ret": 0.78,
+          "monthlyReturn": 0.12365234375,
+          "wr": 63.63999999999999,
+          "dd": 2.11,
+          "sharpe": 1.47,
+          "perMonth": 1.7438151041666665
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=11<30",
+            "IS PF=1.26<1.3",
+            "IS mRet=0.1%<2.0%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 4,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 56,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "GBPUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 9,
+          "pf": 999,
+          "ret": 2.59,
+          "monthlyReturn": 0.4105891927083333,
+          "wr": 100,
+          "dd": 0.33,
+          "sharpe": 15.26,
+          "perMonth": 1.4267578125
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=9<30",
+            "IS mRet=0.4%<2.0%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 2,
+          "pullback_atr_max": 0.7,
+          "rsi_buy_min": 50,
+          "slMultiplier": 2,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "USDJPY",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 6,
+          "pf": 0.84,
+          "ret": -37.7,
+          "monthlyReturn": -5.976529947916667,
+          "wr": 66.67,
+          "dd": 131.64,
+          "sharpe": -1.18,
+          "perMonth": 0.951171875
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=6<30",
+            "IS PF=0.84<1.3",
+            "IS mRet=-6.0%<2.0%",
+            "IS DD=131.6%>25%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 2,
+          "pullback_atr_max": 0.7,
+          "rsi_buy_min": 50,
+          "slMultiplier": 2,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "AUDUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 16,
+          "pf": 1.41,
+          "ret": 2.27,
+          "monthlyReturn": 0.35986002604166667,
+          "wr": 62.5,
+          "dd": 3.44,
+          "sharpe": 2.08,
+          "perMonth": 2.536458333333333
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=16<30",
+            "IS mRet=0.4%<2.0%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 2,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 56,
+          "slMultiplier": 1,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "USDCHF",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 8,
+          "pf": 1.27,
+          "ret": 0.73,
+          "monthlyReturn": 0.11572591145833333,
+          "wr": 62.5,
+          "dd": 2.57,
+          "sharpe": 1.67,
+          "perMonth": 1.2682291666666665
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=8<30",
+            "IS PF=1.27<1.3",
+            "IS mRet=0.1%<2.0%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 4,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 56,
+          "slMultiplier": 1,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "USDCAD",
+      "status": "oos_fail",
+      "is": {
+        "metrics": {
+          "trades": 42,
+          "pf": 2.02,
+          "ret": 18.54,
+          "monthlyReturn": 2.93912109375,
+          "wr": 66.67,
+          "dd": 7.87,
+          "sharpe": 4.5,
+          "perMonth": 6.658203125
+        },
+        "gate": {
+          "pass": true,
+          "reasons": []
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 3,
+          "pullback_atr_max": 1.4,
+          "rsi_buy_min": 56,
+          "slMultiplier": 1,
+          "tpMultiplier": 2.5,
+          "riskPercent": 0.01
+        }
+      },
+      "oos": {
+        "metrics": {
+          "trades": 11,
+          "pf": 0.04,
+          "ret": -8.86,
+          "monthlyReturn": -3.9083514492753624,
+          "wr": 27.27,
+          "dd": 8.86,
+          "sharpe": -22.18,
+          "perMonth": 4.8523550724637685
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "OOS PF=0.04<1.1",
+            "OOS WR=27.3%<45%"
+          ]
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "NZDUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 17,
+          "pf": 3.22,
+          "ret": 3.35,
+          "monthlyReturn": 0.5310709635416666,
+          "wr": 88.24,
+          "dd": 1.73,
+          "sharpe": 6.36,
+          "perMonth": 2.6949869791666665
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=17<30",
+            "IS mRet=0.5%<2.0%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 2,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 56,
+          "slMultiplier": 2,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "XAUUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 30,
+          "pf": 1.46,
+          "ret": 39.7,
+          "monthlyReturn": 6.293587239583333,
+          "wr": 76.67,
+          "dd": 40.68,
+          "sharpe": 1.89,
+          "perMonth": 4.755859375
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS DD=40.7%>25%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 4,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 50,
+          "slMultiplier": 2,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "XAGUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 36,
+          "pf": 2.19,
+          "ret": 172.82,
+          "monthlyReturn": 27.396920572916663,
+          "wr": 77.78,
+          "dd": 30.18,
+          "sharpe": 4.95,
+          "perMonth": 5.70703125
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS DD=30.2%>25%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 3,
+          "pullback_atr_max": 1.4,
+          "rsi_buy_min": 56,
+          "slMultiplier": 2,
+          "tpMultiplier": 1.5,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "BTCUSD",
+      "status": "pass",
+      "is": {
+        "metrics": {
+          "trades": 46,
+          "pf": 1.91,
+          "ret": 22.33,
+          "monthlyReturn": 3.5399446614583328,
+          "wr": 73.91,
+          "dd": 6.76,
+          "sharpe": 3.89,
+          "perMonth": 7.292317708333333
+        },
+        "gate": {
+          "pass": true,
+          "reasons": []
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 4,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 53,
+          "slMultiplier": 2,
+          "tpMultiplier": 2,
+          "riskPercent": 0.01
+        }
+      },
+      "oos": {
+        "metrics": {
+          "trades": 20,
+          "pf": 1.55,
+          "ret": 5.77,
+          "monthlyReturn": 2.5452807971014493,
+          "wr": 50,
+          "dd": 5.29,
+          "sharpe": 2.38,
+          "perMonth": 8.822463768115943
+        },
+        "gate": {
+          "pass": true,
+          "reasons": []
+        }
+      },
+      "decision": "enable_with_params",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "ETHUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 55,
+          "pf": 1.27,
+          "ret": 4.92,
+          "monthlyReturn": 0.7799609375,
+          "wr": 69.08999999999999,
+          "dd": 5.96,
+          "sharpe": 1.48,
+          "perMonth": 8.719075520833332
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS PF=1.27<1.3",
+            "IS mRet=0.8%<2.0%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 3,
+          "pullback_atr_max": 1.4,
+          "rsi_buy_min": 56,
+          "slMultiplier": 2,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "NAS100",
+      "status": "oos_fail",
+      "is": {
+        "metrics": {
+          "trades": 38,
+          "pf": 1.69,
+          "ret": 18.94,
+          "monthlyReturn": 3.0025325520833333,
+          "wr": 73.68,
+          "dd": 10.6,
+          "sharpe": 2.89,
+          "perMonth": 6.024088541666666
+        },
+        "gate": {
+          "pass": true,
+          "reasons": []
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 4,
+          "pullback_atr_max": 1.4,
+          "rsi_buy_min": 53,
+          "slMultiplier": 2,
+          "tpMultiplier": 3,
+          "riskPercent": 0.01
+        }
+      },
+      "oos": {
+        "metrics": {
+          "trades": 8,
+          "pf": 0.93,
+          "ret": -0.53,
+          "monthlyReturn": -0.2337952898550725,
+          "wr": 50,
+          "dd": 6.04,
+          "sharpe": -0.45,
+          "perMonth": 3.528985507246377
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "OOS PF=0.93<1.1"
+          ]
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "US30",
+      "status": "pass",
+      "is": {
+        "metrics": {
+          "trades": 36,
+          "pf": 1.85,
+          "ret": 25.03,
+          "monthlyReturn": 3.9679720052083334,
+          "wr": 72.22,
+          "dd": 7.61,
+          "sharpe": 3.58,
+          "perMonth": 5.70703125
+        },
+        "gate": {
+          "pass": true,
+          "reasons": []
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 2,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 53,
+          "slMultiplier": 1.5,
+          "tpMultiplier": 2.5,
+          "riskPercent": 0.01
+        }
+      },
+      "oos": {
+        "metrics": {
+          "trades": 9,
+          "pf": 5.43,
+          "ret": 23.05,
+          "monthlyReturn": 10.167889492753623,
+          "wr": 77.78,
+          "dd": 2.73,
+          "sharpe": 8.03,
+          "perMonth": 3.9701086956521743
+        },
+        "gate": {
+          "pass": true,
+          "reasons": []
+        }
+      },
+      "decision": "enable_with_params",
+      "decisionApplied": true
+    },
+    {
+      "symbol": "XTIUSD",
+      "status": "is_fail",
+      "is": {
+        "metrics": {
+          "trades": 12,
+          "pf": 1.89,
+          "ret": 7.06,
+          "monthlyReturn": 1.1192122395833333,
+          "wr": 58.330000000000005,
+          "dd": 5.18,
+          "sharpe": 3.32,
+          "perMonth": 1.90234375
+        },
+        "gate": {
+          "pass": false,
+          "reasons": [
+            "IS trades=12<30",
+            "IS mRet=1.1%<2.0%"
+          ]
+        },
+        "params": {
+          "ema_fast": 30,
+          "ema_slow": 60,
+          "ema_trend": 200,
+          "rsi_period": 18,
+          "atr_period": 14,
+          "breakout_lookback": 2,
+          "pullback_atr_max": 1.05,
+          "rsi_buy_min": 56,
+          "slMultiplier": 1,
+          "tpMultiplier": 2.5,
+          "riskPercent": 0.01
+        }
+      },
+      "decision": "disable",
+      "decisionApplied": true
+    }
+  ],
+  "finishedAt": "2026-04-25T13:36:26.332Z",
+  "enabledSymbols": [
+    "BTCUSD",
+    "US30"
+  ],
+  "syncOk": true
+}

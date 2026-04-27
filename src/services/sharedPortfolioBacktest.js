@@ -26,6 +26,7 @@ const {
   getStrategyExecutionConfig,
   getForcedTimeframeExecutionConfig,
 } = require('../config/strategyExecution');
+const instrumentValuation = require('../utils/instrumentValuation');
 
 const WARMUP = 250;
 const DEFAULT_MAX_CONCURRENT_POSITIONS = 10;
@@ -123,8 +124,9 @@ function buildComboState({
     resolvedParams
   );
 
-  const spread = (instrument.spread || 0) * instrument.pipSize;
-  const slippage = 0.5 * instrument.pipSize;
+  const valuation = instrumentValuation.getValuationContext(tradingInstrument);
+  const spread = (valuation.spreadPips || 0) * valuation.pipSize;
+  const slippage = 0.5 * valuation.pipSize;
 
   return {
     combo,
@@ -148,6 +150,7 @@ function buildComboState({
     fullLowerIndicators,
     preparedLowerIndicators,
     needsEntryIndicators,
+    valuation,
     spread,
     slippage,
     historyWindowState: backtestEngine._createRollingArrayWindowState(candles),
@@ -172,10 +175,13 @@ function markToMarketEquity(state) {
     const pos = s.openPosition;
     const latest = state.latestCandleBySymbol[s.combo.symbol];
     if (!pos || !latest) return;
-    const priceDiff = pos.type === 'BUY'
-      ? latest.close - pos.entryPrice
-      : pos.entryPrice - latest.close;
-    eq += priceDiff * pos.lotSize * s.tradingInstrument.contractSize;
+    eq += instrumentValuation.calculateGrossProfitLoss({
+      type: pos.type,
+      entryPrice: pos.entryPrice,
+      exitPrice: latest.close,
+      lotSize: pos.lotSize,
+      instrument: s.tradingInstrument,
+    });
   });
   return eq;
 }
@@ -347,17 +353,21 @@ function processEvent(state, comboIdx, barIdx) {
         const entryPrice = result.signal === 'BUY'
           ? nextCandle.open + s.spread / 2 + s.slippage
           : nextCandle.open - s.spread / 2 - s.slippage;
-        const slDistance = Math.abs(entryPrice - result.sl);
-        const slPips = slDistance / s.tradingInstrument.pipSize;
-        const riskAmount = state.balance * s.tradingInstrument.riskParams.riskPercent;
-        let lotSize = slPips > 0 && s.tradingInstrument.pipValue > 0
-          ? riskAmount / (slPips * s.tradingInstrument.pipValue)
-          : 0;
-        lotSize = Math.max(
-          s.tradingInstrument.minLot,
-          Math.floor(lotSize / s.tradingInstrument.lotStep) * s.tradingInstrument.lotStep
+        const lotSize = instrumentValuation.calculateLotSize({
+          entryPrice,
+          slPrice: result.sl,
+          balance: state.balance,
+          riskPercent: s.tradingInstrument.riskParams.riskPercent,
+          instrument: s.tradingInstrument,
+        });
+        const plannedRiskAmount = parseFloat(
+          instrumentValuation.calculatePlannedRiskAmount({
+            entryPrice,
+            slPrice: result.sl,
+            lotSize,
+            instrument: s.tradingInstrument,
+          }).toFixed(4)
         );
-        lotSize = Math.min(lotSize, 5.0);
 
         if (!(lotSize > 0) || !Number.isFinite(lotSize) || state.balance <= 0) {
           state.rejectedSignals.zeroSize += 1;
@@ -372,6 +382,7 @@ function processEvent(state, comboIdx, barIdx) {
             tp: result.tp,
             currentSl: result.sl,
             lotSize,
+            plannedRiskAmount,
             atrAtEntry: currentAtr,
             breakevenConfig: s.effectiveBreakeven,
             indicatorsSnapshot: result.indicatorsSnapshot,

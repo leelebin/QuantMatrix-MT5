@@ -98,6 +98,7 @@ exports.runBacktest = async (req, res) => {
       initialBalance,
       strategyParams,
       parameterPreset,
+      costModel,
     } = req.body;
 
     // Validate inputs
@@ -226,6 +227,7 @@ exports.runBacktest = async (req, res) => {
       breakevenConfig: effectiveBreakeven,
       executionPolicy: presetResolution.strategyInstance.executionPolicy,
       includeChartData: true,
+      costModel: costModel || null,
     });
 
     console.log(`[Backtest] Completed: ${result.summary.totalTrades} trades, WR: ${(result.summary.winRate * 100).toFixed(1)}%, PF: ${result.summary.profitFactor}`);
@@ -296,7 +298,7 @@ exports.getBacktestParameterPreset = async (req, res) => {
 // @route   POST /api/backtest/run-all-strategies
 exports.runAllStrategies = async (req, res) => {
   try {
-    const { symbol, timeframe, startDate, endDate, initialBalance } = req.body;
+    const { symbol, timeframe, startDate, endDate, initialBalance, costModel } = req.body;
 
     const instrument = getInstrument(symbol);
     if (!instrument) {
@@ -404,6 +406,7 @@ exports.runAllStrategies = async (req, res) => {
           strategyParams: null,
           breakevenConfig: effectiveBreakeven,
           executionPolicy: strategyInstance.executionPolicy,
+          costModel: costModel || null,
         });
 
         entry.summary = result.summary;

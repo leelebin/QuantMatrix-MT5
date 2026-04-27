@@ -12,6 +12,8 @@ const { DEFAULT_EXECUTION_POLICY, calculateExecutionScore } = require('./executi
 const { getInstrument } = require('../config/instruments');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const { backtestsDb } = require('../config/db');
+const instrumentValuation = require('../utils/instrumentValuation');
+const backtestCostModel = require('../utils/backtestCostModel');
 const {
   resolveStrategyParameters,
 } = require('../config/strategyParameters');
@@ -298,6 +300,7 @@ class BacktestEngine {
       executionPolicy = null,
       executionConfigOverride = null,
       includeChartData = false,
+      costModel: requestCostModel = null,
     } = params;
 
     const instrument = getInstrument(symbol);
@@ -309,6 +312,11 @@ class BacktestEngine {
       storedParameters: storedStrategyParameters,
       overrides: strategyParams,
     });
+    const { costModel: resolvedCostModel, sources: costModelSources } = backtestCostModel.resolveCostModel({
+      instrumentCostModel: instrument.costModel || null,
+      strategyCostModel: resolvedParams && resolvedParams.costModel ? resolvedParams.costModel : null,
+      requestCostModel,
+    });
     const effectiveBreakeven = breakevenConfig
       ? breakevenService.normalizeBreakevenConfig(breakevenConfig, {
           partial: false,
@@ -317,10 +325,22 @@ class BacktestEngine {
         })
       : breakevenService.getDefaultBreakevenConfig();
     const tradingInstrument = this._buildTradingInstrument(instrument, resolvedParams, strategyType, executionConfigOverride);
+    const valuation = instrumentValuation.getValuationContext(tradingInstrument);
     const strategy = this._createStrategy(strategyType);
     const effectiveExecutionPolicy = executionPolicy || DEFAULT_EXECUTION_POLICY;
-    const spread = (spreadPips || instrument.spread) * instrument.pipSize;
-    const slippage = slippagePips * instrument.pipSize;
+    // costModel.spreadPips / slippagePips (when not null) override the legacy
+    // request-level spreadPips / slippagePips params. Old callers that pass
+    // spreadPips directly still work — costModel just adds another layer.
+    const costModelSpreadPips = Number.isFinite(resolvedCostModel.spreadPips) ? resolvedCostModel.spreadPips : null;
+    const costModelSlippagePips = Number.isFinite(resolvedCostModel.slippagePips) ? resolvedCostModel.slippagePips : null;
+    const effectiveSpreadPips = costModelSpreadPips !== null
+      ? costModelSpreadPips
+      : (spreadPips || valuation.spreadPips);
+    const effectiveSlippagePips = costModelSlippagePips !== null
+      ? costModelSlippagePips
+      : slippagePips;
+    const spread = effectiveSpreadPips * valuation.pipSize;
+    const slippage = effectiveSlippagePips * valuation.pipSize;
     const needsEntryIndicators = this._strategyNeedsEntryIndicators(strategyType);
 
     let balance = initialBalance;
@@ -424,11 +444,13 @@ class BacktestEngine {
             ? nextCandle.open + spread / 2 + slippage
             : nextCandle.open - spread / 2 - slippage;
           const slDistance = Math.abs(entryPrice - result.sl);
-          const slPips = slDistance / tradingInstrument.pipSize;
-          const riskAmount = balance * tradingInstrument.riskParams.riskPercent;
-          let lotSize = riskAmount / (slPips * tradingInstrument.pipValue);
-          lotSize = Math.max(tradingInstrument.minLot, Math.floor(lotSize / tradingInstrument.lotStep) * tradingInstrument.lotStep);
-          lotSize = Math.min(lotSize, 5.0);
+          const lotSize = instrumentValuation.calculateLotSize({
+            entryPrice,
+            slPrice: result.sl,
+            balance,
+            riskPercent: tradingInstrument.riskParams.riskPercent,
+            instrument: tradingInstrument,
+          });
 
           const currentAtr = ind.atr && ind.atr.length > 0 ? ind.atr[ind.atr.length - 1] : 0;
           const signalTime = result.entryCandleTime || result.setupCandleTime || currentCandle.time;
@@ -464,7 +486,14 @@ class BacktestEngine {
           if (executionScore.score < effectiveExecutionPolicy.minExecutionScore) {
             continue;
           }
-          const plannedRiskAmount = parseFloat((slPips * tradingInstrument.pipValue * lotSize).toFixed(4));
+          const plannedRiskAmount = parseFloat(
+            instrumentValuation.calculatePlannedRiskAmount({
+              entryPrice,
+              slPrice: result.sl,
+              lotSize,
+              instrument: tradingInstrument,
+            }).toFixed(4)
+          );
           const targetRMultiple = slDistance > 0
             ? parseFloat((Math.abs(result.tp - entryPrice) / slDistance).toFixed(4))
             : null;
@@ -485,6 +514,8 @@ class BacktestEngine {
             executionScoreDetails: executionScore.details,
             plannedRiskAmount,
             targetRMultiple,
+            costModel: resolvedCostModel,
+            costModelSources,
             indicatorsSnapshot: result.indicatorsSnapshot,
             reason: result.reason,
             entryReason: result.entryReason || [result.reason, result.triggerReason].filter(Boolean).join(' | ') || result.reason,
@@ -501,10 +532,13 @@ class BacktestEngine {
       if ((i % 10 === 0 || i === candles.length - 1) && (tradeStartMs === null || currentTimeMs >= tradeStartMs)) {
         let currentEquity = balance;
         if (openPosition) {
-          const priceDiff = openPosition.type === 'BUY'
-            ? currentCandle.close - openPosition.entryPrice
-            : openPosition.entryPrice - currentCandle.close;
-          currentEquity += priceDiff * openPosition.lotSize * tradingInstrument.contractSize;
+          currentEquity += instrumentValuation.calculateGrossProfitLoss({
+            type: openPosition.type,
+            entryPrice: openPosition.entryPrice,
+            exitPrice: currentCandle.close,
+            lotSize: openPosition.lotSize,
+            instrument: tradingInstrument,
+          });
         }
         equity = currentEquity;
         equityCurve.push({ time: currentCandle.time, equity: currentEquity });
@@ -577,6 +611,10 @@ class BacktestEngine {
       },
       breakevenConfigUsed: effectiveBreakeven,
       executionPolicyUsed: effectiveExecutionPolicy,
+      costModelUsed: {
+        costModel: resolvedCostModel,
+        sources: costModelSources,
+      },
       summary,
       monthlyBreakdown,
       trades,
@@ -655,13 +693,42 @@ class BacktestEngine {
 
   /**
    * Close a trade and calculate P/L
+   *
+   * Money math is delegated to instrumentValuation so the same gross/net
+   * logic applies to backtests, paper, and any live fallback path. Cost
+   * fields (commission/swap/fee) are kept in the trade record for future
+   * cost-model work — they default to 0 today.
    */
   _closeTrade(position, exitPrice, reason, exitTime, instrument) {
-    const priceDiff = position.type === 'BUY'
-      ? exitPrice - position.entryPrice
-      : position.entryPrice - exitPrice;
-    const profitPips = priceDiff / instrument.pipSize;
-    const profitLoss = priceDiff * position.lotSize * instrument.contractSize;
+    const profitPips = instrumentValuation.calculateProfitPips({
+      type: position.type,
+      entryPrice: position.entryPrice,
+      exitPrice,
+      instrument,
+    });
+    const grossProfitLoss = instrumentValuation.calculateGrossProfitLoss({
+      type: position.type,
+      entryPrice: position.entryPrice,
+      exitPrice,
+      lotSize: position.lotSize,
+      instrument,
+    });
+    const costs = backtestCostModel.calculateTradeCosts({
+      costModel: position.costModel,
+      lotSize: position.lotSize,
+      type: position.type,
+      entryTime: position.entryTime,
+      exitTime,
+    });
+    const commission = costs.commission;
+    const swap = costs.swap;
+    const fee = costs.fee;
+    const profitLoss = instrumentValuation.calculateNetProfitLoss({
+      grossProfitLoss,
+      commission,
+      swap,
+      fee,
+    });
     const realizedRMultiple = Number(position.plannedRiskAmount) > 0
       ? parseFloat((profitLoss / position.plannedRiskAmount).toFixed(4))
       : null;
@@ -682,7 +749,14 @@ class BacktestEngine {
       finalSl: position.currentSl,
       lotSize: position.lotSize,
       profitPips: parseFloat(profitPips.toFixed(1)),
+      grossProfitLoss: parseFloat(grossProfitLoss.toFixed(2)),
+      commission: parseFloat(commission.toFixed(2)),
+      swap: parseFloat(swap.toFixed(2)),
+      fee: parseFloat(fee.toFixed(2)),
       profitLoss: parseFloat(profitLoss.toFixed(2)),
+      overnightDays: costs.overnightDays,
+      costModelUsed: position.costModelSources || ['default'],
+      plannedRiskAmount: Number(position.plannedRiskAmount) || 0,
       realizedRMultiple,
       targetRMultipleCaptured,
       exitReason: reason,
@@ -748,6 +822,8 @@ class BacktestEngine {
         netProfitMoney: 0, returnPercent: 0, averageWinPips: 0, averageLossPips: 0,
         maxConsecutiveWins: 0, maxConsecutiveLosses: 0, maxDrawdownPercent: 0,
         sharpeRatio: 0, averageHoldingPeriodHours: 0,
+        totalCommission: 0, totalSwap: 0, totalFees: 0, totalTradingCosts: 0,
+        grossNetDifference: 0,
       };
     }
 
@@ -755,8 +831,13 @@ class BacktestEngine {
     const losers = trades.filter((t) => t.profitPips <= 0);
     const totalProfitPips = winners.reduce((sum, trade) => sum + trade.profitPips, 0);
     const totalLossPips = losers.reduce((sum, trade) => sum + trade.profitPips, 0);
-    const totalProfitMoney = winners.reduce((sum, trade) => sum + trade.profitLoss, 0);
-    const totalLossMoney = losers.reduce((sum, trade) => sum + Math.abs(trade.profitLoss), 0);
+    // Gross PF uses pre-cost grossProfitLoss so the metric stays comparable
+    // across runs with and without a cost model. Net impact is exposed
+    // separately via netProfitMoney + grossNetDifference.
+    const grossWinners = trades.filter((t) => Number(t.grossProfitLoss) > 0);
+    const grossLosers = trades.filter((t) => Number(t.grossProfitLoss) <= 0);
+    const totalProfitMoney = grossWinners.reduce((sum, trade) => sum + Number(trade.grossProfitLoss), 0);
+    const totalLossMoney = grossLosers.reduce((sum, trade) => sum + Math.abs(Number(trade.grossProfitLoss)), 0);
 
     let maxConsWins = 0;
     let maxConsLosses = 0;
@@ -793,6 +874,10 @@ class BacktestEngine {
       }
     }
 
+    const costs = backtestCostModel.summarizeCosts(trades);
+    const grossNet = totalProfitMoney - totalLossMoney;
+    const netProfitMoney = parseFloat((finalBalance - initialBalance).toFixed(2));
+
     return {
       totalTrades: trades.length,
       winningTrades: winners.length,
@@ -807,7 +892,7 @@ class BacktestEngine {
       totalProfitPips: parseFloat(totalProfitPips.toFixed(1)),
       totalLossPips: parseFloat(totalLossPips.toFixed(1)),
       netProfitPips: parseFloat((totalProfitPips + totalLossPips).toFixed(1)),
-      netProfitMoney: parseFloat((finalBalance - initialBalance).toFixed(2)),
+      netProfitMoney,
       returnPercent: parseFloat(((finalBalance - initialBalance) / initialBalance * 100).toFixed(2)),
       averageWinPips: winners.length > 0 ? parseFloat((totalProfitPips / winners.length).toFixed(1)) : 0,
       averageLossPips: losers.length > 0 ? parseFloat((totalLossPips / losers.length).toFixed(1)) : 0,
@@ -816,6 +901,13 @@ class BacktestEngine {
       maxDrawdownPercent: parseFloat((maxDD * 100).toFixed(2)),
       sharpeRatio: parseFloat(sharpe.toFixed(2)),
       averageHoldingPeriodHours: holdingCount > 0 ? parseFloat((totalHours / holdingCount).toFixed(1)) : 0,
+      totalCommission: parseFloat(costs.totalCommission.toFixed(2)),
+      totalSwap: parseFloat(costs.totalSwap.toFixed(2)),
+      totalFees: parseFloat(costs.totalFees.toFixed(2)),
+      totalTradingCosts: parseFloat(costs.totalTradingCosts.toFixed(2)),
+      // grossNetDifference = (gross gain - gross loss) - net P&L. With cost
+      // model active this equals -totalTradingCosts; with no costs it's 0.
+      grossNetDifference: parseFloat((grossNet - netProfitMoney).toFixed(2)),
     };
   }
 

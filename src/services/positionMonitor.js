@@ -16,6 +16,10 @@ const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const auditService = require('./auditService');
 const { getStrategyInstance } = require('./strategyInstanceService');
 const { getInstrument } = require('../config/instruments');
+const RiskProfile = require('../models/RiskProfile');
+const indicatorService = require('./indicatorService');
+const tradeManagementService = require('./tradeManagementService');
+const { resolveTradeManagementPolicy } = require('./tradeManagementConfig');
 const {
   getPositionCadenceProfile,
   getScanReason,
@@ -272,6 +276,139 @@ class PositionMonitor {
     return metadata;
   }
 
+  /**
+   * After trailing/breakeven processing, run the conservative trade-management
+   * evaluator on each position. All side-effects (close/partialClose/modifySl)
+   * are gated inside the policy flags resolved from active profile +
+   * strategyInstance — by default this only writes audit events.
+   *
+   * Wrapped in per-position try/catch so a single failure can never break the
+   * monitor loop or the upstream trailing/breakeven flow.
+   */
+  async _runTradeManagementEvaluation(positions, contexts, scanMode, now) {
+    if (!Array.isArray(positions) || positions.length === 0) return;
+
+    let activeProfile = null;
+    try {
+      activeProfile = await RiskProfile.getActive();
+    } catch (_err) {
+      activeProfile = null;
+    }
+
+    const contextByKey = new Map(contexts.map((ctx) => [ctx.key, ctx]));
+    const strategyInstanceCache = new Map();
+    const candleCache = new Map();
+    const priceCache = new Map();
+
+    const getCachedStrategyInstance = async (position) => {
+      const strategyName = position?.strategy;
+      if (!strategyName) return null;
+      const cacheKey = `${position.symbol}:${strategyName}`;
+      if (!strategyInstanceCache.has(cacheKey)) {
+        strategyInstanceCache.set(
+          cacheKey,
+          getStrategyInstance(position.symbol, strategyName, { activeProfile }).catch(() => null)
+        );
+      }
+      return strategyInstanceCache.get(cacheKey);
+    };
+
+    const fetchPrice = async (symbol) => {
+      if (priceCache.has(symbol)) return priceCache.get(symbol);
+      const promise = mt5Service.getPrice(symbol).catch(() => null);
+      priceCache.set(symbol, promise);
+      return promise;
+    };
+
+    const fetchCandles = async (symbol, timeframe) => {
+      const key = `${symbol}:${timeframe}`;
+      if (candleCache.has(key)) return candleCache.get(key);
+      const promise = mt5Service.getCandles(symbol, timeframe, null, 251).catch(() => null);
+      candleCache.set(key, promise);
+      return promise;
+    };
+
+    for (const position of positions) {
+      try {
+        const ctx = contextByKey.get(this._getPositionKey(position));
+        if (!ctx) continue;
+
+        const strategyInstance = await getCachedStrategyInstance(position);
+        const policy = resolveTradeManagementPolicy({ activeProfile, strategyInstance });
+        const instrument = getInstrument(position.symbol);
+
+        const priceData = await fetchPrice(position.symbol);
+        let currentPrice = null;
+        if (priceData) {
+          currentPrice = String(position.type || '').toUpperCase() === 'BUY'
+            ? Number(priceData.bid)
+            : Number(priceData.ask);
+          if (!Number.isFinite(currentPrice)) {
+            currentPrice = Number(priceData.last) || null;
+          }
+        }
+        if (!Number.isFinite(currentPrice) && Number.isFinite(Number(position.currentPrice))) {
+          currentPrice = Number(position.currentPrice);
+        }
+
+        let invalidationContext = null;
+        if (scanMode === 'heavy') {
+          const timeframe = position.timeframe || strategyInstance?.timeframe || 'H1';
+          const candles = await fetchCandles(position.symbol, timeframe);
+          let indicators = null;
+          if (Array.isArray(candles) && candles.length >= 50) {
+            const closes = candles.map((c) => Number(c.close)).filter(Number.isFinite);
+            try {
+              indicators = { ema50: indicatorService.ema(closes, 50) };
+            } catch (_err) {
+              indicators = null;
+            }
+          }
+          invalidationContext = {
+            candles: candles || [],
+            indicators,
+            opposingSignal: false,
+            higherTrendChanged: false,
+          };
+        }
+
+        const actions = {
+          modifySlFn: async (pos, newSl) => {
+            if (!pos?.mt5PositionId) throw new Error('mt5PositionId missing');
+            return mt5Service.modifyPosition(pos.mt5PositionId, newSl, pos.currentTp || null);
+          },
+          partialCloseFn: async (pos, volume) => {
+            if (!pos?.mt5PositionId) throw new Error('mt5PositionId missing');
+            if (typeof mt5Service.partialClosePosition !== 'function') {
+              throw new Error('partialClosePosition not supported');
+            }
+            return mt5Service.partialClosePosition(pos.mt5PositionId, volume);
+          },
+          closePositionFn: async (pos) => {
+            if (!pos?.mt5PositionId) throw new Error('mt5PositionId missing');
+            return mt5Service.closePosition(pos.mt5PositionId);
+          },
+        };
+
+        await tradeManagementService.evaluatePosition({
+          position,
+          instrument,
+          policy,
+          scanMode,
+          scanReason: ctx.scanReason || null,
+          newsBlackoutActive: ctx.state === 'news_fast_mode',
+          blackoutEvent: ctx.blackoutEvent || null,
+          currentPrice,
+          now,
+          invalidationContext,
+          actions,
+        });
+      } catch (err) {
+        console.warn(`[Monitor] Trade management evaluation failed for ${position?.symbol}: ${err.message}`);
+      }
+    }
+  }
+
   async _runPositionManagement(positions, contexts, scanMode, now, cycleState) {
     if (!Array.isArray(positions) || positions.length === 0) {
       return [];
@@ -316,6 +453,8 @@ class PositionMonitor {
         scanMetadataByPosition: metadataByPosition,
       }
     );
+
+    await this._runTradeManagementEvaluation(positions, contexts, scanMode, now);
 
     if (updates.length === 0) {
       return [];

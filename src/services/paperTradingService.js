@@ -25,6 +25,10 @@ const {
   buildManagedPositionState,
   createManagerAction,
 } = require('../utils/positionExitState');
+const {
+  buildOpenTradeCapture,
+  buildPositionExportSnapshot,
+} = require('../utils/tradeDataCapture');
 const auditService = require('./auditService');
 const strategyDailyStopService = require('./strategyDailyStopService');
 const { getStrategyInstance } = require('./strategyInstanceService');
@@ -653,6 +657,13 @@ class PaperTradingService {
         exitPlan,
         plannedRiskAmount: riskCheck.plannedRiskAmount,
       });
+      const openCapture = buildOpenTradeCapture(signal, managedPositionState);
+      const spreadAtEntry = Number.isFinite(Number(priceData.ask)) && Number.isFinite(Number(priceData.bid))
+        ? Math.abs(Number(priceData.ask) - Number(priceData.bid))
+        : null;
+      const slippageEstimate = Number.isFinite(Number(entryPrice)) && Number.isFinite(Number(quotedEntryPrice))
+        ? parseFloat((Number(entryPrice) - Number(quotedEntryPrice)).toFixed(10))
+        : null;
 
       // Save to paper positions DB
       const position = await paperPositionsDb.insert({
@@ -669,10 +680,15 @@ class PaperTradingService {
         comment: tradeComment,
         confidence: signal.confidence,
         rawConfidence: signal.rawConfidence ?? signal.confidence,
-        reason: signal.reason,
+        reason: openCapture.signalReason || signal.reason,
         atrAtEntry,
         ...managedPositionState,
-        indicatorsSnapshot: signal.indicatorsSnapshot,
+        ...openCapture,
+        requestedEntryPrice: quotedEntryPrice,
+        spreadAtEntry,
+        slippageEstimate,
+        brokerRetcodeOpen: result.retcode ?? null,
+        indicatorsSnapshot: openCapture.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
       });
@@ -685,11 +701,14 @@ class PaperTradingService {
         entryPrice,
         stopLoss: signal.sl,
         takeProfit: signal.tp,
-        signalReason: signal.reason,
+        signalReason: openCapture.signalReason || signal.reason,
+        entryReason: openCapture.entryReason,
+        setupReason: openCapture.setupReason,
+        triggerReason: openCapture.triggerReason,
         strategy: signal.strategy,
         confidence: signal.confidence,
         rawConfidence: signal.rawConfidence ?? signal.confidence,
-        indicatorsSnapshot: signal.indicatorsSnapshot,
+        indicatorsSnapshot: openCapture.indicatorsSnapshot,
         commission: entryCommission,
         swap: entrySwap,
         fee: entryFee,
@@ -709,6 +728,14 @@ class PaperTradingService {
         entryTimeframe: managedPositionState.entryTimeframe,
         setupCandleTime: managedPositionState.setupCandleTime,
         entryCandleTime: managedPositionState.entryCandleTime,
+        initialSl: openCapture.initialSl,
+        initialTp: openCapture.initialTp,
+        finalSl: openCapture.finalSl,
+        finalTp: openCapture.finalTp,
+        requestedEntryPrice: quotedEntryPrice,
+        spreadAtEntry,
+        slippageEstimate,
+        brokerRetcodeOpen: result.retcode ?? null,
         openedAt,
       });
 
@@ -1113,6 +1140,11 @@ class PaperTradingService {
       commission: closedSnapshot.commission,
       swap: closedSnapshot.swap,
       fee: closedSnapshot.fee,
+      grossProfitLoss: closedSnapshot.grossProfitLoss,
+      finalSl: localPos.currentSl ?? localPos.finalSl ?? localPos.sl ?? null,
+      finalTp: localPos.currentTp ?? localPos.finalTp ?? localPos.tp ?? null,
+      brokerRetcodeModify: localPos.brokerRetcodeModify ?? null,
+      positionSnapshot: buildPositionExportSnapshot(localPos),
       openedAt,
       closedAt: closedSnapshot.closedAt,
       realizedRMultiple: closedSnapshot.realizedRMultiple,
@@ -1252,6 +1284,12 @@ class PaperTradingService {
       commission: closedSnapshot.commission,
       swap: closedSnapshot.swap,
       fee: closedSnapshot.fee,
+      grossProfitLoss: closedSnapshot.grossProfitLoss,
+      finalSl: position.currentSl ?? position.finalSl ?? position.sl ?? null,
+      finalTp: position.currentTp ?? position.finalTp ?? position.tp ?? null,
+      brokerRetcodeClose: closeResult?.retcode ?? null,
+      brokerRetcodeModify: position.brokerRetcodeModify ?? null,
+      positionSnapshot: buildPositionExportSnapshot(position),
       openedAt,
       closedAt: closedSnapshot.closedAt,
       realizedRMultiple: closedSnapshot.realizedRMultiple,

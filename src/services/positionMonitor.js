@@ -13,6 +13,7 @@ const breakevenService = require('./breakevenService');
 const economicCalendarService = require('./economicCalendarService');
 const { positionsDb, tradesDb } = require('../config/db');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
+const { buildPositionExportSnapshot } = require('../utils/tradeDataCapture');
 const auditService = require('./auditService');
 const { getStrategyInstance } = require('./strategyInstanceService');
 const { getInstrument } = require('../config/instruments');
@@ -702,11 +703,16 @@ class PositionMonitor {
         commission: closedSnapshot.commission,
         swap: closedSnapshot.swap,
         fee: closedSnapshot.fee,
+        grossProfitLoss: closedSnapshot.grossProfitLoss,
+        finalSl: localPos.currentSl ?? localPos.finalSl ?? localPos.sl ?? null,
+        finalTp: localPos.currentTp ?? localPos.finalTp ?? localPos.tp ?? null,
+        brokerRetcodeModify: localPos.brokerRetcodeModify ?? null,
         mt5CloseDealId: dealSummary?.lastExitDeal?.id || null,
         exitPlanSnapshot: closedSnapshot.exitPlanSnapshot || null,
         managementEvents: closedSnapshot.managementEvents || [],
         realizedRMultiple: closedSnapshot.realizedRMultiple,
         targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
+        positionSnapshot: buildPositionExportSnapshot(localPos),
       },
     });
 

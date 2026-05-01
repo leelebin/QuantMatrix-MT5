@@ -196,7 +196,29 @@ class TradeHistoryService {
       strategy,
       confidence,
       reason,
+      entryReason: existingTrade?.entryReason || null,
+      setupReason: existingTrade?.setupReason || null,
+      triggerReason: existingTrade?.triggerReason || null,
       indicatorsSnapshot: existingTrade?.indicatorsSnapshot || {},
+      executionScore: existingTrade?.executionScore ?? null,
+      executionScoreDetails: existingTrade?.executionScoreDetails || null,
+      initialSl: existingTrade?.initialSl ?? existingTrade?.sl ?? null,
+      initialTp: existingTrade?.initialTp ?? existingTrade?.tp ?? null,
+      finalSl: existingTrade?.finalSl ?? existingTrade?.sl ?? null,
+      finalTp: existingTrade?.finalTp ?? existingTrade?.tp ?? null,
+      plannedRiskAmount: existingTrade?.plannedRiskAmount ?? null,
+      realizedRMultiple: existingTrade?.realizedRMultiple ?? null,
+      targetRMultiple: existingTrade?.targetRMultiple ?? null,
+      targetRMultipleCaptured: existingTrade?.targetRMultipleCaptured ?? null,
+      managementEvents: Array.isArray(existingTrade?.managementEvents) ? existingTrade.managementEvents : [],
+      maxFavourableR: existingTrade?.maxFavourableR ?? null,
+      maxAdverseR: existingTrade?.maxAdverseR ?? null,
+      spreadAtEntry: existingTrade?.spreadAtEntry ?? null,
+      slippageEstimate: existingTrade?.slippageEstimate ?? null,
+      brokerRetcodeOpen: existingTrade?.brokerRetcodeOpen ?? null,
+      brokerRetcodeClose: existingTrade?.brokerRetcodeClose ?? null,
+      brokerRetcodeModify: existingTrade?.brokerRetcodeModify ?? null,
+      positionSnapshot: existingTrade?.positionSnapshot || null,
       commission: this._coerceNumber(summary?.commission, existingTrade?.commission ?? 0),
       swap: this._coerceNumber(summary?.swap, existingTrade?.swap ?? 0),
       fee: this._coerceNumber(summary?.fee, existingTrade?.fee ?? 0),
@@ -230,10 +252,13 @@ class TradeHistoryService {
       record.closedAt = closedSnapshot.closedAt;
       record.exitReason = closedSnapshot.exitReason;
       record.profitLoss = closedSnapshot.profitLoss;
+      record.grossProfitLoss = closedSnapshot.grossProfitLoss;
       record.profitPips = closedSnapshot.profitPips;
       record.commission = closedSnapshot.commission;
       record.swap = closedSnapshot.swap;
       record.fee = closedSnapshot.fee;
+      record.realizedRMultiple = existingTrade?.realizedRMultiple ?? closedSnapshot.realizedRMultiple;
+      record.targetRMultipleCaptured = existingTrade?.targetRMultipleCaptured ?? closedSnapshot.targetRMultipleCaptured;
     } else {
       record.exitPrice = null;
       record.closedAt = null;
@@ -269,10 +294,34 @@ class TradeHistoryService {
         : (brokerStrategy || UNKNOWN_STRATEGY),
       confidence: existingTrade.confidence ?? brokerTrade.confidence ?? null,
       reason: String(existingTrade.reason || brokerTrade.reason || '').trim(),
+      entryReason: existingTrade.entryReason || brokerTrade.entryReason || null,
+      setupReason: existingTrade.setupReason || brokerTrade.setupReason || null,
+      triggerReason: existingTrade.triggerReason || brokerTrade.triggerReason || null,
       indicatorsSnapshot: existingTrade.indicatorsSnapshot
         && Object.keys(existingTrade.indicatorsSnapshot).length > 0
         ? existingTrade.indicatorsSnapshot
         : (brokerTrade.indicatorsSnapshot || {}),
+      executionScore: existingTrade.executionScore ?? brokerTrade.executionScore ?? null,
+      executionScoreDetails: existingTrade.executionScoreDetails || brokerTrade.executionScoreDetails || null,
+      initialSl: existingTrade.initialSl ?? existingTrade.sl ?? brokerTrade.initialSl ?? brokerTrade.sl ?? null,
+      initialTp: existingTrade.initialTp ?? existingTrade.tp ?? brokerTrade.initialTp ?? brokerTrade.tp ?? null,
+      finalSl: brokerTrade.finalSl ?? existingTrade.finalSl ?? existingTrade.currentSl ?? existingTrade.sl ?? null,
+      finalTp: brokerTrade.finalTp ?? existingTrade.finalTp ?? existingTrade.currentTp ?? existingTrade.tp ?? null,
+      plannedRiskAmount: existingTrade.plannedRiskAmount ?? brokerTrade.plannedRiskAmount ?? null,
+      realizedRMultiple: existingTrade.realizedRMultiple ?? brokerTrade.realizedRMultiple ?? null,
+      targetRMultiple: existingTrade.targetRMultiple ?? brokerTrade.targetRMultiple ?? null,
+      targetRMultipleCaptured: existingTrade.targetRMultipleCaptured ?? brokerTrade.targetRMultipleCaptured ?? null,
+      managementEvents: Array.isArray(existingTrade.managementEvents)
+        ? existingTrade.managementEvents
+        : (Array.isArray(brokerTrade.managementEvents) ? brokerTrade.managementEvents : []),
+      maxFavourableR: existingTrade.maxFavourableR ?? brokerTrade.maxFavourableR ?? null,
+      maxAdverseR: existingTrade.maxAdverseR ?? brokerTrade.maxAdverseR ?? null,
+      spreadAtEntry: existingTrade.spreadAtEntry ?? brokerTrade.spreadAtEntry ?? null,
+      slippageEstimate: existingTrade.slippageEstimate ?? brokerTrade.slippageEstimate ?? null,
+      brokerRetcodeOpen: existingTrade.brokerRetcodeOpen ?? brokerTrade.brokerRetcodeOpen ?? null,
+      brokerRetcodeClose: existingTrade.brokerRetcodeClose ?? brokerTrade.brokerRetcodeClose ?? null,
+      brokerRetcodeModify: existingTrade.brokerRetcodeModify ?? brokerTrade.brokerRetcodeModify ?? null,
+      positionSnapshot: existingTrade.positionSnapshot || brokerTrade.positionSnapshot || null,
       commission: brokerTrade.commission ?? existingTrade.commission ?? 0,
       swap: brokerTrade.swap ?? existingTrade.swap ?? 0,
       fee: brokerTrade.fee ?? existingTrade.fee ?? 0,
@@ -301,6 +350,9 @@ class TradeHistoryService {
       merged.profitLoss = keepClosedState
         ? (existingTrade.profitLoss ?? null)
         : (brokerTrade.profitLoss ?? existingTrade.profitLoss ?? null);
+      merged.grossProfitLoss = keepClosedState
+        ? (existingTrade.grossProfitLoss ?? null)
+        : (brokerTrade.grossProfitLoss ?? existingTrade.grossProfitLoss ?? null);
       merged.profitPips = keepClosedState
         ? (existingTrade.profitPips ?? null)
         : (brokerTrade.profitPips ?? existingTrade.profitPips ?? null);
@@ -314,6 +366,7 @@ class TradeHistoryService {
       merged.closedAt = null;
       merged.exitReason = null;
       merged.profitLoss = existingTrade.status === 'OPEN' ? existingTrade.profitLoss ?? null : null;
+      merged.grossProfitLoss = existingTrade.status === 'OPEN' ? existingTrade.grossProfitLoss ?? null : null;
       merged.profitPips = existingTrade.status === 'OPEN' ? existingTrade.profitPips ?? null : null;
       merged.mt5CloseDealId = null;
     }
@@ -356,6 +409,9 @@ class TradeHistoryService {
       || this._stringChanged(trade.type, update.type)
       || this._stringChanged(trade.strategy, update.strategy)
       || this._stringChanged(trade.reason, update.reason)
+      || this._stringChanged(trade.entryReason, update.entryReason)
+      || this._stringChanged(trade.setupReason, update.setupReason)
+      || this._stringChanged(trade.triggerReason, update.triggerReason)
       || this._stringChanged(trade.status, update.status)
       || this._stringChanged(trade.exitReason, update.exitReason)
       || this._stringChanged(trade.mt5PositionId, update.mt5PositionId)
@@ -366,16 +422,36 @@ class TradeHistoryService {
       || this._stringChanged(trade.comment, update.comment)
       || this._numberChanged(trade.entryPrice, update.entryPrice)
       || this._numberChanged(trade.exitPrice, update.exitPrice)
+      || this._numberChanged(trade.initialSl, update.initialSl)
+      || this._numberChanged(trade.initialTp, update.initialTp)
+      || this._numberChanged(trade.finalSl, update.finalSl)
+      || this._numberChanged(trade.finalTp, update.finalTp)
       || this._numberChanged(trade.lotSize, update.lotSize)
       || this._numberChanged(trade.confidence, update.confidence)
       || this._numberChanged(trade.profitLoss, update.profitLoss)
+      || this._numberChanged(trade.grossProfitLoss, update.grossProfitLoss)
       || this._numberChanged(trade.profitPips, update.profitPips)
+      || this._numberChanged(trade.executionScore, update.executionScore)
+      || this._numberChanged(trade.plannedRiskAmount, update.plannedRiskAmount)
+      || this._numberChanged(trade.realizedRMultiple, update.realizedRMultiple)
+      || this._numberChanged(trade.targetRMultiple, update.targetRMultiple)
+      || this._numberChanged(trade.targetRMultipleCaptured, update.targetRMultipleCaptured)
+      || this._numberChanged(trade.maxFavourableR, update.maxFavourableR)
+      || this._numberChanged(trade.maxAdverseR, update.maxAdverseR)
+      || this._numberChanged(trade.spreadAtEntry, update.spreadAtEntry)
+      || this._numberChanged(trade.slippageEstimate, update.slippageEstimate)
+      || this._numberChanged(trade.brokerRetcodeOpen, update.brokerRetcodeOpen)
+      || this._numberChanged(trade.brokerRetcodeClose, update.brokerRetcodeClose)
+      || this._numberChanged(trade.brokerRetcodeModify, update.brokerRetcodeModify)
       || this._numberChanged(trade.commission, update.commission)
       || this._numberChanged(trade.swap, update.swap)
       || this._numberChanged(trade.fee, update.fee)
       || this._dateChanged(trade.openedAt, update.openedAt)
       || this._dateChanged(trade.closedAt, update.closedAt)
       || this._jsonChanged(trade.indicatorsSnapshot, update.indicatorsSnapshot)
+      || this._jsonChanged(trade.executionScoreDetails, update.executionScoreDetails)
+      || this._jsonChanged(trade.managementEvents, update.managementEvents)
+      || this._jsonChanged(trade.positionSnapshot, update.positionSnapshot)
     );
   }
 

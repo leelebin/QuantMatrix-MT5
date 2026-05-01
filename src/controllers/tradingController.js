@@ -18,6 +18,7 @@ const {
 } = require('../services/assignmentRuntimeService');
 const { getAllSymbols, getInstrument, instruments, INSTRUMENT_CATEGORIES } = require('../config/instruments');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
+const { buildOpenTradeCapture } = require('../utils/tradeDataCapture');
 const symbolResolver = require('../services/symbolResolver');
 
 let tradingScheduler = null;
@@ -190,6 +191,10 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
   const entryCommission = Number(order.entryDeal?.commission) || 0;
   const entrySwap = Number(order.entryDeal?.swap) || 0;
   const entryFee = Number(order.entryDeal?.fee) || 0;
+  const openCapture = buildOpenTradeCapture(signal, {});
+  const slippageEstimate = Number.isFinite(Number(executedEntryPrice)) && Number.isFinite(Number(signal.entryPrice))
+    ? parseFloat((Number(executedEntryPrice) - Number(signal.entryPrice)).toFixed(10))
+    : null;
 
   const position = await positionsDb.insert({
     symbol: signal.symbol,
@@ -206,11 +211,15 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
     strategy: signal.strategy,
     comment: tradeComment,
     confidence: signal.confidence,
-    reason: signal.reason,
+    reason: openCapture.signalReason || signal.reason,
     atrAtEntry: signal.indicatorsSnapshot?.atr || 0,
+    ...openCapture,
     partialsExecutedIndices: [],
     maxFavourablePrice: executedEntryPrice,
-    indicatorsSnapshot: signal.indicatorsSnapshot || {},
+    requestedEntryPrice: signal.entryPrice || null,
+    slippageEstimate,
+    brokerRetcodeOpen: order.retcode ?? null,
+    indicatorsSnapshot: openCapture.indicatorsSnapshot,
     unrealizedPl: 0,
     openedAt,
     status: 'OPEN',
@@ -225,8 +234,18 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
     lotSize: volume,
     strategy: signal.strategy,
     confidence: signal.confidence,
-    reason: signal.reason,
-    indicatorsSnapshot: signal.indicatorsSnapshot || {},
+    reason: openCapture.signalReason || signal.reason,
+    entryReason: openCapture.entryReason,
+    setupReason: openCapture.setupReason,
+    triggerReason: openCapture.triggerReason,
+    initialSl: openCapture.initialSl,
+    initialTp: openCapture.initialTp,
+    finalSl: openCapture.finalSl,
+    finalTp: openCapture.finalTp,
+    requestedEntryPrice: signal.entryPrice || null,
+    slippageEstimate,
+    brokerRetcodeOpen: order.retcode ?? null,
+    indicatorsSnapshot: openCapture.indicatorsSnapshot,
     commission: entryCommission,
     swap: entrySwap,
     fee: entryFee,

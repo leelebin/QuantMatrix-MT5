@@ -78,17 +78,24 @@ function buildClosedTradeSnapshot(position, dealSummary = null, fallback = {}) {
     protectiveStopState: position?.protectiveStopState || null,
   });
   const metrics = calculateExitMetrics(position, { profitLoss });
+  const commission = dealSummary?.commission || 0;
+  const swap = dealSummary?.swap || 0;
+  const fee = dealSummary?.fee || 0;
+  const grossProfitLoss = hasRealizedBrokerProfit
+    ? profitLoss - commission - swap - fee
+    : priceBasedProfit;
 
   return {
     entryPrice,
     exitPrice,
     exitReason,
     profitLoss,
+    grossProfitLoss,
     profitPips,
     closedAt,
-    commission: dealSummary?.commission || 0,
-    swap: dealSummary?.swap || 0,
-    fee: dealSummary?.fee || 0,
+    commission,
+    swap,
+    fee,
     dealSummary,
     exitPlanSnapshot: position?.exitPlanSnapshot || position?.exitPlan || null,
     managementEvents: Array.isArray(position?.managementEvents) ? position.managementEvents : [],

@@ -146,6 +146,17 @@ class MeanReversionStrategy extends BaseStrategy {
     const isOversold = currentRsi < oversoldThreshold;
 
     if (touchedLower && closedInsideLower && isOversold) {
+      const trendCheck = this._isTrendingMarket(indicators, candles, 'BUY', currentAtr);
+      if (trendCheck.trending) {
+        return this.noSignal({
+          reason: `MeanReversion BUY filtered: ${trendCheck.reason}`,
+          filterReason: trendCheck.reason,
+          status: 'FILTERED',
+          setupDirection: 'BUY',
+          indicatorsSnapshot: { ...snapshot, trendFilter: trendCheck },
+        });
+      }
+
       const sl = currentBB.lower - 0.5 * currentAtr;
       const tp = currentBB.middle;
       return {
@@ -166,6 +177,17 @@ class MeanReversionStrategy extends BaseStrategy {
     const isOverbought = currentRsi > overboughtThreshold;
 
     if (touchedUpper && closedInsideUpper && isOverbought) {
+      const trendCheck = this._isTrendingMarket(indicators, candles, 'SELL', currentAtr);
+      if (trendCheck.trending) {
+        return this.noSignal({
+          reason: `MeanReversion SELL filtered: ${trendCheck.reason}`,
+          filterReason: trendCheck.reason,
+          status: 'FILTERED',
+          setupDirection: 'SELL',
+          indicatorsSnapshot: { ...snapshot, trendFilter: trendCheck },
+        });
+      }
+
       const sl = currentBB.upper + 0.5 * currentAtr;
       const tp = currentBB.middle;
       return {
@@ -180,6 +202,87 @@ class MeanReversionStrategy extends BaseStrategy {
     }
 
     return this.noSignal();
+  }
+
+  /**
+   * Detects a trending market that is hostile to mean reversion.
+   *
+   * Two independent checks — either alone is enough to block the signal:
+   *
+   *   A) EMA50 slope: measures how fast the 50-period mean is moving
+   *      relative to ATR. A normalised slope > SLOPE_THRESHOLD means
+   *      the trend is strong enough that a BB-touch is "BB walking"
+   *      (price hugging one band due to momentum) rather than a genuine
+   *      oversold/overbought extreme.
+   *      Threshold = 0.10 → EMA50 moved > 1.0× ATR over the last 10 bars.
+   *
+   *   B) Price displacement: price more than 2.5× ATR away from EMA50
+   *      indicates strong directional extension. A mean-reversion entry
+   *      here is fighting the prevailing move, not fading an outlier.
+   *
+   * Both checks are counter-trend aware: a fast-falling EMA50 only
+   * blocks BUY signals (shorting into the fall is fine); a fast-rising
+   * EMA50 only blocks SELL signals.
+   *
+   * @param {object}  indicators   Indicator bundle from calculateAll()
+   * @param {Array}   candles      Closed H1 candles
+   * @param {string}  direction    'BUY' or 'SELL' (the candidate signal)
+   * @param {number}  currentAtr   Latest ATR value (pre-fetched for speed)
+   * @returns {{ trending: boolean, reason: string, slopeNorm: number, displacementAtr: number }}
+   */
+  _isTrendingMarket(indicators, candles, direction, currentAtr) {
+    const SLOPE_WINDOW = 10;
+    const SLOPE_THRESHOLD = 0.10;
+    const DISPLACEMENT_THRESHOLD = 2.5;
+
+    const ema50 = indicators.ema50;
+    if (!ema50 || ema50.length < SLOPE_WINDOW + 1 || !currentAtr || currentAtr <= 0) {
+      return { trending: false, reason: '', slopeNorm: 0, displacementAtr: 0 };
+    }
+
+    const latestEma50 = this.latest(ema50);
+    const prevEma50 = this.latest(ema50, SLOPE_WINDOW);
+    if (latestEma50 === null || prevEma50 === null) {
+      return { trending: false, reason: '', slopeNorm: 0, displacementAtr: 0 };
+    }
+
+    // Normalise: how many ATRs did EMA50 move per bar on average?
+    const slopeNorm = (latestEma50 - prevEma50) / (SLOPE_WINDOW * currentAtr);
+    const price = this.latestCandle(candles).close;
+    const displacementAtr = Math.abs(price - latestEma50) / currentAtr;
+
+    // ── Check A: EMA50 slope counter to the candidate signal ──
+    const risingTrendBlocksSell = direction === 'SELL' && slopeNorm > SLOPE_THRESHOLD;
+    const fallingTrendBlocksBuy = direction === 'BUY' && slopeNorm < -SLOPE_THRESHOLD;
+
+    if (risingTrendBlocksSell) {
+      return {
+        trending: true,
+        reason: `strong uptrend (EMA50 slope ${slopeNorm.toFixed(3)} ATR/bar > ${SLOPE_THRESHOLD}) — SELL blocked`,
+        slopeNorm,
+        displacementAtr,
+      };
+    }
+    if (fallingTrendBlocksBuy) {
+      return {
+        trending: true,
+        reason: `strong downtrend (EMA50 slope ${slopeNorm.toFixed(3)} ATR/bar < -${SLOPE_THRESHOLD}) — BUY blocked`,
+        slopeNorm,
+        displacementAtr,
+      };
+    }
+
+    // ── Check B: price too extended from EMA50 ──
+    if (displacementAtr > DISPLACEMENT_THRESHOLD) {
+      return {
+        trending: true,
+        reason: `price ${displacementAtr.toFixed(2)}× ATR from EMA50 (threshold ${DISPLACEMENT_THRESHOLD}) — extended trend, not a reversion opportunity`,
+        slopeNorm,
+        displacementAtr,
+      };
+    }
+
+    return { trending: false, reason: '', slopeNorm, displacementAtr };
   }
 
   _calcConfidence(rsi, candle, bb, direction) {

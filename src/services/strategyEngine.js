@@ -6,6 +6,7 @@
 const indicatorService = require('./indicatorService');
 const Strategy = require('../models/Strategy');
 const { instruments, getInstrumentsByStrategy, STRATEGY_TYPES } = require('../config/instruments');
+const { isHighRiskPeriod, isLowLiquiditySession } = require('../utils/sessionFilter');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const {
   getStrategyParameterDefinitions,
@@ -239,6 +240,14 @@ class StrategyEngine {
   }
 
   async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null) {
+    // ─── Global session filter ───────────────────────────────────────────────
+    // Pause ALL strategies during holidays, NFP windows, and FOMC windows.
+    const sessionCheck = isHighRiskPeriod(new Date());
+    if (sessionCheck.blocked) {
+      console.log(`[Engine] Analysis skipped — ${sessionCheck.reason}`);
+      return;
+    }
+
     const symbolsToAnalyze = enabledSymbols || Object.keys(instruments);
     const strategyRecords = await Strategy.findAll();
     const parametersByStrategy = new Map(
@@ -247,9 +256,25 @@ class StrategyEngine {
     const analysisTasks = this._buildAnalysisTasks(strategyRecords, symbolsToAnalyze);
     const candleCache = new Map();
 
+    // Evaluate thin-session once so the per-task check is cheap.
+    const thinSession = isLowLiquiditySession(new Date());
+
     for (const task of analysisTasks) {
       try {
         const { symbol, strategyType } = task;
+
+        // ─── Per-task session filter ─────────────────────────────────────────
+        // Volume-sensitive strategies (Breakout, VolumeFlowHybrid) are paused
+        // during the 22:00–01:00 UTC inter-session window where tick volume is
+        // unreliable and false breakouts are common.
+        if (
+          thinSession &&
+          (strategyType === STRATEGY_TYPES.BREAKOUT ||
+            strategyType === STRATEGY_TYPES.VOLUME_FLOW_HYBRID)
+        ) {
+          continue;
+        }
+
         const executionConfig = this._getExecutionConfig(symbol, strategyType);
         if (!executionConfig) continue;
 

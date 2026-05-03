@@ -336,7 +336,13 @@ tr:hover{background:var(--bg3)}
 <div class="page" id="page-strategies">
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
-      <span class="card-title">Symbol Assignments</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="card-title">Symbol Assignments</span>
+        <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+          <button id="stratModeLive" class="btn-sm" style="border-radius:0;border:none;background:var(--accent);color:#fff;padding:4px 12px" onclick="setStrategiesMode('live')">Live</button>
+          <button id="stratModePaper" class="btn-sm" style="border-radius:0;border:none;background:transparent;padding:4px 12px" onclick="setStrategiesMode('paper')">Paper</button>
+        </div>
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn-outline btn-sm" onclick="resetStrategyAssignments()">Reset</button>
         <button class="btn-primary btn-sm" onclick="saveStrategyAssignments()">Save Assignments</button>
@@ -774,8 +780,13 @@ let wsPingInterval = null;
 let wsSubscriptions = ['positions','trades','signals','account','status','notifications'];
 const wsLogEntries = [];
 let strategyConfigs = [];
+let strategiesMode = 'live'; // 'live' | 'paper'
 let strategyAssignmentsState = null;
 let strategyAssignmentsDraft = {};
+const strategyModeCache = {
+  live:  { state: null, draft: {} },
+  paper: { state: null, draft: {} },
+};
 let availableSymbols = [];
 let lastOptimizerResult = null;
 let backtestMode = 'single';
@@ -1000,13 +1011,44 @@ async function fetchStrategyConfigs(force=false) {
   return strategyConfigs;
 }
 
+function setStrategiesMode(mode) {
+  if (mode === strategiesMode) return;
+  // Save current draft before switching
+  strategyModeCache[strategiesMode].draft = JSON.parse(JSON.stringify(strategyAssignmentsDraft));
+  strategiesMode = mode;
+  const liveBtn = document.getElementById('stratModeLive');
+  const paperBtn = document.getElementById('stratModePaper');
+  if (liveBtn && paperBtn) {
+    liveBtn.style.background = mode === 'live' ? 'var(--accent)' : 'transparent';
+    liveBtn.style.color = mode === 'live' ? '#fff' : '';
+    paperBtn.style.background = mode === 'paper' ? 'var(--accent)' : 'transparent';
+    paperBtn.style.color = mode === 'paper' ? '#fff' : '';
+  }
+  const cached = strategyModeCache[mode];
+  strategyAssignmentsState = cached.state;
+  strategyAssignmentsDraft = cached.state
+    ? JSON.parse(JSON.stringify(cached.draft))
+    : {};
+  loadStrategies();
+}
+
 async function fetchStrategyAssignments(force=false) {
-  if (!force && strategyAssignmentsState) return strategyAssignmentsState;
-  const r = await api('/api/strategies/assignments');
+  const cached = strategyModeCache[strategiesMode];
+  if (!force && cached.state) {
+    strategyAssignmentsState = cached.state;
+    strategyAssignmentsDraft = JSON.parse(JSON.stringify(cached.state.assignmentsBySymbol || {}));
+    return cached.state;
+  }
+  const url = strategiesMode === 'paper'
+    ? '/api/strategies/paper-assignments'
+    : '/api/strategies/assignments';
+  const r = await api(url);
   if (r.success && r.data) {
     strategyAssignmentsState = r.data;
     strategyAssignmentsDraft = JSON.parse(JSON.stringify(r.data.assignmentsBySymbol || {}));
     setAvailableSymbols(r.data.symbols || []);
+    cached.state = r.data;
+    cached.draft = JSON.parse(JSON.stringify(r.data.assignmentsBySymbol || {}));
   }
   return strategyAssignmentsState;
 }
@@ -1606,7 +1648,11 @@ async function loadStrategies() {
 
 async function toggleStrategy(id) {
   try {
-    await api('/api/strategies/' + id + '/toggle', 'PUT');
+    const endpoint = strategiesMode === 'paper'
+      ? '/api/strategies/' + id + '/paper-toggle'
+      : '/api/strategies/' + id + '/toggle';
+    await api(endpoint, 'PUT');
+    strategyModeCache[strategiesMode].state = null;
     await loadStrategies();
   } catch (e) {
     alert(e.message);
@@ -1625,14 +1671,21 @@ function renderStrategyCards(data) {
   data.forEach(s => {
     const effectiveBreakeven = getNormalizedBreakeven(s.effectiveBreakeven);
     const overrideActive = Boolean(s.tradeManagement && s.tradeManagement.breakevenOverride);
+    const isPaper = strategiesMode === 'paper';
+    const isEnabled = isPaper
+      ? (s.paperEnabled !== undefined ? Boolean(s.paperEnabled) : s.enabled)
+      : s.enabled;
+    const activeSymbols = isPaper
+      ? (Array.isArray(s.paperSymbols) && s.paperSymbols.length ? s.paperSymbols : (s.symbols || []))
+      : (s.symbols || []);
     html += '<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;background:var(--bg3)">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
     html += '<div><strong>' + (s.displayName||s.name) + '</strong>';
-    html += ' <span class="tag ' + (s.enabled?'tag-active':'') + '">' + (s.enabled?'Enabled':'Disabled') + '</span></div>';
-    html += '<label class="toggle"><input type="checkbox" ' + (s.enabled?'checked':'') + ' onchange="toggleStrategy(\'' + s._id + '\')"><span class="slider"></span></label>';
+    html += ' <span class="tag ' + (isEnabled?'tag-active':'') + '">' + (isEnabled?'Enabled':'Disabled') + '</span></div>';
+    html += '<label class="toggle"><input type="checkbox" ' + (isEnabled?'checked':'') + ' onchange="toggleStrategy(\'' + s._id + '\')"><span class="slider"></span></label>';
     html += '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + (s.description||'') + '</div>';
-    html += '<div style="font-size:12px;color:var(--text2)">Symbols: ' + (s.symbols && s.symbols.length ? s.symbols.join(', ') : 'None') + '</div>';
+    html += '<div style="font-size:12px;color:var(--text2)">Symbols: ' + (activeSymbols.length ? activeSymbols.join(', ') : 'None') + '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-top:8px">Effective BE: ' + escapeHtml(formatBreakevenSummary(effectiveBreakeven)) + '</div>';
     html += '<details style="margin-top:12px"' + (overrideActive ? ' open' : '') + '>';
     html += '<summary style="cursor:pointer;font-weight:600">Breakeven Override</summary>';
@@ -1716,6 +1769,11 @@ function toggleStrategyAssignment(symbol, strategyName, checked) {
 
 async function resetStrategyAssignments() {
   try {
+    const url = strategiesMode === 'paper'
+      ? '/api/strategies/paper-assignments/reset'
+      : '/api/strategies/assignments/reset';
+    await api(url, 'POST');
+    strategyModeCache[strategiesMode].state = null;
     const assignments = await fetchStrategyAssignments(true);
     renderStrategyAssignments(assignments);
   } catch (e) {
@@ -1725,7 +1783,10 @@ async function resetStrategyAssignments() {
 
 async function saveStrategyAssignments() {
   try {
-    const r = await api('/api/strategies/assignments', 'PUT', {
+    const url = strategiesMode === 'paper'
+      ? '/api/strategies/paper-assignments'
+      : '/api/strategies/assignments';
+    const r = await api(url, 'PUT', {
       assignmentsBySymbol: strategyAssignmentsDraft,
     });
     if (!r.success) throw new Error(r.message || 'Failed to save assignments');
@@ -1733,10 +1794,13 @@ async function saveStrategyAssignments() {
     strategyAssignmentsState = r.data;
     strategyAssignmentsDraft = JSON.parse(JSON.stringify(r.data.assignmentsBySymbol || {}));
     setAvailableSymbols(r.data.symbols || []);
+    const cached = strategyModeCache[strategiesMode];
+    cached.state = r.data;
+    cached.draft = JSON.parse(JSON.stringify(r.data.assignmentsBySymbol || {}));
     await fetchStrategyConfigs(true);
     renderStrategyAssignments(strategyAssignmentsState);
     renderStrategyCards(strategyConfigs);
-    wsLog('success', 'Saved strategy assignments');
+    wsLog('success', 'Saved ' + strategiesMode + ' strategy assignments');
   } catch (e) {
     alert(e.message);
   }

@@ -239,7 +239,12 @@ class StrategyEngine {
     return signalRecord;
   }
 
-  async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null) {
+  // prebuiltRecords: optional array of strategy records to use instead of
+  // calling Strategy.findAll().  Paper trading passes a mapped view of
+  // records where `enabled` and `symbols` reflect the paper-specific fields
+  // (paperEnabled / paperSymbols).  Live trading omits this param and gets
+  // the real DB records as before.  The existing call signature is unchanged.
+  async analyzeAll(getCandlesFn, onSignalFn, enabledSymbols = null, prebuiltRecords = null) {
     // ─── Global session filter ───────────────────────────────────────────────
     // Pause ALL strategies during holidays, NFP windows, and FOMC windows.
     const sessionCheck = isHighRiskPeriod(new Date());
@@ -249,7 +254,7 @@ class StrategyEngine {
     }
 
     const symbolsToAnalyze = enabledSymbols || Object.keys(instruments);
-    const strategyRecords = await Strategy.findAll();
+    const strategyRecords = prebuiltRecords ?? await Strategy.findAll();
     const parametersByStrategy = new Map(
       strategyRecords.map((strategy) => [strategy.name, strategy.parameters || {}])
     );

@@ -189,14 +189,39 @@ class PaperTradingService {
   }
 
   /**
+   * Build a paper-trading view of strategy records.
+   *
+   * Each record is remapped so that:
+   *   - `enabled`  ← paperEnabled  (falls back to live `enabled` for old records)
+   *   - `symbols`  ← paperSymbols  (falls back to live `symbols` for old records)
+   *
+   * All other fields (parameters, tradeManagement, etc.) are preserved
+   * unchanged — strategy logic itself is shared between live and paper.
+   *
+   * Live trading calls analyzeAll() without this view; it continues to read
+   * the original `enabled` and `symbols` fields from DB unchanged.
+   */
+  _buildPaperRecords(strategies) {
+    return strategies.map((s) => ({
+      ...s,
+      enabled: s.paperEnabled !== undefined ? Boolean(s.paperEnabled) : s.enabled,
+      symbols: Array.isArray(s.paperSymbols) && s.paperSymbols.length > 0
+        ? s.paperSymbols
+        : (s.symbols || []),
+    }));
+  }
+
+  /**
    * Run one full analysis cycle across all enabled symbols
    */
   async _runAnalysisCycle() {
     if (!mt5Service.isConnected()) return;
 
-    // Get enabled strategies/symbols
-    const strategies = await Strategy.findAll();
-    const activeAssignments = strategies.reduce((total, strategy) => {
+    // Build paper-specific strategy view — does NOT touch live `enabled`/`symbols`.
+    const allStrategies = await Strategy.findAll();
+    const paperRecords = this._buildPaperRecords(allStrategies);
+
+    const activeAssignments = paperRecords.reduce((total, strategy) => {
       if (!strategy.enabled || !Array.isArray(strategy.symbols)) {
         return total;
       }
@@ -205,11 +230,13 @@ class PaperTradingService {
     }, 0);
 
     if (activeAssignments === 0) {
-      console.log('[PaperTrading] No enabled strategy assignments to analyze');
+      console.log('[PaperTrading] No enabled paper strategy assignments to analyze');
       return;
     }
 
-    // Run strategy engine analysis
+    // Run strategy engine analysis with the paper-specific record view.
+    // The 4th argument (prebuiltRecords) prevents analyzeAll from calling
+    // Strategy.findAll() internally, so live strategy config is untouched.
     await strategyEngine.analyzeAll(
       // Candle data fetcher — request the latest `count` bars (no startTime)
       async (symbol, timeframe, count) => {
@@ -231,7 +258,9 @@ class PaperTradingService {
       // Signal handler — execute paper trade
       async (signal) => {
         await this._executePaperTrade(signal);
-      }
+      },
+      null,          // enabledSymbols — let paper records drive the symbol set
+      paperRecords   // prebuiltRecords — paper view, not live DB read
     );
   }
 

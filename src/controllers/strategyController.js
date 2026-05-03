@@ -235,6 +235,151 @@ exports.resetAssignments = async (req, res) => {
   }
 };
 
+// ─── Paper-trading strategy helpers ──────────────────────────────────────────
+// These helpers build the same assignment payload shape as buildAssignmentsPayload
+// but operate on paperEnabled / paperSymbols so live config is never exposed or
+// mutated through these endpoints.
+
+function buildPaperAssignmentsPayload(strategies) {
+  const symbols = getAllSymbols();
+  const symbolSet = new Set(symbols);
+  const assignmentsBySymbol = Object.fromEntries(symbols.map((symbol) => [symbol, []]));
+  const assignmentsByStrategy = {};
+
+  strategies.forEach((strategy) => {
+    // Resolve paper symbols — fall back to live symbols for old records.
+    const raw = Array.isArray(strategy.paperSymbols) && strategy.paperSymbols.length > 0
+      ? strategy.paperSymbols
+      : (strategy.symbols || []);
+    const strategySymbols = [...new Set(raw)].filter((symbol) => symbolSet.has(symbol));
+
+    assignmentsByStrategy[strategy.name] = strategySymbols;
+    strategySymbols.forEach((symbol) => {
+      assignmentsBySymbol[symbol].push(strategy.name);
+    });
+  });
+
+  return {
+    symbols,
+    strategies: strategies.map((strategy) => ({
+      id: strategy._id,
+      name: strategy.name,
+      displayName: strategy.displayName,
+      // Resolve paper enabled — fall back to live for old records.
+      enabled: strategy.paperEnabled !== undefined ? Boolean(strategy.paperEnabled) : strategy.enabled,
+    })),
+    assignmentsBySymbol,
+    assignmentsByStrategy,
+  };
+}
+
+// @desc    Get paper-trading symbol-strategy assignments
+// @route   GET /api/strategies/paper-assignments
+exports.getPaperAssignments = async (req, res) => {
+  try {
+    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+    const strategies = await Strategy.findAll();
+    res.json({ success: true, data: buildPaperAssignmentsPayload(strategies) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Replace paper-trading symbol-strategy assignments
+// @route   PUT /api/strategies/paper-assignments
+exports.updatePaperAssignments = async (req, res) => {
+  try {
+    const { assignmentsBySymbol } = req.body || {};
+    if (!assignmentsBySymbol || typeof assignmentsBySymbol !== 'object' || Array.isArray(assignmentsBySymbol)) {
+      return res.status(400).json({
+        success: false,
+        message: 'assignmentsBySymbol must be an object keyed by symbol',
+      });
+    }
+
+    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+    const strategies = await Strategy.findAll();
+    const validSymbols = getAllSymbols();
+    const validSymbolSet = new Set(validSymbols);
+    const validStrategySet = new Set(strategies.map((s) => s.name));
+    const nextPaperByStrategy = Object.fromEntries(strategies.map((s) => [s.name, []]));
+
+    for (const [symbol, strategyNames] of Object.entries(assignmentsBySymbol)) {
+      if (!validSymbolSet.has(symbol)) {
+        return res.status(400).json({ success: false, message: `Invalid symbol: ${symbol}` });
+      }
+      if (!Array.isArray(strategyNames)) {
+        return res.status(400).json({ success: false, message: `Assignments for ${symbol} must be an array` });
+      }
+      for (const strategyName of [...new Set(strategyNames)]) {
+        if (!validStrategySet.has(strategyName)) {
+          return res.status(400).json({ success: false, message: `Invalid strategy: ${strategyName}` });
+        }
+        nextPaperByStrategy[strategyName].push(symbol);
+      }
+    }
+
+    const symbolOrder = new Map(validSymbols.map((symbol, index) => [symbol, index]));
+    await Promise.all(strategies.map((strategy) => {
+      const paperSymbols = [...new Set(nextPaperByStrategy[strategy.name])]
+        .sort((a, b) => symbolOrder.get(a) - symbolOrder.get(b));
+      // Only write paperSymbols — live `symbols` field is untouched.
+      return Strategy.update(strategy._id, { paperSymbols });
+    }));
+
+    const updatedStrategies = await Strategy.findAll();
+    res.json({
+      success: true,
+      data: buildPaperAssignmentsPayload(updatedStrategies),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Toggle paper-trading enabled flag for a single strategy
+// @route   PUT /api/strategies/:id/paper-toggle
+exports.togglePaperStrategy = async (req, res) => {
+  try {
+    const strategy = await Strategy.togglePaperEnabled(req.params.id);
+    if (!strategy) {
+      return res.status(404).json({ success: false, message: 'Strategy not found' });
+    }
+    const paperEnabled = strategy.paperEnabled !== undefined
+      ? Boolean(strategy.paperEnabled)
+      : strategy.enabled;
+    res.json({
+      success: true,
+      message: `Paper strategy ${paperEnabled ? 'enabled' : 'disabled'}`,
+      data: {
+        id: strategy._id,
+        name: strategy.name,
+        paperEnabled,
+        liveEnabled: strategy.enabled,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Reset paper-trading assignments to defaults (live config untouched)
+// @route   POST /api/strategies/paper-assignments/reset
+exports.resetPaperAssignments = async (req, res) => {
+  try {
+    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+    await Strategy.resetPaperToDefaults();
+    const strategies = await Strategy.findAll();
+    res.json({
+      success: true,
+      message: 'Paper strategy assignments reset to defaults',
+      data: buildPaperAssignmentsPayload(strategies),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // @desc    Get recent signals for a strategy
 // @route   GET /api/strategies/:id/signals
 exports.getSignals = async (req, res) => {

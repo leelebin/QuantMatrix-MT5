@@ -5,6 +5,7 @@ const positionMonitor = require('../services/positionMonitor');
 const riskManager = require('../services/riskManager');
 const indicatorService = require('../services/indicatorService');
 const websocketService = require('../services/websocketService');
+const notificationService = require('../services/notificationService');
 const Strategy = require('../models/Strategy');
 const ExecutionAudit = require('../models/ExecutionAudit');
 const { getAllSymbols, getInstrument } = require('../config/instruments');
@@ -160,6 +161,15 @@ exports.startTrading = async (req, res) => {
     const strategies = await Strategy.findAll();
     const assignmentStats = getActiveAssignmentStats(strategies);
 
+    await notificationService.notifySystem('start',
+      `🔴 <b>LIVE Trading started</b>\n`
+      + `Account: ${accountInfo.login}\n`
+      + `Mode: ${mt5Service.getAccountModeName(accountInfo)}\n`
+      + `Balance: ${accountInfo.balance} ${accountInfo.currency}\n`
+      + `Active symbols: ${assignmentStats.activeSymbols}\n`
+      + `Active assignments: ${assignmentStats.activeAssignments}`
+    );
+
     res.json({
       success: true,
       message: 'Trading started',
@@ -194,6 +204,8 @@ exports.stopTrading = async (req, res) => {
     }
 
     positionMonitor.stop();
+
+    await notificationService.notifySystem('stop', '🔴 LIVE Trading stopped');
 
     res.json({ success: true, message: 'Trading stopped' });
   } catch (err) {

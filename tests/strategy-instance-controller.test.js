@@ -140,7 +140,7 @@ describe('strategy instance controller', () => {
     });
   });
 
-  test('updateRuntimeMatrix passes scope and enabledBySymbol to the service', async () => {
+  test('runtime matrix writes remain allowed and pass scope/enabledBySymbol to the service', async () => {
     updateRuntimeMatrix.mockResolvedValue({
       scope: 'paper',
       changes: [
@@ -164,6 +164,8 @@ describe('strategy instance controller', () => {
     }, res);
 
     expect(res.statusCode).toBe(200);
+    expect(res.payload.success).toBe(true);
+    expect(res.payload.deprecated).toBeUndefined();
     expect(updateRuntimeMatrix).toHaveBeenCalledWith({
       scope: 'paper',
       enabledBySymbol: {

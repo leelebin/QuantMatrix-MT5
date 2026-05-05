@@ -399,14 +399,16 @@ class RiskManager {
     if (signal?.strategy && signal?.symbol && strategyStopTimeframe && settings?.strategyDailyStop?.enabled !== false) {
       try {
         const gateResult = await strategyDailyStopService.isEntryBlocked({
+          scope,
           strategy: signal.strategy,
           symbol: signal.symbol,
           timeframe: strategyStopTimeframe,
         }, settings.strategyDailyStop);
         if (gateResult.blocked) {
           const record = gateResult.record || {};
-          const reasonText = `Strategy daily stop active for ${signal.strategy}:${signal.symbol}:${strategyStopTimeframe} (tradingDay=${gateResult.tradingDay})`;
+          const reasonText = `Strategy daily stop active for ${gateResult.key} (tradingDay=${gateResult.tradingDay})`;
           strategyDailyStopService.recordBlockedEntry({
+            scope,
             strategy: signal.strategy,
             symbol: signal.symbol,
             timeframe: strategyStopTimeframe,

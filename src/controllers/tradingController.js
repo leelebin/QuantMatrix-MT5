@@ -304,6 +304,30 @@ async function getLiveAccountInfo({ reconnectOnMismatch = false } = {}) {
   return { accountInfo, accountConfigMatch, reconnected: true };
 }
 
+function buildDefaultValidation() {
+  return { ok: false, warnings: [], errors: [] };
+}
+
+function withModeAlias(account = null) {
+  if (!account) return null;
+  return {
+    ...account,
+    mode: account.mode || account.tradeModeName || 'UNKNOWN',
+  };
+}
+
+function buildLiveRuntimeStatus(runtimeIdentity = null) {
+  const account = withModeAlias(runtimeIdentity?.account || null);
+  return {
+    scope: 'live',
+    connected: Boolean(runtimeIdentity?.connected),
+    running: Boolean(tradingScheduler && tradingScheduler.isRunning()),
+    mt5Path: runtimeIdentity?.mt5Path || null,
+    account,
+    validation: runtimeIdentity?.validation || buildDefaultValidation(),
+  };
+}
+
 function buildLiveConnectionStatus(accountInfo = null, accountConfigMatch = null) {
   if (typeof mt5Service.reloadConnectionEnvFromFile === 'function') {
     mt5Service.reloadConnectionEnvFromFile();
@@ -325,6 +349,7 @@ function buildLiveConnectionStatus(accountInfo = null, accountConfigMatch = null
     scope: 'live',
     config,
     runtimeIdentity,
+    runtime: buildLiveRuntimeStatus(runtimeIdentity),
     accountConfigMatch: match,
     warning: match && !match.matches
       ? `Live MT5 account mismatch: expected ${match.expected.login || '--'}@${match.expected.server || '--'}, got ${match.actual.login || '--'}@${match.actual.server || '--'}`
@@ -340,6 +365,7 @@ function getSafeLiveConnectionStatus() {
       scope: 'live',
       config: null,
       runtimeIdentity: null,
+      runtime: buildLiveRuntimeStatus(null),
       accountConfigMatch: null,
       warning: error.message || 'Unable to build live connection diagnostics',
     };
@@ -517,10 +543,18 @@ exports.getStatus = async (req, res) => {
       const { accountInfo, accountConfigMatch } = await getLiveAccountInfo({ reconnectOnMismatch: false });
       liveConnection = buildLiveConnectionStatus(accountInfo, accountConfigMatch);
       riskStatus = await riskManager.getRiskStatus(accountInfo);
+      const identityAccount = withModeAlias(liveConnection.runtimeIdentity?.account || null);
       account = {
+        ...(identityAccount || {}),
         login: accountInfo.login,
         server: accountInfo.server,
         mode: mt5Service.getAccountModeName(accountInfo),
+        tradeModeName: identityAccount?.tradeModeName || mt5Service.getAccountModeName(accountInfo),
+        isReal: identityAccount?.isReal,
+        isDemo: identityAccount?.isDemo,
+        balance: identityAccount?.balance,
+        equity: identityAccount?.equity,
+        currency: identityAccount?.currency,
         tradeAllowed: accountInfo.tradeAllowed,
       };
     }
@@ -529,27 +563,36 @@ exports.getStatus = async (req, res) => {
     try {
       const config = await strategyDailyStopService.getActiveConfig();
       const { tradingDay, resetAt } = strategyDailyStopService.resolveTradingDay(new Date(), config);
-      const todayStoppedStrategies = await strategyDailyStopService.getTodayStoppedStrategies({}, config);
+      const todayStoppedStrategies = await strategyDailyStopService.getTodayStoppedStrategies({ scope: 'live' }, config);
       strategyDailyStopStatus = {
+        scope: 'live',
         enabled: config?.enabled !== false,
         tradingDay,
         resetAt,
         todayStoppedStrategies,
         todayStoppedStrategiesCount: todayStoppedStrategies.length,
-        blockedEntriesTodayByStrategyDailyStop: strategyDailyStopService.getBlockedEntriesToday(tradingDay),
+        blockedEntriesTodayByStrategyDailyStop: strategyDailyStopService.getBlockedEntriesToday(tradingDay, 'live'),
       };
     } catch (_) {
       strategyDailyStopStatus = null;
     }
 
+    const liveRuntime = buildLiveRuntimeStatus(liveConnection.runtimeIdentity);
+
     res.json({
       success: true,
       data: {
+        scope: 'live',
+        connected: liveRuntime.connected,
+        running: liveRuntime.running,
+        mt5Path: liveRuntime.mt5Path,
+        validation: liveRuntime.validation,
         mt5Connected: connected,
-        account,
+        account: account || liveRuntime.account,
+        liveRuntime,
         liveConnection,
-        runtimeIdentity: liveConnection.runtimeIdentity,
-        liveRuntimeIdentity: liveConnection.runtimeIdentity,
+        runtimeIdentity: liveRuntime,
+        liveRuntimeIdentity: liveRuntime,
         wsClients: websocketService.getClientCount(),
         tradingEnabled,
         liveTradingAllowed: liveTradingPermissionService.isAllowLiveTradingEnabled(),
@@ -888,7 +931,27 @@ exports.getAccount = async (req, res) => {
       await mt5Service.connect();
     }
     const accountInfo = await mt5Service.getAccountInfo();
-    res.json({ success: true, data: accountInfo });
+    const runtimeIdentity = typeof mt5Service.buildRuntimeIdentityStatus === 'function'
+      ? mt5Service.buildRuntimeIdentityStatus(accountInfo)
+      : null;
+    const runtime = buildLiveRuntimeStatus(runtimeIdentity);
+    const account = withModeAlias(runtime.account || {
+      login: accountInfo.login,
+      server: accountInfo.server,
+      tradeModeName: mt5Service.getAccountModeName(accountInfo),
+      balance: accountInfo.balance,
+      equity: accountInfo.equity,
+      currency: accountInfo.currency,
+    });
+    res.json({
+      success: true,
+      data: {
+        ...accountInfo,
+        ...runtime,
+        account,
+        runtimeIdentity: runtime,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

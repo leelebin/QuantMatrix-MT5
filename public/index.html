@@ -289,6 +289,8 @@ tr:hover{background:var(--bg3)}
         <tr><td style="color:var(--text2)">Live Runtime Enabled</td><td id="dTradingEnabled">--</td></tr>
         <tr><td style="color:var(--text2)">Live Trading Allowed</td><td id="dLiveTradingAllowed">--</td></tr>
         <tr><td style="color:var(--text2)">Live MT5 Config</td><td id="dLiveMt5Config">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Account</td><td id="dLiveAccountDetails">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Validation</td><td id="dLiveAccountValidation">--</td></tr>
         <tr><td style="color:var(--text2)">Risk Profile</td><td id="dRiskProfile">--</td></tr>
         <tr><td style="color:var(--text2)">Live Trading Loop</td><td id="dTradingLoop">--</td></tr>
         <tr><td style="color:var(--text2)">Live Position Monitor</td><td id="dMonitor">--</td></tr>
@@ -308,6 +310,9 @@ tr:hover{background:var(--bg3)}
       </div>
       <table>
         <tr><td style="color:var(--text2)">Status</td><td id="dPaperStatus">--</td></tr>
+        <tr><td style="color:var(--text2)">Paper Account</td><td id="dPaperAccountDetails">--</td></tr>
+        <tr><td style="color:var(--text2)">Paper MT5 Path</td><td id="dPaperMt5Path">--</td></tr>
+        <tr><td style="color:var(--text2)">Paper Validation</td><td id="dPaperAccountValidation">--</td></tr>
         <tr><td style="color:var(--text2)">Runtime</td><td id="dPaperRuntime">--</td></tr>
         <tr><td style="color:var(--text2)">Open Paper Positions</td><td id="dPaperOpen">--</td></tr>
         <tr><td style="color:var(--text2)">Today Paper Trades</td><td id="dPaperTodayTrades">--</td></tr>
@@ -2282,13 +2287,18 @@ function wsLog(level, message) {
 }
 
 // --- Dashboard ---
+let lastLiveRuntimeStatus = null;
+let lastPaperRuntimeStatus = null;
+
 async function loadDashboard() {
   try {
     const r = await api('/api/trading/status');
     if (!r.success) return;
     const d = r.data;
+    const liveRuntime = normalizeRuntimeStatus('live', d.liveRuntime || d);
+    lastLiveRuntimeStatus = liveRuntime;
     document.getElementById('dMt5Status').innerHTML = d.mt5Connected ? '<span style="color:var(--green)">Connected</span>' : '<span style="color:var(--red)">Disconnected</span>';
-    document.getElementById('dAccountMode').innerHTML = d.account ? accountModeBadge(d.account.mode) + ' <span style="color:var(--text2)">' + (d.account.login || '--') + '@' + (d.account.server || '--') + '</span>' : '--';
+    document.getElementById('dAccountMode').innerHTML = liveRuntime.account ? accountModeBadge(liveRuntime.account.mode) + ' <span style="color:var(--text2)">' + escapeHtml(liveRuntime.account.login || '--') + '@' + escapeHtml(liveRuntime.account.server || '--') + '</span>' : '--';
     document.getElementById('dTradingEnabled').innerHTML = d.tradingEnabled ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>';
     const liveAllowedEl = document.getElementById('dLiveTradingAllowed');
     if (liveAllowedEl) {
@@ -2312,6 +2322,10 @@ async function loadDashboard() {
         : '';
       liveConfigEl.innerHTML = configuredAccount + sourceNote + pathNote + matchNote;
     }
+    const liveAccountDetailsEl = document.getElementById('dLiveAccountDetails');
+    if (liveAccountDetailsEl) liveAccountDetailsEl.innerHTML = renderRuntimeAccountSummary(liveRuntime);
+    const liveValidationEl = document.getElementById('dLiveAccountValidation');
+    if (liveValidationEl) liveValidationEl.innerHTML = renderRuntimeValidation(liveRuntime, lastPaperRuntimeStatus);
     document.getElementById('dRiskProfile').innerHTML = d.risk && d.risk.activeRiskProfileName
       ? '<strong>' + d.risk.activeRiskProfileName + '</strong>' + (d.risk.allowAggressiveMinLot ? ' <span style="color:var(--yellow)">(Aggressive Min Lot)</span>' : '')
       : '--';
@@ -2400,16 +2414,29 @@ function setPaperTradingDashboard(d) {
   if (!statusEl) return;
   if (!d) {
     statusEl.textContent = '--';
-    ['dPaperRuntime','dPaperOpen','dPaperTodayTrades','dPaperTotalTrades','dPaperWinRate','dPaperTotalProfit','dPaperDailyReport'].forEach((id) => {
+    lastPaperRuntimeStatus = null;
+    ['dPaperRuntime','dPaperOpen','dPaperTodayTrades','dPaperTotalTrades','dPaperWinRate','dPaperTotalProfit','dPaperDailyReport','dPaperAccountDetails','dPaperMt5Path','dPaperAccountValidation'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.textContent = '--';
     });
+    const liveValidationEl = document.getElementById('dLiveAccountValidation');
+    if (liveValidationEl && lastLiveRuntimeStatus) liveValidationEl.innerHTML = renderRuntimeValidation(lastLiveRuntimeStatus, null);
     return;
   }
 
+  const paperRuntime = normalizeRuntimeStatus('paper', d.paperRuntime || d);
+  lastPaperRuntimeStatus = paperRuntime;
   statusEl.innerHTML = d.running
     ? '<span style="color:var(--green)">Running</span>'
     : '<span style="color:var(--red)">Stopped</span>';
+  const paperAccountDetailsEl = document.getElementById('dPaperAccountDetails');
+  if (paperAccountDetailsEl) paperAccountDetailsEl.innerHTML = renderRuntimeAccountSummary(paperRuntime);
+  const paperMt5PathEl = document.getElementById('dPaperMt5Path');
+  if (paperMt5PathEl) paperMt5PathEl.innerHTML = paperRuntime.mt5Path ? '<code>' + escapeHtml(paperRuntime.mt5Path) + '</code>' : '<span style="color:var(--yellow)">Not configured</span>';
+  const paperValidationEl = document.getElementById('dPaperAccountValidation');
+  if (paperValidationEl) paperValidationEl.innerHTML = renderRuntimeValidation(paperRuntime, lastLiveRuntimeStatus);
+  const liveValidationEl = document.getElementById('dLiveAccountValidation');
+  if (liveValidationEl && lastLiveRuntimeStatus) liveValidationEl.innerHTML = renderRuntimeValidation(lastLiveRuntimeStatus, paperRuntime);
   document.getElementById('dPaperRuntime').textContent = d.runtime || '--';
   document.getElementById('dPaperOpen').textContent = d.openPositions != null ? d.openPositions : '--';
   document.getElementById('dPaperTodayTrades').textContent = d.todayTrades != null ? d.todayTrades : '--';
@@ -7562,26 +7589,40 @@ async function testNotification() {
 }
 
 async function loadAccountInfo() {
+  const container = document.getElementById('accountInfo');
   try {
-    const r = await api('/api/trading/account');
-    if (!r.success) { document.getElementById('accountInfo').innerHTML = '<div class="empty">Not connected to MT5</div>'; return; }
-    const a = r.data;
-    let html = '<table>';
-    html += '<tr><td style="color:var(--text2)">Login</td><td>' + (a.login || '--') + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Server</td><td>' + (a.server || '--') + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Account Mode</td><td>' + accountModeBadge(a.tradeModeName) + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Trade Allowed</td><td>' + boolBadge(a.tradeAllowed) + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Balance</td><td>$' + num(a.balance) + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Equity</td><td>$' + num(a.equity) + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Profit</td><td>' + fmtSignedMoney(a.profit) + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Margin</td><td>$' + num(a.margin) + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Free Margin</td><td>$' + num(a.freeMargin) + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Leverage</td><td>1:' + (a.leverage || '--') + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Company</td><td>' + (a.company || '--') + '</td></tr>';
-    html += '<tr><td style="color:var(--text2)">Name</td><td>' + (a.name || '--') + '</td></tr>';
-    html += '</table>';
-    document.getElementById('accountInfo').innerHTML = html;
-  } catch (e) { document.getElementById('accountInfo').innerHTML = '<div class="empty">Error loading account info</div>'; }
+    container.innerHTML = '<div class="empty">Loading account info...</div>';
+    const [liveStatusResult, paperStatusResult] = await Promise.allSettled([
+      api('/api/trading/status'),
+      api('/api/paper-trading/status'),
+    ]);
+
+    const liveStatus = liveStatusResult.status === 'fulfilled' && liveStatusResult.value.success
+      ? liveStatusResult.value.data
+      : null;
+    const paperStatus = paperStatusResult.status === 'fulfilled' && paperStatusResult.value.success
+      ? paperStatusResult.value.data
+      : null;
+
+    let liveAccount = null;
+    const liveRuntimeFromStatus = normalizeRuntimeStatus('live', liveStatus?.liveRuntime || liveStatus || {});
+    if (liveRuntimeFromStatus.connected) {
+      try {
+        const accountResponse = await api('/api/trading/account');
+        if (accountResponse.success) liveAccount = accountResponse.data;
+      } catch (_) {}
+    }
+
+    const liveRuntime = normalizeRuntimeStatus('live', liveAccount || liveStatus?.liveRuntime || liveStatus || {});
+    const paperRuntime = normalizeRuntimeStatus('paper', paperStatus?.paperRuntime || paperStatus || {});
+
+    container.innerHTML = '<div class="grid grid-2">'
+      + renderRuntimeAccountPanel('Live Account', liveRuntime, paperRuntime, liveAccount)
+      + renderRuntimeAccountPanel('Paper Account', paperRuntime, liveRuntime, null)
+      + '</div>';
+  } catch (e) {
+    container.innerHTML = '<div class="empty">Error loading account info</div>';
+  }
 }
 
 function fmtBytes(value) {
@@ -7792,6 +7833,123 @@ function accountModeBadge(mode) {
   const normalized = (mode || 'UNKNOWN').toUpperCase();
   const color = normalized === 'REAL' ? 'var(--red)' : normalized === 'DEMO' || normalized === 'CONTEST' ? 'var(--green)' : 'var(--text2)';
   return '<span style="color:' + color + ';font-weight:600">' + normalized + '</span>';
+}
+function normalizeRuntimeAccount(account) {
+  if (!account) return null;
+  const mode = (account.mode || account.tradeModeName || 'UNKNOWN').toUpperCase();
+  return {
+    ...account,
+    mode,
+    tradeModeName: account.tradeModeName || mode,
+    isReal: account.isReal === true || mode === 'REAL',
+    isDemo: account.isDemo === true || mode === 'DEMO',
+  };
+}
+function normalizeRuntimeStatus(scope, payload) {
+  const p = payload || {};
+  const runtime = scope === 'live'
+    ? (p.liveRuntime || p.liveRuntimeIdentity || p.runtimeIdentity || p)
+    : (p.paperRuntime || p.runtimeIdentity || p);
+  const rawAccount = runtime.account || p.account || (p.login || p.server ? p : null);
+  const connected = runtime.connected != null
+    ? runtime.connected
+    : (p.connected != null ? p.connected : (scope === 'live' ? p.mt5Connected : false));
+  return {
+    scope,
+    enabled: p.enabled,
+    running: runtime.running != null ? runtime.running : Boolean(p.running),
+    connected: Boolean(connected),
+    mt5Path: runtime.mt5Path || p.mt5Path || null,
+    account: normalizeRuntimeAccount(rawAccount),
+    validation: runtime.validation || p.validation || { ok: false, warnings: [], errors: [] },
+    message: runtime.message || p.message || null,
+  };
+}
+function normalizeRuntimePathForCompare(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/\/+$/g, '')
+    .toLowerCase();
+}
+function renderRuntimeConnectionBadge(runtime) {
+  return runtime && runtime.connected
+    ? '<span style="color:var(--green)">Connected</span>'
+    : '<span style="color:var(--red)">Disconnected</span>';
+}
+function renderRuntimeAccountSummary(runtime) {
+  if (!runtime || !runtime.account) {
+    return renderRuntimeConnectionBadge(runtime) + (runtime?.message ? '<div style="color:var(--text2);margin-top:4px">' + escapeHtml(runtime.message) + '</div>' : '');
+  }
+  const a = runtime.account;
+  const accountLine = accountModeBadge(a.mode) + ' <span style="color:var(--text2)">' + escapeHtml(a.login || '--') + '@' + escapeHtml(a.server || '--') + '</span>';
+  const moneyLine = '<div style="color:var(--text2);margin-top:4px">Balance ' + num(a.balance) + ' / Equity ' + num(a.equity) + ' ' + escapeHtml(a.currency || '') + '</div>';
+  return renderRuntimeConnectionBadge(runtime) + '<div style="margin-top:4px">' + accountLine + '</div>' + moneyLine;
+}
+function collectRuntimeValidationMessages(runtime, peerRuntime) {
+  const messages = [];
+  const validation = runtime?.validation || {};
+  (validation.errors || []).forEach((message) => messages.push({ severity: 'error', text: message }));
+  (validation.warnings || []).forEach((message) => messages.push({ severity: 'warning', text: message }));
+
+  const mode = (runtime?.account?.mode || runtime?.account?.tradeModeName || '').toUpperCase();
+  if (runtime?.scope === 'paper' && mode === 'REAL') {
+    messages.unshift({ severity: 'error', text: 'Paper runtime is connected to REAL account. Paper trading is blocked.' });
+  }
+  if (runtime?.scope === 'live' && (mode === 'DEMO' || mode === 'CONTEST')) {
+    messages.push({ severity: validation.ok === false ? 'error' : 'warning', text: 'Live runtime is connected to a demo-style account.' });
+  }
+
+  const path = normalizeRuntimePathForCompare(runtime?.mt5Path);
+  const peerPath = normalizeRuntimePathForCompare(peerRuntime?.mt5Path);
+  if (path && peerPath && path === peerPath) {
+    messages.unshift({ severity: 'error', text: 'Live and paper MT5 paths point to the same terminal64.exe.' });
+  }
+  return messages;
+}
+function renderRuntimeValidation(runtime, peerRuntime) {
+  const messages = collectRuntimeValidationMessages(runtime, peerRuntime);
+  if (messages.length === 0) {
+    if (runtime?.connected && runtime?.validation?.ok) return '<span style="color:var(--green)">OK</span>';
+    return runtime?.message ? '<span style="color:var(--text2)">' + escapeHtml(runtime.message) + '</span>' : '--';
+  }
+  return messages.map((item) => {
+    const color = item.severity === 'error' ? 'var(--red)' : 'var(--yellow)';
+    return '<div style="color:' + color + ';margin-bottom:4px">' + escapeHtml(item.text) + '</div>';
+  }).join('');
+}
+function renderRuntimePath(runtime) {
+  return runtime?.mt5Path
+    ? '<code style="word-break:break-all">' + escapeHtml(runtime.mt5Path) + '</code>'
+    : '<span style="color:var(--yellow)">Not configured</span>';
+}
+function renderRuntimeAccountPanel(title, runtime, peerRuntime, legacyAccount) {
+  const a = runtime?.account || null;
+  let html = '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg);height:100%">';
+  html += '<div style="font-weight:700;margin-bottom:10px">' + escapeHtml(title) + '</div>';
+  html += '<table>';
+  html += '<tr><td style="color:var(--text2)">Status</td><td>' + renderRuntimeConnectionBadge(runtime) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Login</td><td>' + escapeHtml(a?.login || '--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Server</td><td>' + escapeHtml(a?.server || '--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Mode</td><td>' + accountModeBadge(a?.mode) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Balance</td><td>' + num(a?.balance) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Equity</td><td>' + num(a?.equity) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Currency</td><td>' + escapeHtml(a?.currency || '--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">MT5 Path</td><td>' + renderRuntimePath(runtime) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Validation</td><td>' + renderRuntimeValidation(runtime, peerRuntime) + '</td></tr>';
+  if (legacyAccount) {
+    html += '<tr><td style="color:var(--text2)">Trade Allowed</td><td>' + boolBadge(legacyAccount.tradeAllowed) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Profit</td><td>' + fmtSignedMoney(legacyAccount.profit) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Margin</td><td>' + num(legacyAccount.margin) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Free Margin</td><td>' + num(legacyAccount.freeMargin) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Leverage</td><td>1:' + escapeHtml(legacyAccount.leverage || '--') + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Company</td><td>' + escapeHtml(legacyAccount.company || '--') + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Name</td><td>' + escapeHtml(legacyAccount.name || '--') + '</td></tr>';
+  }
+  html += '</table>';
+  if (runtime?.message) html += '<div style="color:var(--text2);font-size:12px;margin-top:8px">' + escapeHtml(runtime.message) + '</div>';
+  html += '</div>';
+  return html;
 }
 function badge(label, color) {
   return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:rgba(255,255,255,0.06);color:' + color + '">' + label + '</span>';

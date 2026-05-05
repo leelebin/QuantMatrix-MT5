@@ -86,14 +86,16 @@ exports.activateRiskProfile = async (req, res) => {
 
 exports.getStrategyDailyStops = async (req, res) => {
   try {
+    const scope = strategyDailyStopService.normalizeScope(req.query?.scope || 'live');
     const config = await strategyDailyStopService.getActiveConfig();
-    const todayStoppedStrategies = await strategyDailyStopService.getTodayStoppedStrategies({}, config);
+    const todayStoppedStrategies = await strategyDailyStopService.getTodayStoppedStrategies({ scope }, config);
     const { tradingDay, resetAt } = strategyDailyStopService.resolveTradingDay(new Date(), config);
-    const blockedEntriesToday = strategyDailyStopService.getBlockedEntriesToday(tradingDay);
+    const blockedEntriesToday = strategyDailyStopService.getBlockedEntriesToday(tradingDay, scope);
 
     res.json({
       success: true,
       data: {
+        scope,
         config,
         tradingDay,
         resetAt,
@@ -110,6 +112,7 @@ exports.getStrategyDailyStops = async (req, res) => {
 exports.resetStrategyDailyStop = async (req, res) => {
   try {
     const { strategy, symbol, timeframe } = req.body || {};
+    const scope = strategyDailyStopService.normalizeScope(req.body?.scope || req.query?.scope || 'live');
     if (!strategy || !symbol || !timeframe) {
       return res.status(400).json({
         success: false,
@@ -119,6 +122,7 @@ exports.resetStrategyDailyStop = async (req, res) => {
 
     const actor = req.user?.email || req.headers['x-actor'] || 'manual-reset';
     const result = await strategyDailyStopService.manualReset({
+      scope,
       strategy,
       symbol,
       timeframe,

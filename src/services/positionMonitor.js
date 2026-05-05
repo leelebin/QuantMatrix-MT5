@@ -7,6 +7,7 @@
 const mt5Service = require('./mt5Service');
 const trailingStopService = require('./trailingStopService');
 const riskManager = require('./riskManager');
+const strategyDailyStopService = require('./strategyDailyStopService');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
 const breakevenService = require('./breakevenService');
@@ -812,6 +813,19 @@ class PositionMonitor {
     if (closedSnapshot.profitLoss < 0) {
       await riskManager.recordLoss(Math.abs(closedSnapshot.profitLoss), closedSnapshot.closedAt);
     }
+
+    try {
+      await strategyDailyStopService.recordTradeOutcome({
+        scope: 'live',
+        strategy: localPos.strategy,
+        symbol: localPos.symbol,
+        timeframe: localPos.setupTimeframe || localPos.timeframe || null,
+        realizedRMultiple: closedSnapshot.realizedRMultiple,
+        profitLoss: closedSnapshot.profitLoss,
+        plannedRiskAmount: localPos.plannedRiskAmount,
+        closedAt: closedSnapshot.closedAt,
+      });
+    } catch (_) {}
 
     await positionsDb.remove({ _id: localPos._id });
 

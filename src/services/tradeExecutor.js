@@ -465,6 +465,7 @@ class TradeExecutor {
 
       try {
         await strategyDailyStopService.recordTradeOutcome({
+          scope: 'live',
           strategy: position.strategy,
           symbol: position.symbol,
           timeframe: position.setupTimeframe || position.timeframe || null,

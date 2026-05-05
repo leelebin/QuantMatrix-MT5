@@ -6,6 +6,28 @@ const breakevenService = require('../services/breakevenService');
 const { getAllSymbols } = require('../config/instruments');
 const { getStrategyParameterDefinitions } = require('../config/strategyParameters');
 
+const LEGACY_ASSIGNMENT_DEPRECATED_MESSAGE = 'This endpoint is deprecated. Use strategy runtime matrix / strategy instances instead.';
+const LEGACY_ASSIGNMENT_WRITE_WARNING = 'Legacy assignment write used. This may affect live and paper assignment universe.';
+
+function isLegacyAssignmentWriteAllowed(req = {}) {
+  return req.body?.confirmLegacyAssignmentUpdate === true
+    || String(process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE || '').toLowerCase() === 'true';
+}
+
+function guardLegacyAssignmentWrite(req, res) {
+  if (!isLegacyAssignmentWriteAllowed(req)) {
+    res.status(409).json({
+      success: false,
+      message: LEGACY_ASSIGNMENT_DEPRECATED_MESSAGE,
+      deprecated: true,
+    });
+    return false;
+  }
+
+  console.warn(LEGACY_ASSIGNMENT_WRITE_WARNING);
+  return true;
+}
+
 async function ensureStrategyInstancesForSymbols(strategyName, symbols = [], seedPatch = {}) {
   const uniqueSymbols = [...new Set(Array.isArray(symbols) ? symbols : [])];
   for (const symbol of uniqueSymbols) {
@@ -145,6 +167,8 @@ exports.getAssignments = async (req, res) => {
 // @route   PUT /api/strategies/assignments
 exports.updateAssignments = async (req, res) => {
   try {
+    if (!guardLegacyAssignmentWrite(req, res)) return;
+
     const { assignmentsBySymbol } = req.body || {};
     const assignmentScope = String(req.body?.scope || 'paper').toLowerCase() === 'live'
       ? 'live'
@@ -212,6 +236,8 @@ exports.updateAssignments = async (req, res) => {
     const updatedStrategies = await Strategy.findAll();
     res.json({
       success: true,
+      deprecated: true,
+      warning: LEGACY_ASSIGNMENT_WRITE_WARNING,
       data: buildAssignmentsPayload(updatedStrategies),
     });
   } catch (err) {
@@ -241,6 +267,8 @@ exports.toggleStrategy = async (req, res) => {
 // @route   POST /api/strategies/assignments/reset
 exports.resetAssignments = async (req, res) => {
   try {
+    if (!guardLegacyAssignmentWrite(req, res)) return;
+
     await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
     await Strategy.resetToDefaults();
     const strategies = await Strategy.findAll();
@@ -249,6 +277,8 @@ exports.resetAssignments = async (req, res) => {
     }
     res.json({
       success: true,
+      deprecated: true,
+      warning: LEGACY_ASSIGNMENT_WRITE_WARNING,
       message: 'Strategy symbol assignments reset to defaults',
       data: buildAssignmentsPayload(strategies),
     });

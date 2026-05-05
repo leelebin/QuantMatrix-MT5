@@ -1,8 +1,8 @@
 /**
  * Strategy-level daily stop service.
  *
- * For every `strategy + symbol + timeframe` key, counts consecutive losses
- * inside a single trading day. When the count reaches the configured
+ * For every `scope + strategy + symbol + timeframe` key, counts consecutive
+ * losses inside a single trading day. When the count reaches the configured
  * threshold, blocks any NEW entries for that key for the rest of the day.
  * Existing positions are not affected (exits, break-even, trailing, partial
  * close, time-exit all continue to run).
@@ -47,8 +47,38 @@ function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-function buildKey(strategy, symbol, timeframe) {
-  return `${String(strategy || '').trim()}:${String(symbol || '').trim()}:${String(timeframe || '').trim()}`;
+function normalizeScope(scope = 'live') {
+  const normalized = String(scope || 'live').trim().toLowerCase();
+  if (normalized === 'live' || normalized === 'paper') {
+    return normalized;
+  }
+  throw new Error(`Invalid strategy daily stop scope: ${scope}`);
+}
+
+function buildKey(scopeOrArgs, maybeStrategy, maybeSymbol, maybeTimeframe) {
+  let scope = 'live';
+  let strategy = scopeOrArgs;
+  let symbol = maybeStrategy;
+  let timeframe = maybeSymbol;
+
+  if (scopeOrArgs && typeof scopeOrArgs === 'object') {
+    scope = scopeOrArgs.scope || 'live';
+    strategy = scopeOrArgs.strategy;
+    symbol = scopeOrArgs.symbol;
+    timeframe = scopeOrArgs.timeframe;
+  } else if (arguments.length >= 4) {
+    scope = scopeOrArgs || 'live';
+    strategy = maybeStrategy;
+    symbol = maybeSymbol;
+    timeframe = maybeTimeframe;
+  }
+
+  return [
+    normalizeScope(scope),
+    String(strategy || '').trim(),
+    String(symbol || '').trim(),
+    String(timeframe || '').trim(),
+  ].join(':');
 }
 
 /**
@@ -144,14 +174,14 @@ function classify(tradeR, config) {
 const blockedEntryCounterState = {
   tradingDay: null,
   countsByKey: Object.create(null),
-  total: 0,
+  totalByScope: Object.create(null),
 };
 
 function ensureBlockedCounterFresh(tradingDay) {
   if (blockedEntryCounterState.tradingDay !== tradingDay) {
     blockedEntryCounterState.tradingDay = tradingDay;
     blockedEntryCounterState.countsByKey = Object.create(null);
-    blockedEntryCounterState.total = 0;
+    blockedEntryCounterState.totalByScope = Object.create(null);
   }
 }
 
@@ -194,43 +224,45 @@ async function upsertRecord(doc) {
  * Also returns the underlying record so callers can surface details in audit
  * logs.
  */
-async function isEntryBlocked({ strategy, symbol, timeframe, now = new Date() }, configOverride = null) {
+async function isEntryBlocked({ scope = 'live', strategy, symbol, timeframe, now = new Date() }, configOverride = null) {
+  const normalizedScope = normalizeScope(scope);
   const config = configOverride || await getActiveConfig();
   if (!config || config.enabled === false) {
-    return { blocked: false, config, record: null };
+    return { blocked: false, config, record: null, scope: normalizedScope };
   }
 
-  const key = buildKey(strategy, symbol, timeframe);
+  const key = buildKey({ scope: normalizedScope, strategy, symbol, timeframe });
   const { tradingDay, resetAt } = resolveTradingDay(now, config);
   const record = await findRecord(key, tradingDay);
 
   if (!record || !record.stopped) {
-    return { blocked: false, config, record: record || null, key, tradingDay, resetAt };
+    return { blocked: false, config, record: record || null, key, scope: normalizedScope, tradingDay, resetAt };
   }
 
   if (record.resetAt && new Date(record.resetAt).getTime() <= new Date(now).getTime()) {
-    return { blocked: false, config, record, key, tradingDay, resetAt, expired: true };
+    return { blocked: false, config, record, key, scope: normalizedScope, tradingDay, resetAt, expired: true };
   }
 
-  return { blocked: true, config, record, key, tradingDay, resetAt };
+  return { blocked: true, config, record, key, scope: normalizedScope, tradingDay, resetAt };
 }
 
 /**
  * Called from the risk gate when a new-entry attempt is blocked. Tracks the
  * counter shown on the status endpoint and emits an audit event.
  */
-function recordBlockedEntry({ strategy, symbol, timeframe, tradingDay, record = null, details = null }) {
-  const key = buildKey(strategy, symbol, timeframe);
+function recordBlockedEntry({ scope = 'live', strategy, symbol, timeframe, tradingDay, record = null, details = null }) {
+  const normalizedScope = normalizeScope(scope);
+  const key = buildKey({ scope: normalizedScope, strategy, symbol, timeframe });
   ensureBlockedCounterFresh(tradingDay);
   blockedEntryCounterState.countsByKey[key] = (blockedEntryCounterState.countsByKey[key] || 0) + 1;
-  blockedEntryCounterState.total += 1;
+  blockedEntryCounterState.totalByScope[normalizedScope] = (blockedEntryCounterState.totalByScope[normalizedScope] || 0) + 1;
 
   try {
     auditService.riskRejected({
       symbol,
       strategy,
       module: 'strategyDailyStopService',
-      scope: null,
+      scope: normalizedScope,
       setupTimeframe: timeframe,
       reasonCode: auditService.REASON.STRATEGY_DAILY_STOP_ACTIVE,
       reasonText: `Strategy daily stop active for ${key} (tradingDay=${tradingDay})`,
@@ -240,6 +272,7 @@ function recordBlockedEntry({ strategy, symbol, timeframe, tradingDay, record = 
       },
       details: {
         blockReason: 'strategy_daily_stop',
+        scope: normalizedScope,
         key,
         tradingDay,
         consecutiveLossCountAtStop: record?.consecutiveLossCountAtStop || null,
@@ -251,11 +284,12 @@ function recordBlockedEntry({ strategy, symbol, timeframe, tradingDay, record = 
   } catch (_) {}
 }
 
-function getBlockedEntriesToday(tradingDay) {
+function getBlockedEntriesToday(tradingDay, scope = 'live') {
+  const normalizedScope = normalizeScope(scope);
   if (tradingDay && blockedEntryCounterState.tradingDay !== tradingDay) {
     return 0;
   }
-  return blockedEntryCounterState.total;
+  return blockedEntryCounterState.totalByScope[normalizedScope] || 0;
 }
 
 /**
@@ -266,6 +300,7 @@ function getBlockedEntriesToday(tradingDay) {
  * `(profitLoss + plannedRiskAmount)` are sufficient.
  */
 async function recordTradeOutcome({
+  scope = 'live',
   strategy,
   symbol,
   timeframe,
@@ -275,6 +310,7 @@ async function recordTradeOutcome({
   plannedRiskAmount,
   closedAt,
 }, configOverride = null) {
+  const normalizedScope = normalizeScope(scope);
   const config = configOverride || await getActiveConfig();
   if (!config || config.enabled === false) return null;
   if (!strategy || !symbol || !timeframe) return null;
@@ -285,12 +321,13 @@ async function recordTradeOutcome({
 
   const now = closedAt ? new Date(closedAt) : new Date();
   const { tradingDay, resetAt } = resolveTradingDay(now, config);
-  const key = buildKey(strategy, symbol, timeframe);
+  const key = buildKey({ scope: normalizedScope, strategy, symbol, timeframe });
   const existing = await findRecord(key, tradingDay);
 
   // Seed a new per-day doc when none exists.
   const doc = existing || {
     key,
+    scope: normalizedScope,
     strategy,
     symbol,
     timeframe,
@@ -345,6 +382,7 @@ async function recordTradeOutcome({
       symbol,
       strategy,
       module: 'strategyDailyStopService',
+      scope: normalizedScope,
       setupTimeframe: timeframe,
       reasonCode: auditService.REASON.STRATEGY_DAILY_STOP_CLASSIFICATION,
       reasonText: `Trade classified as ${classification} (tradeR=${
@@ -353,6 +391,7 @@ async function recordTradeOutcome({
       details: {
         tradeR: Number.isFinite(resolvedTradeR) ? resolvedTradeR : null,
         classification,
+        scope: normalizedScope,
         consecutiveLossCountBefore: beforeCount,
         consecutiveLossCountAfter: afterCount,
         tradingDay,
@@ -366,6 +405,7 @@ async function recordTradeOutcome({
         symbol,
         strategy,
         module: 'strategyDailyStopService',
+        scope: normalizedScope,
         setupTimeframe: timeframe,
         reasonCode: auditService.REASON.STRATEGY_DAILY_STOP_TRIGGERED,
         reasonText: `Strategy daily stop triggered for ${key} after ${afterCount} consecutive loss(es)`,
@@ -375,6 +415,7 @@ async function recordTradeOutcome({
         },
         details: {
           blockReason: 'strategy_daily_stop',
+          scope: normalizedScope,
           key,
           tradingDay,
           consecutiveLossCountAtStop: afterCount,
@@ -385,28 +426,34 @@ async function recordTradeOutcome({
     } catch (_) {}
   }
 
-  return { record: saved, classification, triggered, consecutiveLossCount: afterCount };
+  return { record: saved, classification, triggered, consecutiveLossCount: afterCount, scope: normalizedScope };
 }
 
-async function getTodayStoppedStrategies({ now = new Date() } = {}, configOverride = null) {
+async function getTodayStoppedStrategies({ scope = 'live', now = new Date() } = {}, configOverride = null) {
+  const normalizedScope = normalizeScope(scope);
   const config = configOverride || await getActiveConfig();
   const { tradingDay } = resolveTradingDay(now, config);
   const nowMs = new Date(now).getTime();
 
   let records = [];
   try {
-    records = await strategyDailyStopsDb.find({ tradingDay, stopped: true });
+    records = await strategyDailyStopsDb.find({ tradingDay, stopped: true, scope: normalizedScope });
   } catch (_) {
     records = [];
   }
 
+  // Legacy records created before runtime scope isolation have no `scope`
+  // and use unscoped keys. New runtime checks query scoped keys only, so old
+  // records are intentionally ignored rather than allowed to cross-block.
   return records
     .filter((r) => !r.resetAt || new Date(r.resetAt).getTime() > nowMs)
     .map((r) => ({
       key: r.key,
+      scope: r.scope || normalizedScope,
       strategy: r.strategy,
       symbol: r.symbol,
       timeframe: r.timeframe,
+      stopped: Boolean(r.stopped),
       stopReason: r.stopReason,
       stoppedAt: r.stoppedAt,
       tradingDay: r.tradingDay,
@@ -417,12 +464,13 @@ async function getTodayStoppedStrategies({ now = new Date() } = {}, configOverri
     }));
 }
 
-async function manualReset({ strategy, symbol, timeframe, now = new Date(), actor = null }) {
+async function manualReset({ scope = 'live', strategy, symbol, timeframe, now = new Date(), actor = null }) {
+  const normalizedScope = normalizeScope(scope);
   const config = await getActiveConfig();
-  const key = buildKey(strategy, symbol, timeframe);
+  const key = buildKey({ scope: normalizedScope, strategy, symbol, timeframe });
   const { tradingDay } = resolveTradingDay(now, config);
   const record = await findRecord(key, tradingDay);
-  if (!record) return { cleared: false, key, tradingDay };
+  if (!record) return { cleared: false, key, scope: normalizedScope, tradingDay };
 
   try {
     await strategyDailyStopsDb.remove({ _id: buildDocId(key, tradingDay) });
@@ -433,11 +481,13 @@ async function manualReset({ strategy, symbol, timeframe, now = new Date(), acto
       symbol,
       strategy,
       module: 'strategyDailyStopService',
+      scope: normalizedScope,
       setupTimeframe: timeframe,
       reasonCode: auditService.REASON.STRATEGY_DAILY_STOP_RESET,
       reasonText: `Strategy daily stop manually reset for ${key}`,
       details: {
         key,
+        scope: normalizedScope,
         tradingDay,
         actor: actor || null,
         previousRecord: {
@@ -449,7 +499,7 @@ async function manualReset({ strategy, symbol, timeframe, now = new Date(), acto
     });
   } catch (_) {}
 
-  return { cleared: true, key, tradingDay };
+  return { cleared: true, key, scope: normalizedScope, tradingDay };
 }
 
 /**
@@ -459,11 +509,12 @@ async function manualReset({ strategy, symbol, timeframe, now = new Date(), acto
 function _resetInMemoryCountersForTests() {
   blockedEntryCounterState.tradingDay = null;
   blockedEntryCounterState.countsByKey = Object.create(null);
-  blockedEntryCounterState.total = 0;
+  blockedEntryCounterState.totalByScope = Object.create(null);
 }
 
 module.exports = {
   buildKey,
+  normalizeScope,
   computeTradeR,
   classify,
   resolveTradingDay,

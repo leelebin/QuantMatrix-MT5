@@ -2,6 +2,7 @@ jest.mock('../src/models/Strategy', () => ({
   initDefaults: jest.fn(),
   findAll: jest.fn(),
   update: jest.fn(),
+  resetToDefaults: jest.fn(),
 }));
 
 jest.mock('../src/models/StrategyInstance', () => ({
@@ -20,6 +21,9 @@ jest.mock('../src/models/RiskProfile', () => ({
 
 const strategyController = require('../src/controllers/strategyController');
 const Strategy = require('../src/models/Strategy');
+const StrategyInstance = require('../src/models/StrategyInstance');
+const originalAllowLegacyAssignmentWrite = process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE;
+const legacyWarning = 'Legacy assignment write used. This may affect live and paper assignment universe.';
 
 function createRes() {
   return {
@@ -37,9 +41,22 @@ function createRes() {
 }
 
 describe('strategy assignments controller', () => {
+  let warnSpy;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    require('../src/models/StrategyInstance').findByKey.mockResolvedValue(null);
+    delete process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE;
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    StrategyInstance.findByKey.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    if (originalAllowLegacyAssignmentWrite === undefined) {
+      delete process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE;
+    } else {
+      process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE = originalAllowLegacyAssignmentWrite;
+    }
   });
 
   test('getAssignments returns a full symbol-strategy matrix', async () => {
@@ -84,7 +101,29 @@ describe('strategy assignments controller', () => {
     }));
   });
 
-  test('updateAssignments rewrites strategy symbols from assignmentsBySymbol', async () => {
+  test('updateAssignments rejects legacy writes by default before changing Strategy.symbols', async () => {
+    const res = createRes();
+
+    await strategyController.updateAssignments({
+      body: {
+        assignmentsBySymbol: {
+          EURUSD: ['TrendFollowing'],
+        },
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.payload).toEqual({
+      success: false,
+      message: 'This endpoint is deprecated. Use strategy runtime matrix / strategy instances instead.',
+      deprecated: true,
+    });
+    expect(Strategy.update).not.toHaveBeenCalled();
+    expect(Strategy.initDefaults).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  test('updateAssignments allows confirmed legacy writes and returns deprecated warning', async () => {
     const existingStrategies = [
       {
         _id: 'trend-1',
@@ -125,6 +164,7 @@ describe('strategy assignments controller', () => {
 
     const req = {
       body: {
+        confirmLegacyAssignmentUpdate: true,
         assignmentsBySymbol: {
           EURUSD: ['TrendFollowing', 'MeanReversion'],
         },
@@ -137,11 +177,16 @@ describe('strategy assignments controller', () => {
     expect(Strategy.update).toHaveBeenCalledWith('trend-1', { symbols: ['EURUSD'] });
     expect(Strategy.update).toHaveBeenCalledWith('mean-1', { symbols: ['EURUSD'] });
     expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: true,
+      deprecated: true,
+      warning: legacyWarning,
+    }));
     expect(res.payload.data.assignmentsBySymbol.EURUSD).toEqual(['TrendFollowing', 'MeanReversion']);
+    expect(warnSpy).toHaveBeenCalledWith(legacyWarning);
   });
 
   test('updateAssignments in live scope seeds new instances as live-only', async () => {
-    const StrategyInstance = require('../src/models/StrategyInstance');
     const existingStrategies = [
       {
         _id: 'trend-1',
@@ -166,6 +211,7 @@ describe('strategy assignments controller', () => {
     const res = createRes();
     await strategyController.updateAssignments({
       body: {
+        confirmLegacyAssignmentUpdate: true,
         scope: 'live',
         assignmentsBySymbol: {
           EURUSD: ['TrendFollowing'],
@@ -178,6 +224,45 @@ describe('strategy assignments controller', () => {
       paperEnabled: false,
       liveEnabled: true,
     });
+    expect(res.payload).toEqual(expect.objectContaining({
+      deprecated: true,
+      warning: legacyWarning,
+    }));
+  });
+
+  test('updateAssignments allows legacy writes when ALLOW_LEGACY_ASSIGNMENT_WRITE is true', async () => {
+    process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE = 'true';
+    const existingStrategies = [
+      {
+        _id: 'trend-1',
+        name: 'TrendFollowing',
+        displayName: 'Trend Following',
+        enabled: true,
+        symbols: [],
+      },
+    ];
+    Strategy.findAll
+      .mockResolvedValueOnce(existingStrategies)
+      .mockResolvedValueOnce([{ ...existingStrategies[0], symbols: ['EURUSD'] }]);
+    Strategy.update.mockResolvedValue({});
+
+    const res = createRes();
+    await strategyController.updateAssignments({
+      body: {
+        assignmentsBySymbol: {
+          EURUSD: ['TrendFollowing'],
+        },
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(Strategy.update).toHaveBeenCalledWith('trend-1', { symbols: ['EURUSD'] });
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: true,
+      deprecated: true,
+      warning: legacyWarning,
+    }));
+    expect(warnSpy).toHaveBeenCalledWith(legacyWarning);
   });
 
   test('updateAssignments rejects invalid symbols', async () => {
@@ -193,6 +278,7 @@ describe('strategy assignments controller', () => {
 
     const req = {
       body: {
+        confirmLegacyAssignmentUpdate: true,
         assignmentsBySymbol: {
           ZZZZZZ: ['TrendFollowing'],
         },

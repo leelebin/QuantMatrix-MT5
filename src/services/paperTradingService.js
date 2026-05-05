@@ -49,6 +49,61 @@ const {
 const BASE_MONITOR_TICK_MS = 15 * 1000;
 const JUST_OPENED_WINDOW_MS = 5 * 60 * 1000;
 
+function buildDefaultValidation() {
+  return { ok: false, warnings: [], errors: [] };
+}
+
+function withModeAlias(account = null) {
+  if (!account) return null;
+  return {
+    ...account,
+    mode: account.mode || account.tradeModeName || 'UNKNOWN',
+  };
+}
+
+function getPaperPublicConfig() {
+  try {
+    return typeof mt5Service.getPublicConnectionConfig === 'function'
+      ? mt5Service.getPublicConnectionConfig()
+      : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function buildPaperRuntimeStatus(runtimeIdentity = null, running = false) {
+  const config = getPaperPublicConfig();
+  const account = withModeAlias(runtimeIdentity?.account || null);
+  const connected = Boolean(runtimeIdentity?.connected);
+  const validation = runtimeIdentity?.validation || buildDefaultValidation();
+  const configured = Boolean(
+    runtimeIdentity?.mt5Path
+    || config?.pathConfigured
+    || config?.login
+    || config?.server
+  );
+
+  let message = null;
+  if (account?.isReal) {
+    message = 'Paper runtime is connected to REAL account. Paper trading is blocked.';
+  } else if (!connected) {
+    message = configured
+      ? 'Paper runtime is not connected.'
+      : 'Paper runtime not configured or not connected.';
+  }
+
+  return {
+    scope: 'paper',
+    enabled: process.env.PAPER_TRADING_ENABLED === 'true' || running,
+    running,
+    connected,
+    mt5Path: runtimeIdentity?.mt5Path || null,
+    account,
+    validation,
+    message,
+  };
+}
+
 class PaperTradingService {
   constructor() {
     this.running = false;
@@ -1171,6 +1226,7 @@ class PaperTradingService {
 
     try {
       await strategyDailyStopService.recordTradeOutcome({
+        scope: 'paper',
         strategy: localPos.strategy,
         symbol: localPos.symbol,
         timeframe: localPos.setupTimeframe || localPos.timeframe || null,
@@ -1315,6 +1371,7 @@ class PaperTradingService {
 
     try {
       await strategyDailyStopService.recordTradeOutcome({
+        scope: 'paper',
         strategy: position.strategy,
         symbol: position.symbol,
         timeframe: position.setupTimeframe || position.timeframe || null,
@@ -1377,6 +1434,23 @@ class PaperTradingService {
       assignments,
       this.scheduler ? this.scheduler.getBucketStates() : new Map()
     );
+    let strategyDailyStopStatus = null;
+    try {
+      const config = await strategyDailyStopService.getActiveConfig();
+      const { tradingDay, resetAt } = strategyDailyStopService.resolveTradingDay(new Date(), config);
+      const todayStoppedStrategies = await strategyDailyStopService.getTodayStoppedStrategies({ scope: 'paper' }, config);
+      strategyDailyStopStatus = {
+        scope: 'paper',
+        enabled: config?.enabled !== false,
+        tradingDay,
+        resetAt,
+        todayStoppedStrategies,
+        todayStoppedStrategiesCount: todayStoppedStrategies.length,
+        blockedEntriesTodayByStrategyDailyStop: strategyDailyStopService.getBlockedEntriesToday(tradingDay, 'paper'),
+      };
+    } catch (_) {
+      strategyDailyStopStatus = null;
+    }
     let runtimeIdentity = typeof mt5Service.buildRuntimeIdentityStatus === 'function'
       ? mt5Service.buildRuntimeIdentityStatus()
       : null;
@@ -1398,11 +1472,21 @@ class PaperTradingService {
       }
     }
 
+    const paperRuntime = buildPaperRuntimeStatus(runtimeIdentity, this.running);
+
     return {
+      scope: 'paper',
+      enabled: paperRuntime.enabled,
       running: this.running,
       startedAt: this.startedAt,
       runtime: this.startedAt ? TradeLog.formatHoldingTime(Date.now() - this.startedAt.getTime()) : null,
+      connected: paperRuntime.connected,
+      mt5Path: paperRuntime.mt5Path,
+      account: paperRuntime.account,
+      validation: paperRuntime.validation,
+      message: paperRuntime.message,
       runtimeIdentity,
+      paperRuntime,
       openPositions: openPositions.length,
       positions: openPositions,
       todayTrades: todayTrades.length,
@@ -1411,6 +1495,9 @@ class PaperTradingService {
       activeSymbols: assignmentStats.activeSymbols,
       signalScanBuckets,
       scanBuckets: signalScanBuckets,
+      strategyDailyStop: strategyDailyStopStatus,
+      todayStoppedStrategiesCount: strategyDailyStopStatus?.todayStoppedStrategiesCount || 0,
+      blockedEntriesTodayByStrategyDailyStop: strategyDailyStopStatus?.blockedEntriesTodayByStrategyDailyStop || 0,
       positionMonitor: {
         ...this.monitorStatus,
         running: this.running,

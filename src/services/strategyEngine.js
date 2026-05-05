@@ -41,6 +41,14 @@ function buildVolumeFeatureSnapshot(strategyType, candles, resolvedParams) {
   return series.length > 0 ? series[series.length - 1] : null;
 }
 
+function buildSignalDedupKey({ scope, symbol, strategyType, timeframe } = {}) {
+  const runtimeScope = String(scope || 'live').trim().toLowerCase() || 'live';
+  const normalizedSymbol = String(symbol || 'unknown').trim() || 'unknown';
+  const normalizedStrategyType = String(strategyType || 'unknown').trim() || 'unknown';
+  const normalizedTimeframe = String(timeframe || 'default').trim() || 'default';
+  return `${runtimeScope}:${normalizedSymbol}:${normalizedStrategyType}:${normalizedTimeframe}`;
+}
+
 class StrategyEngine {
   constructor() {
     this.strategies = {};
@@ -65,6 +73,10 @@ class StrategyEngine {
 
   _getExecutionConfig(symbol, strategyType) {
     return getStrategyExecutionConfig(symbol, strategyType);
+  }
+
+  buildSignalDedupKey(input = {}) {
+    return buildSignalDedupKey(input);
   }
 
   _buildRuntimeInstrument(symbol, strategyType, strategyParameters = null) {
@@ -140,6 +152,9 @@ class StrategyEngine {
   }
 
   analyzeSymbol(symbol, strategyType, candles, higherTfCandles = null, entryCandles = null, strategyContext = null) {
+    const runtimeScope = strategyContext && typeof strategyContext === 'object'
+      ? strategyContext.scope || strategyContext.assignmentScope || 'live'
+      : 'live';
     const runtimeParameters = strategyContext && typeof strategyContext === 'object' && strategyContext.parameters
       ? strategyContext.parameters
       : strategyContext;
@@ -206,6 +221,7 @@ class StrategyEngine {
     const analyzedCandle = closedCandles[closedCandles.length - 1];
     const latestEntryCandle = closedEntryCandles[closedEntryCandles.length - 1] || null;
     const signalRecord = {
+      scope: runtimeScope,
       symbol,
       strategy: strategyType,
       signal: result.signal,
@@ -257,7 +273,18 @@ class StrategyEngine {
         signalRecord.setupCandleTime || analyzedCandle.time,
         signalRecord.entryCandleTime || signalRecord.candleTime,
       ].join(':');
-      const emissionKey = `${symbol}:${strategyType}`;
+      const dedupTimeframe = result.entryTimeframe
+        || result.setupTimeframe
+        || strategyContext?.timeframe
+        || runtimeInstrument.entryTimeframe
+        || runtimeInstrument.timeframe
+        || 'default';
+      const emissionKey = buildSignalDedupKey({
+        scope: runtimeScope,
+        symbol,
+        strategyType,
+        timeframe: dedupTimeframe,
+      });
 
       if (this.lastEmittedSignals.get(emissionKey) === signalKey) {
         return {
@@ -295,15 +322,16 @@ class StrategyEngine {
     const results = [];
 
     for (const task of analysisTasks) {
+      const taskScope = task.scope || task.assignmentScope || scope;
       try {
         const { symbol, strategyType } = task;
         const strategyInstance = task.strategyInstance || await getStrategyInstance(
           symbol,
           strategyType,
-          { activeProfile: options.activeProfile, scope }
+          { activeProfile: options.activeProfile, scope: taskScope }
         );
-        if (!isInstanceEnabledForScope(strategyInstance, scope)) {
-          console.log(`[Engine] Skipping disabled ${scope} strategy instance ${symbol}/${strategyType}`);
+        if (!isInstanceEnabledForScope(strategyInstance, taskScope)) {
+          console.log(`[Engine] Skipping disabled ${taskScope} strategy instance ${symbol}/${strategyType}`);
           continue;
         }
 
@@ -326,7 +354,7 @@ class StrategyEngine {
             symbol,
             strategy: strategyType,
             module: 'strategyEngine',
-            scope,
+            scope: taskScope,
             signal: 'NONE',
             reasonCode: 'INSUFFICIENT_CANDLES',
             reasonText: `Only ${candles ? candles.length : 0} candles (need ≥50)`,
@@ -369,7 +397,7 @@ class StrategyEngine {
               symbol,
               strategy: strategyType,
               module: 'strategyEngine',
-              scope,
+              scope: taskScope,
               signal: 'NONE',
               reasonCode: auditService.REASON.NEWS_BLACKOUT,
               reasonText: `Blocked by scheduled ${blackout.event.impact} ${blackout.event.currency} event: ${blackout.event.title}`,
@@ -414,8 +442,10 @@ class StrategyEngine {
             entryCandles,
             {
               ...strategyInstance,
+              scope: taskScope,
               scanMode: task.scanMode || 'signal',
               scanReason: task.scanReason || 'cadence',
+              timeframe: task.cadenceTimeframe || executionConfig.timeframe || null,
               category: task.category || executionConfig.category || null,
               categoryFallback: task.categoryFallback === true,
             }
@@ -431,7 +461,7 @@ class StrategyEngine {
           categoryFallback: task.categoryFallback === true,
         };
 
-        this._auditAnalysisResult(result, { scope });
+        this._auditAnalysisResult(result, { scope: taskScope });
         results.push(result);
 
         if (result.signal !== 'NONE' && onSignalFn) {
@@ -443,7 +473,7 @@ class StrategyEngine {
           symbol: task.symbol,
           strategy: task.strategyType,
           module: 'strategyEngine',
-          scope,
+          scope: taskScope,
           signal: 'NONE',
           status: 'WARN',
           reasonCode: 'ANALYSIS_ERROR',

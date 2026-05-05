@@ -6,6 +6,7 @@ jest.mock('../src/services/mt5Service', () => ({
   reloadConnectionEnvFromFile: jest.fn(),
   getPublicConnectionConfig: jest.fn(),
   getAccountConfigMatch: jest.fn(),
+  buildRuntimeIdentityStatus: jest.fn(),
   ensureLiveTradingAllowed: jest.fn(),
   ensureLiveAccountReady: jest.fn(),
   ensurePaperTradingAccount: jest.fn(),
@@ -579,8 +580,35 @@ describe('tradingController.getStatus', () => {
       server: 'Broker-Demo',
       tradeModeName: 'DEMO',
       tradeAllowed: true,
+      balance: 10000,
+      equity: 9950,
+      currency: 'USD',
     });
     mt5Service.getAccountModeName.mockReturnValue('DEMO');
+    mt5Service.buildRuntimeIdentityStatus.mockImplementation((accountInfo = null) => ({
+      scope: 'live',
+      connected: Boolean(accountInfo),
+      mt5Path: 'C:\\MT5-Live\\terminal64.exe',
+      account: accountInfo ? {
+        login: accountInfo.login,
+        server: accountInfo.server,
+        tradeModeName: accountInfo.tradeModeName,
+        isReal: false,
+        isDemo: true,
+        balance: accountInfo.balance,
+        equity: accountInfo.equity,
+        currency: accountInfo.currency,
+      } : null,
+      validation: accountInfo ? {
+        ok: false,
+        warnings: [],
+        errors: ['Live MT5 runtime expects a REAL account. Current account mode: DEMO.'],
+      } : {
+        ok: false,
+        warnings: [],
+        errors: [],
+      },
+    }));
     riskManager.getRiskStatus.mockResolvedValue({
       balance: 10000,
       equity: 9950,
@@ -628,6 +656,27 @@ describe('tradingController.getStatus', () => {
         tradingEnabled: true,
         activeAssignments: 2,
         activeSymbols: 2,
+        scope: 'live',
+        connected: true,
+        mt5Path: 'C:\\MT5-Live\\terminal64.exe',
+        liveRuntime: expect.objectContaining({
+          scope: 'live',
+          connected: true,
+          mt5Path: 'C:\\MT5-Live\\terminal64.exe',
+          account: expect.objectContaining({
+            login: '123456',
+            server: 'Broker-Demo',
+            tradeModeName: 'DEMO',
+            isDemo: true,
+            balance: 10000,
+            equity: 9950,
+            currency: 'USD',
+          }),
+          validation: expect.objectContaining({
+            ok: false,
+            errors: ['Live MT5 runtime expects a REAL account. Current account mode: DEMO.'],
+          }),
+        }),
         signalScanBuckets: [{ cadenceMs: 15000, items: [] }],
         scanBuckets: [{ cadenceMs: 15000, items: [] }],
         positionMonitor: expect.objectContaining({ running: true, lightCadenceMs: 15000, heavyCadenceMs: 60000 }),

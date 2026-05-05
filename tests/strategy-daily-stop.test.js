@@ -235,7 +235,8 @@ describe('strategyDailyStopService', () => {
         stopped: true,
         stopReason: 'CONSECUTIVE_LOSSES',
         consecutiveLossCountAtStop: 2,
-        key: 'TrendFollowing:EURUSD:1h',
+        scope: 'live',
+        key: 'live:TrendFollowing:EURUSD:1h',
       });
 
       const gate = await service.isEntryBlocked({ ...baseTrade, now }, cfg);
@@ -264,11 +265,14 @@ describe('strategyDailyStopService', () => {
       const tradingDay = '2026-04-25';
       service.recordBlockedEntry({ ...baseTrade, tradingDay });
       service.recordBlockedEntry({ ...baseTrade, tradingDay });
+      service.recordBlockedEntry({ ...baseTrade, scope: 'paper', tradingDay });
       expect(service.getBlockedEntriesToday(tradingDay)).toBe(2);
+      expect(service.getBlockedEntriesToday(tradingDay, 'paper')).toBe(1);
 
       // New trading day resets the counter
       service.recordBlockedEntry({ ...baseTrade, tradingDay: '2026-04-26' });
       expect(service.getBlockedEntriesToday('2026-04-26')).toBe(1);
+      expect(service.getBlockedEntriesToday('2026-04-26', 'paper')).toBe(0);
       expect(service.getBlockedEntriesToday('2026-04-25')).toBe(0);
     });
 
@@ -283,11 +287,100 @@ describe('strategyDailyStopService', () => {
       const stopped = await service.getTodayStoppedStrategies({ now }, cfg);
       expect(stopped).toHaveLength(1);
       expect(stopped[0]).toMatchObject({
+        scope: 'live',
         strategy: 'TrendFollowing',
         symbol: 'EURUSD',
         timeframe: '1h',
+        stopped: true,
         stopReason: 'CONSECUTIVE_LOSSES',
       });
+    });
+
+    test('paper consecutive losses block paper but not live', async () => {
+      const cfg = defaultConfig();
+      const now = new Date('2026-04-25T06:00:00.000Z');
+      const trade = {
+        strategy: 'Breakout',
+        symbol: 'XAUUSD',
+        timeframe: '15m',
+      };
+
+      await service.recordTradeOutcome({ ...trade, scope: 'paper', tradeR: -1.0, closedAt: now }, cfg);
+      const second = await service.recordTradeOutcome({ ...trade, scope: 'paper', tradeR: -1.2, closedAt: now }, cfg);
+
+      expect(second.record).toMatchObject({
+        scope: 'paper',
+        key: 'paper:Breakout:XAUUSD:15m',
+        stopped: true,
+      });
+      expect((await service.isEntryBlocked({ ...trade, scope: 'paper', now }, cfg)).blocked).toBe(true);
+      expect((await service.isEntryBlocked({ ...trade, scope: 'live', now }, cfg)).blocked).toBe(false);
+    });
+
+    test('live consecutive losses block live but not paper', async () => {
+      const cfg = defaultConfig();
+      const now = new Date('2026-04-25T06:00:00.000Z');
+      const trade = {
+        strategy: 'Breakout',
+        symbol: 'XAUUSD',
+        timeframe: '15m',
+      };
+
+      await service.recordTradeOutcome({ ...trade, scope: 'live', tradeR: -1.0, closedAt: now }, cfg);
+      await service.recordTradeOutcome({ ...trade, scope: 'live', tradeR: -1.2, closedAt: now }, cfg);
+
+      expect((await service.isEntryBlocked({ ...trade, scope: 'live', now }, cfg)).blocked).toBe(true);
+      expect((await service.isEntryBlocked({ ...trade, scope: 'paper', now }, cfg)).blocked).toBe(false);
+    });
+
+    test('manualReset paper does not affect live and manualReset live does not affect paper', async () => {
+      const cfg = defaultConfig();
+      const now = new Date('2026-04-25T06:00:00.000Z');
+      const trade = {
+        strategy: 'Breakout',
+        symbol: 'XAUUSD',
+        timeframe: '15m',
+      };
+
+      await service.recordTradeOutcome({ ...trade, scope: 'paper', tradeR: -1.0, closedAt: now }, cfg);
+      await service.recordTradeOutcome({ ...trade, scope: 'paper', tradeR: -1.2, closedAt: now }, cfg);
+      await service.recordTradeOutcome({ ...trade, scope: 'live', tradeR: -1.0, closedAt: now }, cfg);
+      await service.recordTradeOutcome({ ...trade, scope: 'live', tradeR: -1.2, closedAt: now }, cfg);
+
+      const resetPaper = await service.manualReset({ ...trade, scope: 'paper', now, actor: 'debug-user' });
+      expect(resetPaper).toMatchObject({
+        cleared: true,
+        scope: 'paper',
+        key: 'paper:Breakout:XAUUSD:15m',
+      });
+      expect((await service.isEntryBlocked({ ...trade, scope: 'paper', now }, cfg)).blocked).toBe(false);
+      expect((await service.isEntryBlocked({ ...trade, scope: 'live', now }, cfg)).blocked).toBe(true);
+
+      const resetLive = await service.manualReset({ ...trade, scope: 'live', now, actor: 'debug-user' });
+      expect(resetLive).toMatchObject({
+        cleared: true,
+        scope: 'live',
+        key: 'live:Breakout:XAUUSD:15m',
+      });
+      expect((await service.isEntryBlocked({ ...trade, scope: 'live', now }, cfg)).blocked).toBe(false);
+    });
+
+    test('missing scope remains backwards-compatible and defaults to live', async () => {
+      const cfg = defaultConfig();
+      const now = new Date('2026-04-25T06:00:00.000Z');
+      const trade = {
+        strategy: 'Breakout',
+        symbol: 'XAUUSD',
+        timeframe: '15m',
+      };
+
+      expect(service.buildKey(trade.strategy, trade.symbol, trade.timeframe)).toBe('live:Breakout:XAUUSD:15m');
+
+      await service.recordTradeOutcome({ ...trade, tradeR: -1.0, closedAt: now }, cfg);
+      await service.recordTradeOutcome({ ...trade, tradeR: -1.2, closedAt: now }, cfg);
+
+      expect((await service.isEntryBlocked({ ...trade, now }, cfg)).blocked).toBe(true);
+      expect((await service.isEntryBlocked({ ...trade, scope: 'paper', now }, cfg)).blocked).toBe(false);
     });
 
     test('three-in-a-row threshold', async () => {

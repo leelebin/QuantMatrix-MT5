@@ -5,9 +5,46 @@ function normalizeActionType(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+function normalizeExitReasonCode(value, fallback = 'BROKER_EXTERNAL') {
+  const normalized = normalizeActionType(value);
+  switch (normalized) {
+    case 'SL':
+    case 'SL_HIT':
+      return 'SL_HIT';
+    case 'INITIAL_SL':
+    case 'INITIAL_SL_HIT':
+      return 'INITIAL_SL_HIT';
+    case 'BREAKEVEN':
+    case 'BREAKEVEN_HIT':
+    case 'BREAKEVEN_SL':
+    case 'BREAKEVEN_SL_HIT':
+      return 'BREAKEVEN_SL_HIT';
+    case 'TRAILING':
+    case 'TRAILING_STOP':
+    case 'TRAILING_SL':
+    case 'TRAILING_SL_HIT':
+      return 'TRAILING_SL_HIT';
+    case 'PROTECTIVE':
+    case 'PROTECTIVE_SL':
+    case 'PROTECTIVE_SL_HIT':
+      return 'PROTECTIVE_SL_HIT';
+    case 'TP':
+    case 'TP_HIT':
+      return 'TP_HIT';
+    case 'MANUAL':
+    case 'MANUAL_CLOSE':
+      return 'MANUAL_CLOSE';
+    case 'EXTERNAL':
+    case 'BROKER_EXTERNAL':
+      return 'BROKER_EXTERNAL';
+    default:
+      return normalized || fallback;
+  }
+}
+
 function mapDealReasonToExitReason(reasonName, fallbackReason = 'EXTERNAL', context = {}) {
   const normalizedReason = String(reasonName || '').toUpperCase();
-  const normalizedFallback = normalizeActionType(fallbackReason || 'EXTERNAL') || 'EXTERNAL';
+  const normalizedFallback = normalizeExitReasonCode(fallbackReason || 'BROKER_EXTERNAL');
   const pendingActionType = normalizeActionType(
     context?.pendingExitAction?.type
       || context?.pendingExitAction?.reason
@@ -17,10 +54,12 @@ function mapDealReasonToExitReason(reasonName, fallbackReason = 'EXTERNAL', cont
     context?.protectiveStopState?.phase
       || context?.protectiveStopState?.type
   );
+  const hasProtectiveState = Boolean(context?.protectiveStopState);
 
   const resolveProtectiveStopReason = () => {
-    if (protectivePhase === 'BREAKEVEN') return 'BREAKEVEN';
-    if (protectivePhase === 'TRAILING' || protectivePhase === 'TRAILING_STOP') return 'TRAILING_STOP';
+    if (protectivePhase === 'BREAKEVEN') return 'BREAKEVEN_SL_HIT';
+    if (protectivePhase === 'TRAILING' || protectivePhase === 'TRAILING_STOP') return 'TRAILING_SL_HIT';
+    if (hasProtectiveState) return 'PROTECTIVE_SL_HIT';
     return 'SL_HIT';
   };
 
@@ -29,26 +68,26 @@ function mapDealReasonToExitReason(reasonName, fallbackReason = 'EXTERNAL', cont
   if (normalizedReason === 'STOP_OUT' || normalizedReason === 'SO') return 'STOP_OUT';
   if (normalizedReason === 'CLIENT' || normalizedReason === 'MOBILE' || normalizedReason === 'WEB') {
     if (pendingActionType) {
-      return pendingActionType;
+      return normalizeExitReasonCode(pendingActionType);
     }
-    return normalizedFallback === 'MANUAL' ? 'MANUAL' : 'BROKER_EXTERNAL';
+    return normalizedFallback === 'MANUAL_CLOSE' ? 'MANUAL_CLOSE' : 'BROKER_EXTERNAL';
   }
   if (normalizedReason === 'EXPERT') {
     if (pendingActionType) {
-      return pendingActionType;
+      return normalizeExitReasonCode(pendingActionType);
     }
     return normalizedFallback === 'EXTERNAL' ? 'BROKER_EXTERNAL' : normalizedFallback;
   }
 
   if (pendingActionType) {
-    return pendingActionType;
+    return normalizeExitReasonCode(pendingActionType);
   }
 
   if (normalizedReason) {
     return normalizedFallback === 'EXTERNAL' ? 'BROKER_EXTERNAL' : normalizedFallback;
   }
 
-  return normalizedFallback || 'EXTERNAL';
+  return normalizedFallback || 'BROKER_EXTERNAL';
 }
 
 function buildClosedTradeSnapshot(position, dealSummary = null, fallback = {}) {
@@ -78,17 +117,24 @@ function buildClosedTradeSnapshot(position, dealSummary = null, fallback = {}) {
     protectiveStopState: position?.protectiveStopState || null,
   });
   const metrics = calculateExitMetrics(position, { profitLoss });
+  const commission = dealSummary?.commission || 0;
+  const swap = dealSummary?.swap || 0;
+  const fee = dealSummary?.fee || 0;
+  const grossProfitLoss = hasRealizedBrokerProfit
+    ? profitLoss - commission - swap - fee
+    : priceBasedProfit;
 
   return {
     entryPrice,
     exitPrice,
     exitReason,
     profitLoss,
+    grossProfitLoss,
     profitPips,
     closedAt,
-    commission: dealSummary?.commission || 0,
-    swap: dealSummary?.swap || 0,
-    fee: dealSummary?.fee || 0,
+    commission,
+    swap,
+    fee,
     dealSummary,
     exitPlanSnapshot: position?.exitPlanSnapshot || position?.exitPlan || null,
     managementEvents: Array.isArray(position?.managementEvents) ? position.managementEvents : [],
@@ -99,5 +145,6 @@ function buildClosedTradeSnapshot(position, dealSummary = null, fallback = {}) {
 
 module.exports = {
   mapDealReasonToExitReason,
+  normalizeExitReasonCode,
   buildClosedTradeSnapshot,
 };

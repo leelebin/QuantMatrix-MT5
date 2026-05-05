@@ -17,9 +17,24 @@ jest.mock('../src/services/strategyParametersLibraryService', () => ({
   listAssignedStrategyRiskStatuses: jest.fn(),
 }));
 
+jest.mock('../src/services/strategyRuntimeMatrixService', () => ({
+  getRuntimeMatrix: jest.fn(),
+  updateRuntimeMatrix: jest.fn(),
+}));
+
+jest.mock('../src/models/RiskProfile', () => ({
+  getActive: jest.fn(),
+}));
+
 const strategyInstanceController = require('../src/controllers/strategyInstanceController');
+const Strategy = require('../src/models/Strategy');
 const StrategyInstance = require('../src/models/StrategyInstance');
+const RiskProfile = require('../src/models/RiskProfile');
 const { getStrategyInstance } = require('../src/services/strategyInstanceService');
+const {
+  getRuntimeMatrix,
+  updateRuntimeMatrix,
+} = require('../src/services/strategyRuntimeMatrixService');
 
 function createRes() {
   return {
@@ -39,6 +54,7 @@ function createRes() {
 describe('strategy instance controller', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    RiskProfile.getActive.mockResolvedValue(null);
   });
 
   test('getStrategyInstanceByKey returns the effective runtime payload from the resolver', async () => {
@@ -69,6 +85,114 @@ describe('strategy instance controller', () => {
     expect(res.payload).toEqual({
       success: true,
       data: effectivePayload,
+    });
+  });
+
+  test('upsertStrategyInstance accepts scoped enable fields without mapping them to legacy enabled', async () => {
+    Strategy.findByName.mockResolvedValue({ name: 'Breakout' });
+    getStrategyInstance.mockResolvedValue({
+      _id: 'Breakout:XAUUSD',
+      strategyName: 'Breakout',
+      symbol: 'XAUUSD',
+      paperEnabled: true,
+      liveEnabled: true,
+      enabledForScope: true,
+    });
+
+    const res = createRes();
+    await strategyInstanceController.upsertStrategyInstance({
+      params: { strategyName: 'Breakout', symbol: 'XAUUSD' },
+      query: { scope: 'live' },
+      body: { liveEnabled: true },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(StrategyInstance.upsert).toHaveBeenCalledWith('Breakout', 'XAUUSD', {
+      liveEnabled: true,
+    });
+    expect(getStrategyInstance).toHaveBeenCalledWith('XAUUSD', 'Breakout', {
+      activeProfile: null,
+      scope: 'live',
+    });
+  });
+
+  test('getRuntimeMatrix returns the scoped runtime matrix payload', async () => {
+    getRuntimeMatrix.mockResolvedValue({
+      scope: 'live',
+      symbols: ['EURUSD'],
+      enabledBySymbol: { EURUSD: ['Breakout'] },
+    });
+
+    const res = createRes();
+    await strategyInstanceController.getRuntimeMatrix({
+      query: { scope: 'live' },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(getRuntimeMatrix).toHaveBeenCalledWith({ scope: 'live' });
+    expect(res.payload).toEqual({
+      success: true,
+      data: {
+        scope: 'live',
+        symbols: ['EURUSD'],
+        enabledBySymbol: { EURUSD: ['Breakout'] },
+      },
+    });
+  });
+
+  test('updateRuntimeMatrix passes scope and enabledBySymbol to the service', async () => {
+    updateRuntimeMatrix.mockResolvedValue({
+      scope: 'paper',
+      changes: [
+        {
+          symbol: 'EURUSD',
+          strategyName: 'Breakout',
+          before: true,
+          after: false,
+        },
+      ],
+    });
+
+    const res = createRes();
+    await strategyInstanceController.updateRuntimeMatrix({
+      body: {
+        scope: 'paper',
+        enabledBySymbol: {
+          EURUSD: [],
+        },
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(updateRuntimeMatrix).toHaveBeenCalledWith({
+      scope: 'paper',
+      enabledBySymbol: {
+        EURUSD: [],
+      },
+    });
+    expect(res.payload.data.changes).toHaveLength(1);
+  });
+
+  test('legacy enabled updates remain paper-only compatibility updates', async () => {
+    Strategy.findByName.mockResolvedValue({ name: 'Breakout' });
+    getStrategyInstance.mockResolvedValue({
+      _id: 'Breakout:XAUUSD',
+      strategyName: 'Breakout',
+      symbol: 'XAUUSD',
+      paperEnabled: false,
+      liveEnabled: false,
+    });
+
+    const res = createRes();
+    await strategyInstanceController.upsertStrategyInstance({
+      params: { strategyName: 'Breakout', symbol: 'XAUUSD' },
+      query: {},
+      body: { enabled: false },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(StrategyInstance.upsert).toHaveBeenCalledWith('Breakout', 'XAUUSD', {
+      enabled: false,
     });
   });
 });

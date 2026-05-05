@@ -63,6 +63,30 @@ describe('assignmentRuntimeService', () => {
     }));
   });
 
+  test('filters active assignments by paper and live scoped enablement', async () => {
+    Strategy.findAll.mockResolvedValue([
+      { _id: 's1', name: 'TrendFollowing', symbols: ['EURUSD', 'XAUUSD'] },
+    ]);
+    getStrategyInstance.mockImplementation(async (symbol, _strategyName, options = {}) => ({
+      enabled: true,
+      paperEnabled: symbol === 'EURUSD',
+      liveEnabled: symbol === 'XAUUSD',
+      enabledForScope: options.scope === 'live' ? symbol === 'XAUUSD' : symbol === 'EURUSD',
+      source: 'instance',
+      parameters: {},
+      executionPolicy: null,
+      newsBlackout: null,
+    }));
+
+    const paperAssignments = await listActiveAssignments({ scope: 'paper' });
+    const liveAssignments = await listActiveAssignments({ scope: 'live' });
+
+    expect(paperAssignments.map((assignment) => assignment.symbol)).toEqual(['EURUSD']);
+    expect(liveAssignments.map((assignment) => assignment.symbol)).toEqual(['XAUUSD']);
+    expect(getStrategyInstance).toHaveBeenCalledWith('EURUSD', 'TrendFollowing', expect.objectContaining({ scope: 'paper' }));
+    expect(getStrategyInstance).toHaveBeenCalledWith('XAUUSD', 'TrendFollowing', expect.objectContaining({ scope: 'live' }));
+  });
+
   test('warns once and falls back to forex cadence for unknown categories', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 

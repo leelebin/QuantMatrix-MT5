@@ -3,6 +3,7 @@ const Trade = require('../models/Trade');
 const ExecutionAudit = require('../models/ExecutionAudit');
 const tradeExecutor = require('../services/tradeExecutor');
 const tradeHistoryService = require('../services/tradeHistoryService');
+const tradeLedgerService = require('../services/tradeLedgerService');
 const mt5Service = require('../services/mt5Service');
 const positionMonitor = require('../services/positionMonitor');
 const { paperPositionsDb } = require('../config/db');
@@ -197,9 +198,12 @@ exports.getTradeStats = async (req, res) => {
 exports.exportTradesCsv = async (req, res) => {
   try {
     const filters = getTradeFilters(req.query);
-    const trades = await Trade.findForExport(filters);
+    const source = tradeLedgerService.normalizeLedgerSource(req.query.source || 'canonical');
+    const trades = source === 'broker'
+      ? await Trade.findForExport(filters)
+      : await tradeLedgerService.getRows({ source, filters });
     const csv = buildCsv(LIVE_TRADE_COLUMNS, trades);
-    const filename = buildExportFilename(filters);
+    const filename = buildExportFilename({ ...filters, source });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -231,6 +235,27 @@ exports.reconcileTrades = async (req, res) => {
       success: true,
       message: `MT5 sync complete: ${result.imported || 0} imported, ${result.updated || 0} updated, ${result.skipped || 0} skipped across ${result.checked || 0} broker trades`,
       data: result,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Get canonical trade ledger
+// @route   GET /api/trades/ledger
+exports.getTradeLedger = async (req, res) => {
+  try {
+    const parsedLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 100;
+    const filters = getTradeFilters(req.query);
+    const source = tradeLedgerService.normalizeLedgerSource(req.query.source || 'canonical');
+    const trades = await tradeLedgerService.getRows({ source, filters, limit });
+
+    res.json({
+      success: true,
+      source,
+      data: trades,
+      count: trades.length,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

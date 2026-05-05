@@ -18,7 +18,9 @@ const {
 } = require('../services/assignmentRuntimeService');
 const { getAllSymbols, getInstrument, instruments, INSTRUMENT_CATEGORIES } = require('../config/instruments');
 const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
+const { buildOpenTradeCapture } = require('../utils/tradeDataCapture');
 const symbolResolver = require('../services/symbolResolver');
+const liveTradingPermissionService = require('../services/liveTradingPermissionService');
 
 let tradingScheduler = null;
 
@@ -190,6 +192,10 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
   const entryCommission = Number(order.entryDeal?.commission) || 0;
   const entrySwap = Number(order.entryDeal?.swap) || 0;
   const entryFee = Number(order.entryDeal?.fee) || 0;
+  const openCapture = buildOpenTradeCapture(signal, {});
+  const slippageEstimate = Number.isFinite(Number(executedEntryPrice)) && Number.isFinite(Number(signal.entryPrice))
+    ? parseFloat((Number(executedEntryPrice) - Number(signal.entryPrice)).toFixed(10))
+    : null;
 
   const position = await positionsDb.insert({
     symbol: signal.symbol,
@@ -206,11 +212,15 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
     strategy: signal.strategy,
     comment: tradeComment,
     confidence: signal.confidence,
-    reason: signal.reason,
+    reason: openCapture.signalReason || signal.reason,
     atrAtEntry: signal.indicatorsSnapshot?.atr || 0,
+    ...openCapture,
     partialsExecutedIndices: [],
     maxFavourablePrice: executedEntryPrice,
-    indicatorsSnapshot: signal.indicatorsSnapshot || {},
+    requestedEntryPrice: signal.entryPrice || null,
+    slippageEstimate,
+    brokerRetcodeOpen: order.retcode ?? null,
+    indicatorsSnapshot: openCapture.indicatorsSnapshot,
     unrealizedPl: 0,
     openedAt,
     status: 'OPEN',
@@ -225,8 +235,18 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
     lotSize: volume,
     strategy: signal.strategy,
     confidence: signal.confidence,
-    reason: signal.reason,
-    indicatorsSnapshot: signal.indicatorsSnapshot || {},
+    reason: openCapture.signalReason || signal.reason,
+    entryReason: openCapture.entryReason,
+    setupReason: openCapture.setupReason,
+    triggerReason: openCapture.triggerReason,
+    initialSl: openCapture.initialSl,
+    initialTp: openCapture.initialTp,
+    finalSl: openCapture.finalSl,
+    finalTp: openCapture.finalTp,
+    requestedEntryPrice: signal.entryPrice || null,
+    slippageEstimate,
+    brokerRetcodeOpen: order.retcode ?? null,
+    indicatorsSnapshot: openCapture.indicatorsSnapshot,
     commission: entryCommission,
     swap: entrySwap,
     fee: entryFee,
@@ -254,7 +274,117 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
 
 async function getLiveAssignments(activeProfile = null) {
   await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
-  return listActiveAssignments({ activeProfile });
+  return listActiveAssignments({ activeProfile, scope: 'live' });
+}
+
+async function getLiveAccountInfo({ reconnectOnMismatch = false } = {}) {
+  if (typeof mt5Service.reloadConnectionEnvFromFile === 'function') {
+    mt5Service.reloadConnectionEnvFromFile();
+  }
+
+  if (mt5Service.isConnected()) {
+    const accountInfo = await mt5Service.getAccountInfo();
+    if (typeof mt5Service.getAccountConfigMatch !== 'function') {
+      return { accountInfo, accountConfigMatch: null, reconnected: false };
+    }
+
+    const accountConfigMatch = mt5Service.getAccountConfigMatch(accountInfo);
+    if (accountConfigMatch.matches || !reconnectOnMismatch) {
+      return { accountInfo, accountConfigMatch, reconnected: false };
+    }
+
+    await mt5Service.disconnect();
+  }
+
+  await mt5Service.connect();
+  const accountInfo = await mt5Service.getAccountInfo();
+  const accountConfigMatch = typeof mt5Service.getAccountConfigMatch === 'function'
+    ? mt5Service.getAccountConfigMatch(accountInfo)
+    : null;
+  return { accountInfo, accountConfigMatch, reconnected: true };
+}
+
+function buildLiveConnectionStatus(accountInfo = null, accountConfigMatch = null) {
+  if (typeof mt5Service.reloadConnectionEnvFromFile === 'function') {
+    mt5Service.reloadConnectionEnvFromFile();
+  }
+
+  const config = typeof mt5Service.getPublicConnectionConfig === 'function'
+    ? mt5Service.getPublicConnectionConfig()
+    : null;
+  const match = accountConfigMatch || (
+    accountInfo && typeof mt5Service.getAccountConfigMatch === 'function'
+      ? mt5Service.getAccountConfigMatch(accountInfo)
+      : null
+  );
+  const runtimeIdentity = typeof mt5Service.buildRuntimeIdentityStatus === 'function'
+    ? mt5Service.buildRuntimeIdentityStatus(accountInfo)
+    : null;
+
+  return {
+    scope: 'live',
+    config,
+    runtimeIdentity,
+    accountConfigMatch: match,
+    warning: match && !match.matches
+      ? `Live MT5 account mismatch: expected ${match.expected.login || '--'}@${match.expected.server || '--'}, got ${match.actual.login || '--'}@${match.actual.server || '--'}`
+      : null,
+  };
+}
+
+function getSafeLiveConnectionStatus() {
+  try {
+    return buildLiveConnectionStatus();
+  } catch (error) {
+    return {
+      scope: 'live',
+      config: null,
+      runtimeIdentity: null,
+      accountConfigMatch: null,
+      warning: error.message || 'Unable to build live connection diagnostics',
+    };
+  }
+}
+
+function buildLiveTradingStartFailure(error) {
+  const liveConnection = getSafeLiveConnectionStatus();
+  const diagnostics = error.details?.diagnostics || error.details || null;
+  const config = diagnostics?.config || liveConnection.config || {};
+  const expected = diagnostics?.expectedAccount || {
+    login: config.login || null,
+    server: config.server || null,
+  };
+  const nextSteps = [];
+
+  if (!config.pathConfigured) {
+    nextSteps.push(`Set ${config.env?.path || 'MT5_LIVE_PATH'} to the real-account MT5 terminal64.exe path on this machine/VPS.`);
+  } else {
+    nextSteps.push(`Open/check the MT5 terminal at ${config.path}; make sure it is not updating or waiting for login/UAC prompts.`);
+  }
+
+  if (diagnostics?.peer?.connected) {
+    nextSteps.push(`Paper is already connected. Use separate terminal installs and set both MT5_LIVE_PATH and MT5_PAPER_PATH.`);
+  }
+
+  nextSteps.push(`Verify ${config.env?.login || 'MT5_LIVE_LOGIN'} / ${config.env?.server || 'MT5_LIVE_SERVER'} points to the REAL account you want to trade.`);
+  nextSteps.push('Restart the backend after changing terminal paths, then click Start Live Trading again.');
+
+  let message = error.message || 'Failed to start live trading';
+  if (error.code === 'MT5_CONNECT_TIMEOUT' || error.code === 'MT5_COMMAND_TIMEOUT' || /timeout/i.test(message)) {
+    message = `Live MT5 connection timed out for ${expected.login || '--'}@${expected.server || '--'}. `
+      + 'The backend could not get a response from MT5 connect. See diagnostics for the likely cause.';
+  }
+
+  return {
+    message,
+    data: {
+      errorCode: error.code || null,
+      method: error.method || null,
+      liveConnection,
+      diagnostics,
+      nextSteps,
+    },
+  };
 }
 
 function getTradingScheduler() {
@@ -299,11 +429,18 @@ function getTradingScheduler() {
 // @route   POST /api/trading/start
 exports.startTrading = async (req, res) => {
   try {
-    if (!mt5Service.isConnected()) {
-      await mt5Service.connect();
+    const { accountInfo, accountConfigMatch, reconnected } = await getLiveAccountInfo({ reconnectOnMismatch: true });
+    let liveTradingPermission = null;
+    const body = req.body || {};
+    const shouldAllowLiveTrading = body.allowLiveTrading === true || body.allowLiveTrading === 'true';
+
+    if (shouldAllowLiveTrading) {
+      mt5Service.ensureLiveAccountReady(accountInfo);
+      liveTradingPermission = await liveTradingPermissionService.setAllowLiveTrading(true, {
+        persist: body.persistAllowLiveTrading !== false,
+      });
     }
 
-    const accountInfo = await mt5Service.getAccountInfo();
     mt5Service.ensureLiveTradingAllowed(accountInfo);
 
     process.env.TRADING_ENABLED = 'true';
@@ -331,11 +468,16 @@ exports.startTrading = async (req, res) => {
         signalScanBuckets,
         scanBuckets: signalScanBuckets,
         positionMonitor: positionMonitor.getStatus(),
+        liveTradingAllowed: liveTradingPermissionService.isAllowLiveTradingEnabled(),
+        allowLiveTradingPersisted: Boolean(liveTradingPermission?.persisted),
+        liveConnection: buildLiveConnectionStatus(accountInfo, accountConfigMatch),
+        reconnected,
       },
     });
   } catch (err) {
     console.error('[Trading] Start error:', err.message);
-    res.status(500).json({ success: false, message: err.message });
+    const failure = buildLiveTradingStartFailure(err);
+    res.status(500).json({ success: false, message: failure.message, data: failure.data });
   }
 };
 
@@ -368,10 +510,12 @@ exports.getStatus = async (req, res) => {
 
     let riskStatus = null;
     let account = null;
+    let liveConnection = buildLiveConnectionStatus();
     const assignments = await getLiveAssignments();
     const assignmentStats = buildAssignmentStats(assignments);
     if (connected) {
-      const accountInfo = await mt5Service.getAccountInfo();
+      const { accountInfo, accountConfigMatch } = await getLiveAccountInfo({ reconnectOnMismatch: false });
+      liveConnection = buildLiveConnectionStatus(accountInfo, accountConfigMatch);
       riskStatus = await riskManager.getRiskStatus(accountInfo);
       account = {
         login: accountInfo.login,
@@ -403,8 +547,12 @@ exports.getStatus = async (req, res) => {
       data: {
         mt5Connected: connected,
         account,
+        liveConnection,
+        runtimeIdentity: liveConnection.runtimeIdentity,
+        liveRuntimeIdentity: liveConnection.runtimeIdentity,
         wsClients: websocketService.getClientCount(),
         tradingEnabled,
+        liveTradingAllowed: liveTradingPermissionService.isAllowLiveTradingEnabled(),
         tradingLoopActive: Boolean(tradingScheduler && tradingScheduler.isRunning()),
         activeAssignments: assignmentStats.activeAssignments,
         activeSymbols: assignmentStats.activeSymbols,

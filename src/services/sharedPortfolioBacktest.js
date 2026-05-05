@@ -27,10 +27,19 @@ const {
   getForcedTimeframeExecutionConfig,
 } = require('../config/strategyExecution');
 const instrumentValuation = require('../utils/instrumentValuation');
+const backtestCostModel = require('../utils/backtestCostModel');
 
 const WARMUP = 250;
 const DEFAULT_MAX_CONCURRENT_POSITIONS = 10;
 const MAX_EQUITY_POINTS = 2000;
+const BREAKEVEN_EXIT_REASONS = new Set(['BREAKEVEN_SL_HIT', 'BREAKEVEN']);
+const PROTECTIVE_EXIT_REASONS = new Set([
+  'BREAKEVEN_SL_HIT',
+  'TRAILING_SL_HIT',
+  'PROTECTIVE_SL_HIT',
+  'BREAKEVEN',
+  'TRAILING_STOP',
+]);
 
 function toTimeMs(value) {
   return value instanceof Date ? value.getTime() : new Date(value).getTime();
@@ -58,6 +67,30 @@ function round4(value) {
   return parseFloat(Number(value).toFixed(4));
 }
 
+function classifyTradeOutcome(trade, basis = 'net') {
+  if (typeof backtestEngine._classifyTradeOutcome === 'function') {
+    return backtestEngine._classifyTradeOutcome(trade, basis);
+  }
+  const value = basis === 'net'
+    ? Number(trade && trade.profitLoss)
+    : Number(trade && trade.profitPips);
+  if (value > 0) return 'win';
+  if (value < 0) return 'loss';
+  return 'neutral';
+}
+
+function isBreakevenExit(trade) {
+  return Boolean(trade && BREAKEVEN_EXIT_REASONS.has(trade.exitReason));
+}
+
+function isProtectiveExitOrTriggered(trade) {
+  return Boolean(trade && (
+    trade.breakevenActivated
+    || trade.trailingActivated
+    || PROTECTIVE_EXIT_REASONS.has(trade.exitReason)
+  ));
+}
+
 function buildComboState({
   combo,
   candles,
@@ -67,6 +100,7 @@ function buildComboState({
   storedStrategyParameters,
   breakevenConfig,
   forcedTimeframe,
+  requestCostModel = null,
 }) {
   const instrument = getInstrument(combo.symbol);
   if (!instrument) {
@@ -90,6 +124,11 @@ function buildComboState({
     combo.strategy,
     forcedTimeframe ? executionConfig : null
   );
+  const { costModel: resolvedCostModel, sources: costModelSources } = backtestCostModel.resolveCostModel({
+    instrumentCostModel: instrument.costModel || null,
+    strategyCostModel: resolvedParams && resolvedParams.costModel ? resolvedParams.costModel : null,
+    requestCostModel,
+  });
 
   const effectiveBreakeven = strategyInstance?.effectiveBreakeven
     || strategyInstance?.effectiveTradeManagement?.breakeven
@@ -125,8 +164,16 @@ function buildComboState({
   );
 
   const valuation = instrumentValuation.getValuationContext(tradingInstrument);
-  const spread = (valuation.spreadPips || 0) * valuation.pipSize;
-  const slippage = 0.5 * valuation.pipSize;
+  const costModelSpreadPips = Number.isFinite(resolvedCostModel.spreadPips) ? resolvedCostModel.spreadPips : null;
+  const costModelSlippagePips = Number.isFinite(resolvedCostModel.slippagePips) ? resolvedCostModel.slippagePips : null;
+  const effectiveSpreadPips = costModelSpreadPips !== null
+    ? costModelSpreadPips
+    : (valuation.spreadPips || 0);
+  const effectiveSlippagePips = costModelSlippagePips !== null
+    ? costModelSlippagePips
+    : 0.5;
+  const spread = effectiveSpreadPips * valuation.pipSize;
+  const slippage = effectiveSlippagePips * valuation.pipSize;
 
   return {
     combo,
@@ -151,6 +198,8 @@ function buildComboState({
     preparedLowerIndicators,
     needsEntryIndicators,
     valuation,
+    costModel: resolvedCostModel,
+    costModelSources,
     spread,
     slippage,
     historyWindowState: backtestEngine._createRollingArrayWindowState(candles),
@@ -295,6 +344,7 @@ function processEvent(state, comboIdx, barIdx) {
     );
     if (trailing.updated) {
       s.openPosition.currentSl = trailing.newSl;
+      backtestEngine._markBreakevenState(s.openPosition, trailing.phase);
     }
   }
 
@@ -381,12 +431,24 @@ function processEvent(state, comboIdx, barIdx) {
             sl: result.sl,
             tp: result.tp,
             currentSl: result.sl,
+            breakevenActivated: false,
+            trailingActivated: false,
+            breakevenPhase: null,
             lotSize,
             plannedRiskAmount,
             atrAtEntry: currentAtr,
             breakevenConfig: s.effectiveBreakeven,
+            costModel: s.costModel,
+            costModelSources: s.costModelSources,
             indicatorsSnapshot: result.indicatorsSnapshot,
             reason: result.reason,
+            entryReason: result.entryReason || [result.reason, result.triggerReason].filter(Boolean).join(' | ') || result.reason,
+            setupReason: result.setupReason || result.reason || '',
+            triggerReason: result.triggerReason || '',
+            setupTimeframe: result.setupTimeframe || s.executionConfig.timeframe,
+            entryTimeframe: result.entryTimeframe || null,
+            setupCandleTime: result.setupCandleTime || currentCandle.time,
+            entryCandleTime: result.entryCandleTime || result.setupCandleTime || currentCandle.time,
           };
         }
       }
@@ -410,10 +472,10 @@ function buildContributions(trades) {
     const strategyKey = trade.strategy || 'unknown';
     const symbolKey = trade.symbol || 'unknown';
     if (!byStrategy.has(strategyKey)) {
-      byStrategy.set(strategyKey, { strategy: strategyKey, trades: 0, wins: 0, losses: 0, netMoney: 0, grossProfit: 0, grossLoss: 0 });
+      byStrategy.set(strategyKey, { strategy: strategyKey, trades: 0, wins: 0, losses: 0, neutrals: 0, breakevenExitTrades: 0, breakevenTriggeredTrades: 0, netMoney: 0, grossProfit: 0, grossLoss: 0 });
     }
     if (!bySymbol.has(symbolKey)) {
-      bySymbol.set(symbolKey, { symbol: symbolKey, trades: 0, wins: 0, losses: 0, netMoney: 0, grossProfit: 0, grossLoss: 0 });
+      bySymbol.set(symbolKey, { symbol: symbolKey, trades: 0, wins: 0, losses: 0, neutrals: 0, breakevenExitTrades: 0, breakevenTriggeredTrades: 0, netMoney: 0, grossProfit: 0, grossLoss: 0 });
     }
     const s = byStrategy.get(strategyKey);
     const y = bySymbol.get(symbolKey);
@@ -421,12 +483,24 @@ function buildContributions(trades) {
     y.trades += 1;
     s.netMoney += trade.profitLoss;
     y.netMoney += trade.profitLoss;
-    if (trade.profitLoss > 0) {
+    if (isBreakevenExit(trade)) {
+      s.breakevenExitTrades += 1; y.breakevenExitTrades += 1;
+    }
+    if (isProtectiveExitOrTriggered(trade)) {
+      s.breakevenTriggeredTrades += 1; y.breakevenTriggeredTrades += 1;
+    }
+    const outcome = classifyTradeOutcome(trade, 'net');
+    if (outcome === 'win') {
       s.wins += 1; y.wins += 1;
+    } else if (outcome === 'loss') {
+      s.losses += 1; y.losses += 1;
+    } else {
+      s.neutrals += 1; y.neutrals += 1;
+    }
+    if (trade.profitLoss > 0) {
       s.grossProfit += trade.profitLoss;
       y.grossProfit += trade.profitLoss;
     } else if (trade.profitLoss < 0) {
-      s.losses += 1; y.losses += 1;
       s.grossLoss += Math.abs(trade.profitLoss);
       y.grossLoss += Math.abs(trade.profitLoss);
     }
@@ -437,7 +511,12 @@ function buildContributions(trades) {
     netMoney: round2(entry.netMoney),
     grossProfit: round2(entry.grossProfit),
     grossLoss: round2(entry.grossLoss),
-    winRate: entry.trades > 0 ? round4(entry.wins / entry.trades) : 0,
+    neutralTrades: entry.neutrals,
+    neutralRate: entry.trades > 0 ? round4(entry.neutrals / entry.trades) : 0,
+    winRate: (entry.wins + entry.losses) > 0 ? round4(entry.wins / (entry.wins + entry.losses)) : 0,
+    lossRate: (entry.wins + entry.losses) > 0 ? round4(entry.losses / (entry.wins + entry.losses)) : 0,
+    breakevenExitRate: entry.trades > 0 ? round4(entry.breakevenExitTrades / entry.trades) : 0,
+    breakevenTriggerRate: entry.trades > 0 ? round4(entry.breakevenTriggeredTrades / entry.trades) : 0,
     profitFactor: entry.grossLoss > 0
       ? round2(entry.grossProfit / entry.grossLoss)
       : (entry.grossProfit > 0 ? 999 : 0),
@@ -452,21 +531,49 @@ function buildContributions(trades) {
 function buildSummary(state, initialBalance) {
   const trades = state.trades;
   const totalTrades = trades.length;
-  const winners = trades.filter((t) => t.profitLoss > 0);
-  const losers = trades.filter((t) => t.profitLoss < 0);
-  const grossProfit = winners.reduce((s, t) => s + t.profitLoss, 0);
-  const grossLoss = losers.reduce((s, t) => s + Math.abs(t.profitLoss), 0);
+  const outcomes = trades.map((trade) => classifyTradeOutcome(trade, 'net'));
+  const winners = trades.filter((_, index) => outcomes[index] === 'win');
+  const losers = trades.filter((_, index) => outcomes[index] === 'loss');
+  const neutrals = trades.filter((_, index) => outcomes[index] === 'neutral');
+  const decisiveTrades = winners.length + losers.length;
+  const moneyWinners = trades.filter((t) => t.profitLoss > 0);
+  const moneyLosers = trades.filter((t) => t.profitLoss < 0);
+  const grossProfit = moneyWinners.reduce((s, t) => s + t.profitLoss, 0);
+  const grossLoss = moneyLosers.reduce((s, t) => s + Math.abs(t.profitLoss), 0);
   const netProfit = state.balance - initialBalance;
+  const breakevenExitTrades = trades.filter(isBreakevenExit).length;
+  const breakevenTriggeredTrades = trades.filter(isProtectiveExitOrTriggered).length;
+  const costs = backtestCostModel.summarizeCosts(trades);
+  const grossNet = trades.reduce((sum, trade) => {
+    const gross = Number(trade.grossProfitLoss);
+    if (Number.isFinite(gross)) return sum + gross;
+    return sum + (Number(trade.profitLoss) || 0);
+  }, 0);
+  const decisiveNetWinners = trades.filter((trade, index) => outcomes[index] === 'win' && trade.profitLoss > 0);
+  const decisiveNetLosers = trades.filter((trade, index) => outcomes[index] === 'loss' && trade.profitLoss < 0);
+  const decisiveNetProfit = decisiveNetWinners.reduce((sum, trade) => sum + trade.profitLoss, 0);
+  const decisiveNetLoss = decisiveNetLosers.reduce((sum, trade) => sum + Math.abs(trade.profitLoss), 0);
+  const avgWin = decisiveNetWinners.length > 0 ? decisiveNetProfit / decisiveNetWinners.length : 0;
+  const avgLoss = decisiveNetLosers.length > 0 ? decisiveNetLoss / decisiveNetLosers.length : 0;
+  let requiredBreakevenWinRate = 0;
+  if (avgWin > 0 && avgLoss > 0) {
+    requiredBreakevenWinRate = avgLoss / (avgWin + avgLoss);
+  } else if (avgWin <= 0 && avgLoss > 0) {
+    requiredBreakevenWinRate = 1;
+  }
 
   let maxConsWins = 0;
   let maxConsLosses = 0;
   let consWins = 0;
   let consLosses = 0;
   for (const trade of trades) {
-    if (trade.profitLoss > 0) {
+    const outcome = classifyTradeOutcome(trade, 'net');
+    if (outcome === 'win') {
       consWins += 1; consLosses = 0;
-    } else {
+    } else if (outcome === 'loss') {
       consLosses += 1; consWins = 0;
+    } else {
+      consWins = 0; consLosses = 0;
     }
     if (consWins > maxConsWins) maxConsWins = consWins;
     if (consLosses > maxConsLosses) maxConsLosses = consLosses;
@@ -480,12 +587,34 @@ function buildSummary(state, initialBalance) {
     totalTrades,
     winningTrades: winners.length,
     losingTrades: losers.length,
-    winRate: totalTrades > 0 ? round4(winners.length / totalTrades) : 0,
-    lossRate: totalTrades > 0 ? round4(losers.length / totalTrades) : 0,
+    neutralTrades: neutrals.length,
+    decisiveTrades,
+    winRate: decisiveTrades > 0 ? round4(winners.length / decisiveTrades) : 0,
+    lossRate: decisiveTrades > 0 ? round4(losers.length / decisiveTrades) : 0,
+    neutralRate: totalTrades > 0 ? round4(neutrals.length / totalTrades) : 0,
     grossProfitMoney: round2(grossProfit),
     grossLossMoney: round2(grossLoss),
     profitFactor: grossLoss > 0 ? round2(grossProfit / grossLoss) : (grossProfit > 0 ? 999 : 0),
+    breakevenExitTrades,
+    breakevenExitRate: totalTrades > 0 ? round4(breakevenExitTrades / totalTrades) : 0,
+    breakevenTriggeredTrades,
+    breakevenTriggerRate: totalTrades > 0 ? round4(breakevenTriggeredTrades / totalTrades) : 0,
+    requiredBreakevenWinRate: round4(requiredBreakevenWinRate),
     averageTradeMoney: totalTrades > 0 ? round2(netProfit / totalTrades) : 0,
+    netWinningTrades: winners.length,
+    netLosingTrades: losers.length,
+    netNeutralTrades: neutrals.length,
+    netDecisiveTrades: decisiveTrades,
+    netWinRate: decisiveTrades > 0 ? round4(winners.length / decisiveTrades) : 0,
+    netProfitFactor: grossLoss > 0 ? round2(grossProfit / grossLoss) : (grossProfit > 0 ? 999 : 0),
+    netGrossProfitMoney: round2(grossProfit),
+    netGrossLossMoney: round2(grossLoss),
+    averageNetTradeMoney: totalTrades > 0 ? round2(netProfit / totalTrades) : 0,
+    totalCommission: round2(costs.totalCommission),
+    totalSwap: round2(costs.totalSwap),
+    totalFees: round2(costs.totalFees),
+    totalTradingCosts: round2(costs.totalTradingCosts),
+    grossNetDifference: round2(grossNet - netProfit),
     maxDrawdownPercent: round2(state.maxDrawdown * 100),
     maxConsecutiveWins: maxConsWins,
     maxConsecutiveLosses: maxConsLosses,
@@ -505,6 +634,7 @@ async function runSharedPortfolioBacktest({
   forcedTimeframe = null,
   maxConcurrentPositions = null,
   onProgress = null,
+  costModel: requestCostModel = null,
 }) {
   if (!Array.isArray(combinations) || combinations.length === 0) {
     throw new Error('No combinations provided for shared portfolio backtest.');
@@ -602,6 +732,7 @@ async function runSharedPortfolioBacktest({
         storedStrategyParameters: null,
         breakevenConfig: null,
         forcedTimeframe,
+        requestCostModel,
       });
       prepared.push({ comboState, primaryCandles: primary.candles });
       state.combos.push(comboState);
@@ -615,6 +746,10 @@ async function runSharedPortfolioBacktest({
         forcedTimeframe: forcedTimeframe || null,
         higherTimeframeDisabled: comboState.executionConfig.higherTimeframeDisabled || null,
         entryTimeframeDisabled: comboState.executionConfig.entryTimeframeDisabled || null,
+        costModelUsed: {
+          costModel: comboState.costModel,
+          sources: comboState.costModelSources,
+        },
       });
 
       if (typeof onProgress === 'function') {
@@ -724,6 +859,7 @@ async function runSharedPortfolioBacktest({
     combinationsUsed: readiedComboInfo,
     combinationsRequested: combinations.length,
     maxConcurrentPositions: state.maxConcurrentPositions,
+    costModelUsed: requestCostModel || null,
   };
 }
 

@@ -83,6 +83,8 @@ describe('strategy parameters library service', () => {
             ema_fast: 20,
           },
           enabled: true,
+          paperEnabled: true,
+          liveEnabled: false,
           source: 'instance',
           newsBlackout: {
             enabled: true,
@@ -136,6 +138,8 @@ describe('strategy parameters library service', () => {
           lookback_period: 20,
         },
         enabled: false,
+        paperEnabled: false,
+        liveEnabled: true,
         source: 'instance',
         newsBlackout: {
           enabled: false,
@@ -192,6 +196,8 @@ describe('strategy parameters library service', () => {
       strategyName: 'TrendFollowing',
       strategyDisplayName: 'Trend Following',
       instanceEnabled: true,
+      paperEnabled: true,
+      liveEnabled: false,
       parameterSource: 'instance',
       instanceParameters: expect.objectContaining({
         riskPercent: 0.02,
@@ -228,6 +234,8 @@ describe('strategy parameters library service', () => {
       symbol: 'XTIUSD',
       strategyName: 'Breakout',
       instanceEnabled: false,
+      paperEnabled: false,
+      liveEnabled: true,
       riskParameters: expect.objectContaining({
         riskPercentPct: 1,
         slMultiplier: 2,

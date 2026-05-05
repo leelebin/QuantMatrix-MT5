@@ -193,8 +193,8 @@ class RiskManager {
     return decimalPart ? decimalPart.length : 2;
   }
 
-  async _getBrokerSizingContext(signal, instrument) {
-    if (!mt5Service.isConnected()) {
+  async _getBrokerSizingContext(signal, instrument, brokerService = mt5Service) {
+    if (!brokerService || !brokerService.isConnected()) {
       return null;
     }
 
@@ -207,8 +207,8 @@ class RiskManager {
 
     try {
       const [symbolInfo, profitEstimate] = await Promise.all([
-        mt5Service.getResolvedSymbolInfo(signal.symbol),
-        mt5Service.calculateOrderProfit(signal.symbol, type, 1.0, entryPrice, stopLoss),
+        brokerService.getResolvedSymbolInfo(signal.symbol),
+        brokerService.calculateOrderProfit(signal.symbol, type, 1.0, entryPrice, stopLoss),
       ]);
 
       const riskPerLot = Math.abs(Number(profitEstimate?.profit));
@@ -587,7 +587,11 @@ class RiskManager {
       };
     }
 
-    const brokerSizingContext = await this._getBrokerSizingContext(signal, instrument);
+    const brokerSizingContext = await this._getBrokerSizingContext(
+      signal,
+      instrument,
+      options.mt5Service || mt5Service
+    );
     const sizing = this.calculateLotSizeDetails(signal, instrument, balance, settings, brokerSizingContext);
     if (!sizing.allowed) {
       const reasonCode = /below minimum/i.test(sizing.reason)

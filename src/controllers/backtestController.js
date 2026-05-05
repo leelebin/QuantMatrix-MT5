@@ -487,6 +487,7 @@ exports.runBatchBacktest = async (req, res) => {
       forcedTimeframe,
       strategyScopeMode,
       runModel,
+      costModel,
     } = req.body;
     const job = await batchBacktestService.startJob(
       {
@@ -498,6 +499,7 @@ exports.runBatchBacktest = async (req, res) => {
         forcedTimeframe,
         strategyScopeMode,
         runModel,
+        costModel,
       },
       {
         onProgress: (data) => {

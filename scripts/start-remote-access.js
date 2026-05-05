@@ -202,12 +202,7 @@ function writeTrafficPolicyFile(username, password) {
             type: 'basic-auth',
             config: {
               realm: 'QuantMatrix Remote',
-              credentials: [
-                {
-                  username,
-                  password,
-                },
-              ],
+              credentials: [`${username}:${password}`],
             },
           },
         ],

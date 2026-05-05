@@ -56,7 +56,12 @@ function getPipSize(instrument) {
  */
 function getTickSize(instrument, snapshot = null) {
   return (
-    _positive(snapshot && (snapshot.tickSize ?? snapshot.trade_tick_size))
+    _positive(snapshot && (
+      snapshot.tickSize
+      ?? snapshot.tradeTickSize
+      ?? snapshot.trade_tick_size
+      ?? snapshot.point
+    ))
     || _positive(instrument && instrument.tickSize)
     || getPipSize(instrument)
   );
@@ -69,7 +74,15 @@ function getTickSize(instrument, snapshot = null) {
  * pip-to-tick ratio.
  */
 function getTickValuePerLot(instrument, snapshot = null) {
-  const snapshotTickValue = _positive(snapshot && (snapshot.tickValue ?? snapshot.trade_tick_value));
+  const snapshotTickValue = _positive(snapshot && (
+    snapshot.tickValue
+    ?? snapshot.tradeTickValue
+    ?? snapshot.tradeTickValueProfit
+    ?? snapshot.tradeTickValueLoss
+    ?? snapshot.trade_tick_value
+    ?? snapshot.trade_tick_value_profit
+    ?? snapshot.trade_tick_value_loss
+  ));
   if (snapshotTickValue) return snapshotTickValue;
 
   const pipSize = getPipSize(instrument);
@@ -86,7 +99,15 @@ function getTickValuePerLot(instrument, snapshot = null) {
  * falls back to the static `pipValue` from instruments.js.
  */
 function getPipValuePerLot(instrument, snapshot = null) {
-  const snapshotTickValue = _positive(snapshot && (snapshot.tickValue ?? snapshot.trade_tick_value));
+  const snapshotTickValue = _positive(snapshot && (
+    snapshot.tickValue
+    ?? snapshot.tradeTickValue
+    ?? snapshot.tradeTickValueProfit
+    ?? snapshot.tradeTickValueLoss
+    ?? snapshot.trade_tick_value
+    ?? snapshot.trade_tick_value_profit
+    ?? snapshot.trade_tick_value_loss
+  ));
   if (snapshotTickValue) {
     const pipSize = getPipSize(instrument);
     const tickSize = getTickSize(instrument, snapshot);
@@ -99,7 +120,11 @@ function getPipValuePerLot(instrument, snapshot = null) {
 
 function getContractSize(instrument, snapshot = null) {
   return (
-    _positive(snapshot && (snapshot.contractSize ?? snapshot.trade_contract_size))
+    _positive(snapshot && (
+      snapshot.contractSize
+      ?? snapshot.tradeContractSize
+      ?? snapshot.trade_contract_size
+    ))
     || _positive(instrument && instrument.contractSize)
     || 0
   );
@@ -107,7 +132,7 @@ function getContractSize(instrument, snapshot = null) {
 
 function getMinLot(instrument, snapshot = null) {
   return (
-    _positive(snapshot && (snapshot.volumeMin ?? snapshot.minLot))
+    _positive(snapshot && (snapshot.volumeMin ?? snapshot.volume_min ?? snapshot.minLot))
     || _positive(instrument && instrument.minLot)
     || 0.01
   );
@@ -115,7 +140,7 @@ function getMinLot(instrument, snapshot = null) {
 
 function getLotStep(instrument, snapshot = null) {
   return (
-    _positive(snapshot && (snapshot.volumeStep ?? snapshot.lotStep))
+    _positive(snapshot && (snapshot.volumeStep ?? snapshot.volume_step ?? snapshot.lotStep))
     || _positive(instrument && instrument.lotStep)
     || 0.01
   );
@@ -123,7 +148,7 @@ function getLotStep(instrument, snapshot = null) {
 
 function getMaxLot(instrument, snapshot = null) {
   return (
-    _positive(snapshot && (snapshot.volumeMax ?? snapshot.maxLot))
+    _positive(snapshot && (snapshot.volumeMax ?? snapshot.volume_max ?? snapshot.maxLot))
     || _positive(instrument && instrument.maxLot)
     || DEFAULT_MAX_LOT
   );
@@ -131,8 +156,24 @@ function getMaxLot(instrument, snapshot = null) {
 
 /** Spread expressed in pips (matches the static `instrument.spread` units). */
 function getSpreadPips(instrument, snapshot = null) {
-  if (snapshot && Number.isFinite(snapshot.spread) && snapshot.spread > 0) {
-    return Number(snapshot.spread);
+  const explicitSpreadPips = snapshot ? _num(snapshot.spreadPips ?? snapshot.spread_pips) : null;
+  if (explicitSpreadPips !== null) {
+    return explicitSpreadPips;
+  }
+
+  const brokerSpread = snapshot ? _num(snapshot.spread) : null;
+  if (brokerSpread !== null && brokerSpread > 0) {
+    const point = _positive(snapshot && (
+      snapshot.point
+      ?? snapshot.tickSize
+      ?? snapshot.tradeTickSize
+      ?? snapshot.trade_tick_size
+    ));
+    const pipSize = getPipSize(instrument);
+    if (point && pipSize) {
+      return brokerSpread * point / pipSize;
+    }
+    return brokerSpread;
   }
   const v = _num(instrument && instrument.spread);
   return v !== null ? v : 0;
@@ -148,8 +189,9 @@ function resolveLotPrecision(minLot, lotStep) {
 }
 
 function resolvePricePrecision(instrument, snapshot = null) {
-  if (snapshot && Number.isFinite(snapshot.digits) && snapshot.digits >= 0) {
-    return Math.round(snapshot.digits);
+  const snapshotDigits = snapshot ? _num(snapshot.digits) : null;
+  if (snapshotDigits !== null && snapshotDigits >= 0) {
+    return Math.round(snapshotDigits);
   }
   const pipSize = getPipSize(instrument);
   if (pipSize >= 1) return 0;

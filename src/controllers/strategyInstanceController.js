@@ -6,6 +6,10 @@ const { listAssignedStrategyRiskStatuses } = require('../services/strategyParame
 const RiskProfile = require('../models/RiskProfile');
 const breakevenService = require('../services/breakevenService');
 const { normalizeExecutionPolicy } = require('../services/executionPolicyService');
+const {
+  getRuntimeMatrix,
+  updateRuntimeMatrix,
+} = require('../services/strategyRuntimeMatrixService');
 
 async function ensureStrategyExists(strategyName) {
   const strategy = await Strategy.findByName(strategyName);
@@ -38,6 +42,31 @@ exports.getParametersLibrary = async (_req, res) => {
   }
 };
 
+exports.getRuntimeMatrix = async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: await getRuntimeMatrix({ scope: req.query?.scope }),
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+};
+
+exports.updateRuntimeMatrix = async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: await updateRuntimeMatrix({
+        scope: req.body?.scope,
+        enabledBySymbol: req.body?.enabledBySymbol,
+      }),
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+};
+
 exports.getStrategyInstancesByStrategyName = async (req, res) => {
   try {
     await ensureStrategyExists(req.params.strategyName);
@@ -51,7 +80,9 @@ exports.getStrategyInstancesByStrategyName = async (req, res) => {
 exports.getStrategyInstanceByKey = async (req, res) => {
   try {
     const { strategyName, symbol } = req.params;
-    const effectiveInstance = await getStrategyInstance(symbol, strategyName);
+    const effectiveInstance = await getStrategyInstance(symbol, strategyName, {
+      scope: req.query?.scope,
+    });
     res.json({
       success: true,
       data: effectiveInstance,
@@ -73,6 +104,12 @@ exports.upsertStrategyInstance = async (req, res) => {
     if (req.body.enabled !== undefined) {
       patch.enabled = req.body.enabled;
     }
+    if (req.body.paperEnabled !== undefined) {
+      patch.paperEnabled = req.body.paperEnabled;
+    }
+    if (req.body.liveEnabled !== undefined) {
+      patch.liveEnabled = req.body.liveEnabled;
+    }
     if (req.body.newsBlackout !== undefined) {
       patch.newsBlackout = normalizeNewsBlackoutConfig(req.body.newsBlackout);
     }
@@ -93,13 +130,16 @@ exports.upsertStrategyInstance = async (req, res) => {
     if (Object.keys(patch).length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Request must include parameters, enabled, newsBlackout, tradeManagement, or executionPolicy',
+        message: 'Request must include parameters, enabled, paperEnabled, liveEnabled, newsBlackout, tradeManagement, or executionPolicy',
       });
     }
 
     await ensureStrategyExists(strategyName);
     await StrategyInstance.upsert(strategyName, symbol, patch);
-    const effectiveInstance = await getStrategyInstance(symbol, strategyName, { activeProfile });
+    const effectiveInstance = await getStrategyInstance(symbol, strategyName, {
+      activeProfile,
+      scope: req.query?.scope,
+    });
     res.json({ success: true, data: effectiveInstance });
   } catch (err) {
     res.status(err.statusCode || 500).json({ success: false, message: err.message });

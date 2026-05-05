@@ -239,6 +239,7 @@ class TradeManagementService {
             error: closeResult.error || null,
             mt5Result: closeResult.result || null,
           }));
+          if (closeResult.success) return events;
         }
       }
     }
@@ -327,6 +328,7 @@ class TradeManagementService {
           } else {
             const partialResult = await this._tryPartialClose({
               position, actions, volume: plan.volume,
+              remaining: plan.remaining,
             });
             events.push(await this._record(position, EVENT.PARTIAL_TP_EXECUTED, {
               ...baseDetails,
@@ -377,6 +379,7 @@ class TradeManagementService {
             error: closeResult.error || null,
             mt5Result: closeResult.result || null,
           }));
+          if (closeResult.success) return events;
         }
       }
     }
@@ -505,13 +508,17 @@ class TradeManagementService {
       if (!stillExists) return { success: false, error: 'position not found before modify' };
 
       const result = await fn(position, newSl);
+      await this._updatePositionFields(position, {
+        currentSl: newSl,
+        lastTradeManagementSyncAt: new Date().toISOString(),
+      });
       return { success: true, result };
     } catch (err) {
       return { success: false, error: err && err.message ? err.message : String(err) };
     }
   }
 
-  async _tryPartialClose({ position, actions, volume }) {
+  async _tryPartialClose({ position, actions, volume, remaining = null }) {
     const fn = actions && typeof actions.partialCloseFn === 'function' ? actions.partialCloseFn : null;
     if (!fn) return { success: false, error: 'partialCloseFn not provided' };
 
@@ -520,6 +527,15 @@ class TradeManagementService {
       if (!stillExists) return { success: false, error: 'position not found before partial close' };
 
       const result = await fn(position, volume);
+      const nextLotSize = Number.isFinite(Number(remaining))
+        ? Number(remaining)
+        : parseFloat((Number(position.lotSize) - Number(volume)).toFixed(8));
+      if (Number.isFinite(nextLotSize) && nextLotSize > 0) {
+        await this._updatePositionFields(position, {
+          lotSize: nextLotSize,
+          lastTradeManagementSyncAt: new Date().toISOString(),
+        });
+      }
       return { success: true, result };
     } catch (err) {
       return { success: false, error: err && err.message ? err.message : String(err) };
@@ -535,9 +551,30 @@ class TradeManagementService {
       if (!stillExists) return { success: false, error: 'position not found before close' };
 
       const result = await fn(position, reason);
+      await this._updatePositionFields(position, {
+        pendingExitAction: reason,
+        pendingExitRequestedAt: new Date().toISOString(),
+        lastTradeManagementSyncAt: new Date().toISOString(),
+      });
       return { success: true, result };
     } catch (err) {
       return { success: false, error: err && err.message ? err.message : String(err) };
+    }
+  }
+
+  async _updatePositionFields(position, patch) {
+    if (!position || !position._id || !patch || typeof patch !== 'object') return false;
+    try {
+      if (this._writer) {
+        await this._writer(position._id, patch);
+      } else {
+        await positionsDb.update({ _id: position._id }, { $set: patch });
+      }
+      Object.assign(position, patch);
+      return true;
+    } catch (err) {
+      console.warn(`[TradeMgmt] Failed to persist state update for ${position.symbol}: ${err.message}`);
+      return false;
     }
   }
 

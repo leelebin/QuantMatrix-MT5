@@ -510,6 +510,17 @@ def handle_connect(params):
         error = mt5.last_error()
         return {"success": False, "error": f"MT5 initialize failed: {error}"}
 
+    if not mt5.login(login=login, password=password, server=server):
+        error = mt5.last_error()
+        mt5.shutdown()
+        return {"success": False, "error": f"MT5 login failed for {login}@{server}: {error}"}
+
+    info = mt5.account_info()
+    if info is None:
+        error = mt5.last_error()
+        mt5.shutdown()
+        return {"success": False, "error": f"MT5 connected but account info is unavailable: {error}"}
+
     return {"success": True, "result": True}
 
 

@@ -161,12 +161,22 @@ function getScanReason(state = 'normal', forcedSync = false) {
   return 'cadence';
 }
 
-function buildFallbackInstance(strategy, symbol) {
+function normalizeAssignmentScope(scope) {
+  return String(scope || 'paper').toLowerCase() === 'live' ? 'live' : 'paper';
+}
+
+function buildFallbackInstance(strategy, symbol, scope = 'paper') {
+  const normalizedScope = normalizeAssignmentScope(scope);
+  const paperEnabled = strategy.enabled !== false;
+  const liveEnabled = false;
   return {
     strategyName: strategy.name,
     symbol,
     parameters: {},
-    enabled: true,
+    enabled: paperEnabled,
+    paperEnabled,
+    liveEnabled,
+    enabledForScope: normalizedScope === 'live' ? liveEnabled : paperEnabled,
     newsBlackout: cloneValue(DEFAULT_NEWS_BLACKOUT_CONFIG),
     executionPolicy: cloneValue(DEFAULT_EXECUTION_POLICY),
     effectiveBreakeven: null,
@@ -176,7 +186,24 @@ function buildFallbackInstance(strategy, symbol) {
   };
 }
 
-async function listActiveAssignments({ activeProfile = null, symbolFilter = null } = {}) {
+function isInstanceEnabledForScope(strategyInstance = {}, scope = 'paper') {
+  const normalizedScope = normalizeAssignmentScope(scope);
+  if (strategyInstance.enabledForScope !== undefined) {
+    return strategyInstance.enabledForScope !== false;
+  }
+  if (normalizedScope === 'live') {
+    return strategyInstance.liveEnabled !== undefined
+      ? strategyInstance.liveEnabled === true
+      : strategyInstance.enabled !== false;
+  }
+  if (strategyInstance.paperEnabled !== undefined) {
+    return strategyInstance.paperEnabled !== false;
+  }
+  return strategyInstance.enabled !== false;
+}
+
+async function listActiveAssignments({ activeProfile = null, symbolFilter = null, scope = 'paper' } = {}) {
+  const normalizedScope = normalizeAssignmentScope(scope);
   const filterSet = Array.isArray(symbolFilter) && symbolFilter.length > 0
     ? new Set(symbolFilter)
     : null;
@@ -203,11 +230,14 @@ async function listActiveAssignments({ activeProfile = null, symbolFilter = null
 
       let strategyInstance = null;
       try {
-        strategyInstance = await getStrategyInstance(symbol, strategy.name, { activeProfile });
+        strategyInstance = await getStrategyInstance(symbol, strategy.name, {
+          activeProfile,
+          scope: normalizedScope,
+        });
       } catch (error) {
-        strategyInstance = buildFallbackInstance(strategy, symbol);
+        strategyInstance = buildFallbackInstance(strategy, symbol, normalizedScope);
       }
-      if (strategyInstance.enabled === false) {
+      if (!isInstanceEnabledForScope(strategyInstance, normalizedScope)) {
         continue;
       }
 
@@ -223,6 +253,7 @@ async function listActiveAssignments({ activeProfile = null, symbolFilter = null
         strategyId: strategy._id,
         strategyEnabled: strategy.enabled !== false,
         strategyInstance,
+        assignmentScope: normalizedScope,
         executionConfig,
         cadenceTimeframe,
         cadenceMs,
@@ -399,7 +430,9 @@ module.exports = {
   getScanReason,
   getSignalBucketDefinitionByCadence,
   getSignalCadenceMs,
+  isInstanceEnabledForScope,
   listActiveAssignments,
+  normalizeAssignmentScope,
   resolveCategoryContext,
   toIsoOrNull,
   warnCategoryFallbackOnce,

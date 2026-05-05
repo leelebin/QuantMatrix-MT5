@@ -2,8 +2,13 @@ node_modules/
 .env
 coverage/
 *.log
+*.log.*
+logs/
 data/
 data/economic-calendar.json
 node-portable/
 ngrok-portable/
 __pycache__/
+.claude/tmp/
+.claude/cherry-pick-backups/
+.claude/merge-backups/

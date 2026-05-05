@@ -55,6 +55,10 @@ async function ensureRuntimeDefaultsMigrated() {
   }
 
   runtimeDefaultsMigrationPromise = (async () => {
+    if (typeof StrategyInstance.migrateScopedEnabledDefaults === 'function') {
+      await StrategyInstance.migrateScopedEnabledDefaults();
+    }
+
     if (typeof StrategyInstance.migrateLegacyNewsBlackoutDefaults !== 'function') {
       return { migrated: 0, skipped: 0 };
     }
@@ -75,6 +79,7 @@ function buildEffectiveInstancePayload({
   storedInstance,
   activeProfile,
   symbol,
+  scope = 'paper',
 }) {
   const instrument = getInstrument(symbol);
   const strategyDefaultParameters = cloneValue(strategy?.parameters || {});
@@ -97,13 +102,26 @@ function buildEffectiveInstancePayload({
 
   const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, mergedStrategy);
   const effectiveExitPlan = breakevenService.resolveEffectiveExitPlan(activeProfile, mergedStrategy, null);
+  const paperEnabled = storedInstance
+    ? (
+        storedInstance.paperEnabled !== undefined
+          ? storedInstance.paperEnabled !== false
+          : storedInstance.enabled !== false
+      )
+    : strategy?.enabled !== false;
+  const liveEnabled = storedInstance?.liveEnabled === true;
+  const normalizedScope = String(scope || 'paper').toLowerCase() === 'live' ? 'live' : 'paper';
+  const enabledForScope = normalizedScope === 'live' ? liveEnabled : paperEnabled;
 
   return {
     _id: storedInstance?._id || null,
     strategyName: strategy?.name || null,
     symbol,
     parameters: effectiveParameters,
-    enabled: storedInstance?.enabled !== undefined ? storedInstance.enabled : true,
+    enabled: paperEnabled,
+    paperEnabled,
+    liveEnabled,
+    enabledForScope,
     newsBlackout: normalizeNewsBlackoutConfig(
       storedInstance?.newsBlackout,
       DEFAULT_NEWS_BLACKOUT_CONFIG
@@ -150,6 +168,7 @@ async function getStrategyInstance(symbol, strategyName, options = {}) {
     storedInstance,
     activeProfile,
     symbol,
+    scope: options.scope || 'paper',
   });
 }
 

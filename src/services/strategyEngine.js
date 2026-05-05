@@ -20,6 +20,7 @@ const BreakoutStrategy = require('../strategies/BreakoutStrategy');
 const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy');
 const auditService = require('./auditService');
 const { getStrategyInstance } = require('./strategyInstanceService');
+const { isInstanceEnabledForScope } = require('./assignmentRuntimeService');
 const economicCalendarService = require('./economicCalendarService');
 const { calculateExecutionScore } = require('./executionPolicyService');
 
@@ -246,7 +247,8 @@ class StrategyEngine {
       signalRecord.rawConfidence = execution.rawConfidence;
     }
 
-    if (result.signal !== 'NONE' || result.setupActive || Boolean(result.filterReason)) {
+    const shouldRecordSignal = !strategyContext || strategyContext.recordSignal !== false;
+    if (shouldRecordSignal && (result.signal !== 'NONE' || result.setupActive || Boolean(result.filterReason))) {
       const signalKey = [
         strategyType,
         signalRecord.status,
@@ -298,10 +300,10 @@ class StrategyEngine {
         const strategyInstance = task.strategyInstance || await getStrategyInstance(
           symbol,
           strategyType,
-          { activeProfile: options.activeProfile }
+          { activeProfile: options.activeProfile, scope }
         );
-        if (strategyInstance.enabled === false) {
-          console.log(`[Engine] Skipping disabled strategy instance ${symbol}/${strategyType}`);
+        if (!isInstanceEnabledForScope(strategyInstance, scope)) {
+          console.log(`[Engine] Skipping disabled ${scope} strategy instance ${symbol}/${strategyType}`);
           continue;
         }
 

@@ -293,6 +293,31 @@ describe('instrumentValuation helper', () => {
       expect(ctx.lotStep).toBe(0.10);
       expect(ctx.pricePrecision).toBe(5);
     });
+
+    test('accepts MT5 bridge symbolInfo aliases and converts point spread to pips', () => {
+      const instrument = getInstrument('EURUSD');
+      const ctx = valuation.getValuationContext(instrument, {
+        tradeTickSize: 0.00001,
+        tradeTickValueProfit: 1,
+        tradeContractSize: 100000,
+        volume_min: 0.10,
+        volume_step: 0.10,
+        volume_max: 3,
+        point: 0.00001,
+        spread: 12,
+        digits: '5',
+      });
+
+      expect(ctx.tickSize).toBe(0.00001);
+      expect(ctx.tickValue).toBe(1);
+      expect(ctx.pipValue).toBe(10);
+      expect(ctx.contractSize).toBe(100000);
+      expect(ctx.minLot).toBe(0.10);
+      expect(ctx.lotStep).toBe(0.10);
+      expect(ctx.maxLot).toBe(3);
+      expect(ctx.spreadPips).toBeCloseTo(1.2, 6);
+      expect(ctx.pricePrecision).toBe(5);
+    });
   });
 
   describe('net P&L = gross + costs', () => {

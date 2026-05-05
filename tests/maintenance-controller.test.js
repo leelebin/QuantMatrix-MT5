@@ -3,8 +3,25 @@ jest.mock('../src/services/cacheMaintenanceService', () => ({
   clearCache: jest.fn(),
 }));
 
+jest.mock('../src/services/databaseMaintenanceService', () => ({
+  getDatabaseStatus: jest.fn(),
+  compactDatabases: jest.fn(),
+  cleanupOldRecords: jest.fn(),
+}));
+
+jest.mock('../src/services/resourceMonitorService', () => ({
+  getResourceStatus: jest.fn(),
+}));
+
+jest.mock('../src/services/weeklyReviewExportService', () => ({
+  exportWeeklyTradeReviews: jest.fn(),
+}));
+
 const maintenanceController = require('../src/controllers/maintenanceController');
 const cacheMaintenanceService = require('../src/services/cacheMaintenanceService');
+const databaseMaintenanceService = require('../src/services/databaseMaintenanceService');
+const resourceMonitorService = require('../src/services/resourceMonitorService');
+const weeklyReviewExportService = require('../src/services/weeklyReviewExportService');
 
 function createRes() {
   return {
@@ -130,6 +147,161 @@ describe('maintenance controller', () => {
     expect(res.payload).toEqual({
       success: false,
       message: 'Unsupported cache scope: logs',
+    });
+  });
+
+  test('getResourceStatus returns RAM and ROM summaries', async () => {
+    resourceMonitorService.getResourceStatus.mockReturnValue({
+      memory: { rssBytes: 128 },
+      storage: [{ key: 'data', totalSizeBytes: 256 }],
+      warnings: [],
+    });
+
+    const req = { query: { topFilesLimit: '5' } };
+    const res = createRes();
+
+    await maintenanceController.getResourceStatus(req, res);
+
+    expect(resourceMonitorService.getResourceStatus).toHaveBeenCalledWith({ topFilesLimit: '5' });
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      success: true,
+      message: 'Loaded resource status',
+      data: {
+        memory: { rssBytes: 128 },
+        storage: [{ key: 'data', totalSizeBytes: 256 }],
+        warnings: [],
+      },
+    });
+  });
+
+  test('getDatabaseStatus returns database file summaries', async () => {
+    databaseMaintenanceService.getDatabaseStatus.mockResolvedValue({
+      totalSizeBytes: 1024,
+      databases: [{ name: 'backtests', count: 4 }],
+    });
+
+    const req = {};
+    const res = createRes();
+
+    await maintenanceController.getDatabaseStatus(req, res);
+
+    expect(databaseMaintenanceService.getDatabaseStatus).toHaveBeenCalledWith();
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      success: true,
+      message: 'Loaded database status',
+      data: {
+        totalSizeBytes: 1024,
+        databases: [{ name: 'backtests', count: 4 }],
+      },
+    });
+  });
+
+  test('compactDatabases forwards selected targets', async () => {
+    databaseMaintenanceService.compactDatabases.mockResolvedValue({
+      totalFreedBytes: 512,
+      results: [{ name: 'backtests', compacted: true }],
+    });
+
+    const req = { body: { targets: ['backtests'], timeoutMs: 7000 } };
+    const res = createRes();
+
+    await maintenanceController.compactDatabases(req, res);
+
+    expect(databaseMaintenanceService.compactDatabases).toHaveBeenCalledWith({
+      targets: ['backtests'],
+      databases: undefined,
+      timeoutMs: 7000,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      success: true,
+      message: 'Compacted databases',
+      data: {
+        totalFreedBytes: 512,
+        results: [{ name: 'backtests', compacted: true }],
+      },
+    });
+  });
+
+  test('cleanupOldRecords previews cleanup by default', async () => {
+    databaseMaintenanceService.cleanupOldRecords.mockResolvedValue({
+      dryRun: true,
+      totalMatched: 3,
+      totalRemoved: 0,
+    });
+
+    const req = { body: { targets: ['decisionAudit'], retentionDays: 7 } };
+    const res = createRes();
+
+    await maintenanceController.cleanupOldRecords(req, res);
+
+    expect(databaseMaintenanceService.cleanupOldRecords).toHaveBeenCalledWith({
+      targets: ['decisionAudit'],
+      dryRun: undefined,
+      retentionDays: 7,
+      retentionDaysByTarget: undefined,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      success: true,
+      message: 'Previewed old record cleanup',
+      data: {
+        dryRun: true,
+        totalMatched: 3,
+        totalRemoved: 0,
+      },
+    });
+  });
+
+  test('cleanupOldRecords returns clean message when dry run is disabled', async () => {
+    databaseMaintenanceService.cleanupOldRecords.mockResolvedValue({
+      dryRun: false,
+      totalMatched: 3,
+      totalRemoved: 3,
+    });
+
+    const req = { body: { targets: ['executionAudit'], dryRun: false } };
+    const res = createRes();
+
+    await maintenanceController.cleanupOldRecords(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      success: true,
+      message: 'Cleaned old records',
+      data: {
+        dryRun: false,
+        totalMatched: 3,
+        totalRemoved: 3,
+      },
+    });
+  });
+
+  test('exportWeeklyTradeReviews forwards review export options', async () => {
+    weeklyReviewExportService.exportWeeklyTradeReviews.mockResolvedValue({
+      outputDir: 'data/history/weekly-trades',
+      totalRecords: 4,
+    });
+
+    const req = { body: { scope: 'paper', rebuild: true } };
+    const res = createRes();
+
+    await maintenanceController.exportWeeklyTradeReviews(req, res);
+
+    expect(weeklyReviewExportService.exportWeeklyTradeReviews).toHaveBeenCalledWith({
+      scope: 'paper',
+      rebuild: true,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      success: true,
+      message: 'Exported weekly trade review files',
+      data: {
+        outputDir: 'data/history/weekly-trades',
+        totalRecords: 4,
+      },
     });
   });
 });

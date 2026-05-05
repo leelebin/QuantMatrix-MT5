@@ -46,6 +46,10 @@ jest.mock('../src/config/db', () => {
       _seed(record) {
         records.set(record._id, { ...record, managementEvents: [...(record.managementEvents || [])] });
       },
+      _get(id) {
+        const rec = records.get(id);
+        return rec ? { ...rec, managementEvents: [...(rec.managementEvents || [])] } : null;
+      },
       _wipe() {
         records.clear();
       },
@@ -240,6 +244,9 @@ describe('evaluatePosition — early adverse exit gated by flag', () => {
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(events.map((e) => e.type)).toContain(EVENT.EARLY_ADVERSE_EXIT);
+    expect(fakePositionsDb._get('pos-1')).toEqual(expect.objectContaining({
+      pendingExitAction: 'EARLY_ADVERSE_EXIT',
+    }));
   });
 });
 
@@ -288,6 +295,8 @@ describe('evaluatePosition — breakeven move gated by flag', () => {
 
     expect(modify).toHaveBeenCalledTimes(1);
     expect(modify).toHaveBeenCalledWith(expect.objectContaining({ _id: 'pos-1' }), 1.10);
+    expect(position.currentSl).toBeCloseTo(1.10, 6);
+    expect(fakePositionsDb._get('pos-1').currentSl).toBeCloseTo(1.10, 6);
     expect(events.map((e) => e.type)).toContain(EVENT.BREAKEVEN_MOVED);
   });
 });
@@ -338,6 +347,8 @@ describe('evaluatePosition — partial TP volume validation', () => {
     expect(partial).toHaveBeenCalledTimes(1);
     const args = partial.mock.calls[0];
     expect(args[1]).toBeCloseTo(0.10, 6);
+    expect(position.lotSize).toBeCloseTo(0.10, 6);
+    expect(fakePositionsDb._get('pos-1').lotSize).toBeCloseTo(0.10, 6);
     expect(events.map((e) => e.type)).toContain(EVENT.PARTIAL_TP_EXECUTED);
   });
 });

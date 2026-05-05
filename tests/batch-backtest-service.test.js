@@ -166,13 +166,18 @@ describe('batch backtest service', () => {
       initialBalance: 10000,
       timeframeMode: 'strategy_default',
       runModel: 'independent',
+      costModel: { commissionPerLot: 7, slippagePips: 0.2 },
     });
 
     const completedJob = await waitForJobCompletion(job._id);
 
     expect(completedJob.status).toBe('completed');
+    expect(completedJob.costModel).toEqual({ commissionPerLot: 7, slippagePips: 0.2 });
     expect(completedJob.results).toHaveLength(4);
     expect(mt5Service.getCandles).toHaveBeenCalledTimes(2);
+    expect(backtestEngine.run).toHaveBeenCalledWith(expect.objectContaining({
+      costModel: { commissionPerLot: 7, slippagePips: 0.2 },
+    }));
     expect(completedJob.aggregate.totals.totalRuns).toBe(4);
     expect(completedJob.aggregate.totals.profitableRuns).toBe(4);
     expect(completedJob.scope).toEqual({

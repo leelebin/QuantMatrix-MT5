@@ -119,6 +119,8 @@ describe('strategy instance model', () => {
       symbol: 'XAUUSD',
       parameters: { lookback_period: 20, slMultiplier: 2 },
       enabled: false,
+      paperEnabled: false,
+      liveEnabled: false,
       newsBlackout: { enabled: true, beforeMinutes: 10, afterMinutes: 20, impactLevels: ['High'] },
     }));
 
@@ -160,6 +162,8 @@ describe('strategy instance model', () => {
     expect(await StrategyInstance.findByKey('Breakout', 'XAUUSD')).toEqual(expect.objectContaining({
       parameters: { lookback_period: 35, body_multiplier: 1.8 },
       enabled: false,
+      paperEnabled: false,
+      liveEnabled: false,
     }));
 
     expect(await StrategyInstance.findByKey('Breakout', 'EURUSD')).toEqual(expect.objectContaining({
@@ -167,6 +171,8 @@ describe('strategy instance model', () => {
       symbol: 'EURUSD',
       parameters: {},
       enabled: false,
+      paperEnabled: false,
+      liveEnabled: false,
       newsBlackout: null,
       tradeManagement: null,
       executionPolicy: null,
@@ -197,6 +203,84 @@ describe('strategy instance model', () => {
     expect(await StrategyInstance.findByKey('Breakout', 'GBPUSD')).toEqual(expect.objectContaining({
       parameters: { lookback_period: 28, body_multiplier: 1.6 },
       enabled: true,
+      paperEnabled: true,
+      liveEnabled: false,
+    }));
+  });
+
+  test('scoped enable migration preserves legacy paper state and keeps live disabled', async () => {
+    const { StrategyInstance } = loadStrategyInstanceModel({
+      instanceRecords: [
+        {
+          _id: 'Breakout:XAUUSD',
+          strategyName: 'Breakout',
+          symbol: 'XAUUSD',
+          parameters: {},
+          enabled: true,
+        },
+        {
+          _id: 'Momentum:USDJPY',
+          strategyName: 'Momentum',
+          symbol: 'USDJPY',
+          parameters: {},
+          enabled: false,
+        },
+      ],
+    });
+
+    const result = await StrategyInstance.migrateScopedEnabledDefaults();
+
+    expect(result).toEqual({ migrated: 2, skipped: 0 });
+    expect(await StrategyInstance.findByKey('Breakout', 'XAUUSD')).toEqual(expect.objectContaining({
+      enabled: true,
+      paperEnabled: true,
+      liveEnabled: false,
+    }));
+    expect(await StrategyInstance.findByKey('Momentum', 'USDJPY')).toEqual(expect.objectContaining({
+      enabled: false,
+      paperEnabled: false,
+      liveEnabled: false,
+    }));
+  });
+
+  test('live enabled can be updated without changing paper enabled', async () => {
+    const { StrategyInstance } = loadStrategyInstanceModel({
+      strategyRecords: [{ name: 'Breakout', enabled: true }],
+      instanceRecords: [
+        {
+          _id: 'Breakout:XAUUSD',
+          strategyName: 'Breakout',
+          symbol: 'XAUUSD',
+          parameters: {},
+          enabled: true,
+          paperEnabled: true,
+          liveEnabled: false,
+        },
+      ],
+    });
+
+    await StrategyInstance.upsert('Breakout', 'XAUUSD', { liveEnabled: true });
+
+    expect(await StrategyInstance.findByKey('Breakout', 'XAUUSD')).toEqual(expect.objectContaining({
+      enabled: true,
+      paperEnabled: true,
+      liveEnabled: true,
+    }));
+  });
+
+  test('live-only upsert for a missing assignment does not enable paper by default', async () => {
+    const { StrategyInstance } = loadStrategyInstanceModel({
+      strategyRecords: [{ name: 'Breakout', enabled: true }],
+    });
+
+    await StrategyInstance.upsert('Breakout', 'XAUUSD', { liveEnabled: true });
+
+    expect(await StrategyInstance.findByKey('Breakout', 'XAUUSD')).toEqual(expect.objectContaining({
+      strategyName: 'Breakout',
+      symbol: 'XAUUSD',
+      enabled: false,
+      paperEnabled: false,
+      liveEnabled: true,
     }));
   });
 
@@ -227,6 +311,8 @@ describe('strategy instance model', () => {
     expect(await StrategyInstance.findByKey('Breakout', 'XAUUSD')).toEqual(expect.objectContaining({
       parameters: {},
       enabled: true,
+      paperEnabled: true,
+      liveEnabled: false,
       newsBlackout: null,
       tradeManagement: null,
       executionPolicy: null,
@@ -234,6 +320,8 @@ describe('strategy instance model', () => {
     expect(await StrategyInstance.findByKey('Momentum', 'USDJPY')).toEqual(expect.objectContaining({
       parameters: {},
       enabled: false,
+      paperEnabled: false,
+      liveEnabled: false,
       newsBlackout: null,
       tradeManagement: null,
       executionPolicy: null,

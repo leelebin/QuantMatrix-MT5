@@ -20,6 +20,10 @@ const {
   buildManagedPositionState,
   createManagerAction,
 } = require('../utils/positionExitState');
+const {
+  buildOpenTradeCapture,
+  buildPositionExportSnapshot,
+} = require('../utils/tradeDataCapture');
 const auditService = require('./auditService');
 const strategyDailyStopService = require('./strategyDailyStopService');
 
@@ -198,6 +202,13 @@ class TradeExecutor {
         exitPlan,
         plannedRiskAmount: riskCheck.plannedRiskAmount,
       });
+      const openCapture = buildOpenTradeCapture(signal, managedPositionState);
+      const spreadAtEntry = Number.isFinite(Number(priceData.ask)) && Number.isFinite(Number(priceData.bid))
+        ? Math.abs(Number(priceData.ask) - Number(priceData.bid))
+        : null;
+      const slippageEstimate = Number.isFinite(Number(executedEntryPrice)) && Number.isFinite(Number(quotedEntryPrice))
+        ? parseFloat((Number(executedEntryPrice) - Number(quotedEntryPrice)).toFixed(10))
+        : null;
 
       // Save position to local DB
       const position = await positionsDb.insert({
@@ -214,10 +225,15 @@ class TradeExecutor {
         comment: tradeComment,
         confidence: signal.confidence,
         rawConfidence: signal.rawConfidence ?? signal.confidence,
-        reason: signal.reason,
+        reason: openCapture.signalReason || signal.reason,
         atrAtEntry,
         ...managedPositionState,
-        indicatorsSnapshot: signal.indicatorsSnapshot,
+        ...openCapture,
+        requestedEntryPrice: quotedEntryPrice,
+        spreadAtEntry,
+        slippageEstimate,
+        brokerRetcodeOpen: result.retcode ?? null,
+        indicatorsSnapshot: openCapture.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
       });
@@ -233,7 +249,10 @@ class TradeExecutor {
         strategy: signal.strategy,
         confidence: signal.confidence,
         rawConfidence: signal.rawConfidence ?? signal.confidence,
-        reason: signal.reason,
+        reason: openCapture.signalReason || signal.reason,
+        entryReason: openCapture.entryReason,
+        setupReason: openCapture.setupReason,
+        triggerReason: openCapture.triggerReason,
         breakevenConfig,
         exitPlan,
         executionPolicy: signal.executionPolicy || null,
@@ -247,7 +266,15 @@ class TradeExecutor {
         entryTimeframe: managedPositionState.entryTimeframe,
         setupCandleTime: managedPositionState.setupCandleTime,
         entryCandleTime: managedPositionState.entryCandleTime,
-        indicatorsSnapshot: signal.indicatorsSnapshot,
+        initialSl: openCapture.initialSl,
+        initialTp: openCapture.initialTp,
+        finalSl: openCapture.finalSl,
+        finalTp: openCapture.finalTp,
+        requestedEntryPrice: quotedEntryPrice,
+        spreadAtEntry,
+        slippageEstimate,
+        brokerRetcodeOpen: result.retcode ?? null,
+        indicatorsSnapshot: openCapture.indicatorsSnapshot,
         commission: entryCommission,
         swap: entrySwap,
         fee: entryFee,
@@ -417,11 +444,17 @@ class TradeExecutor {
           commission: closedSnapshot.commission,
           swap: closedSnapshot.swap,
           fee: closedSnapshot.fee,
+          grossProfitLoss: closedSnapshot.grossProfitLoss,
+          finalSl: position.currentSl ?? position.finalSl ?? position.sl ?? null,
+          finalTp: position.currentTp ?? position.finalTp ?? position.tp ?? null,
+          brokerRetcodeClose: closeResult?.retcode ?? null,
+          brokerRetcodeModify: position.brokerRetcodeModify ?? null,
           mt5CloseDealId: closeResult?.closeDeal?.id || closeResult?.dealId || null,
           exitPlanSnapshot: closedSnapshot.exitPlanSnapshot || null,
           managementEvents: closedSnapshot.managementEvents || [],
           realizedRMultiple: closedSnapshot.realizedRMultiple,
           targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
+          positionSnapshot: buildPositionExportSnapshot(position),
         },
       });
 

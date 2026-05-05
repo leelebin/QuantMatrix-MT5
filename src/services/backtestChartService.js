@@ -2,8 +2,16 @@ const indicatorService = require('./indicatorService');
 const volumeFeatureService = require('./volumeFeatureService');
 
 const EXIT_REASON_LABELS = {
-  SL_HIT: 'Stop loss hit',
+  INITIAL_SL_HIT: 'Initial stop loss hit',
+  SL_HIT: 'Initial stop loss hit',
+  BREAKEVEN_SL_HIT: 'Breakeven stop hit',
+  TRAILING_SL_HIT: 'Trailing stop hit',
+  PROTECTIVE_SL_HIT: 'Protective stop hit',
   TP_HIT: 'Take profit hit',
+  MANUAL_CLOSE: 'Manual close',
+  MANUAL: 'Manual close',
+  BROKER_EXTERNAL: 'Broker / external close',
+  EXTERNAL: 'Broker / external close',
   END_OF_DATA: 'Closed at end of data',
   MR_TIMEOUT: 'Mean reversion timeout',
   MR_RSI_EXHAUSTED: 'Mean reversion RSI exhaustion',

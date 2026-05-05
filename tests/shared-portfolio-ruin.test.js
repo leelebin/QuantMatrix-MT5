@@ -217,4 +217,74 @@ describe('shared portfolio ruin stop', () => {
     expect(bustAtHalf.bust.triggered).toBe(true);
     expect(new Date(bustAtHalf.bust.time).getTime()).toBeLessThan(new Date(bustAtZero.bust.time).getTime());
   });
+
+  test('applies request cost model to shared portfolio trade closes', async () => {
+    const candles = createCandles().map((candle) => ({
+      ...candle,
+      open: 100,
+      high: 100,
+      low: 100,
+      close: 100,
+    }));
+    backtestEngine._buildTradingInstrument.mockReturnValue({
+      pipSize: 1,
+      pipValue: 1,
+      minLot: 1,
+      maxLot: 1,
+      lotStep: 1,
+      contractSize: 20,
+      riskParams: { riskPercent: 1 },
+    });
+    backtestEngine._closeTrade.mockImplementation((position, exitPrice, reason, exitTime, tradingInstrument) => {
+      const grossProfitLoss = (position.type === 'BUY'
+        ? exitPrice - position.entryPrice
+        : position.entryPrice - exitPrice) * position.lotSize * tradingInstrument.contractSize;
+      const commission = position.costModel
+        ? -Math.abs(Number(position.costModel.commissionPerLot || 0)) * position.lotSize
+        : 0;
+      const fee = position.costModel
+        ? -Math.abs(Number(position.costModel.fixedFeePerTrade || 0))
+        : 0;
+      return {
+        ...position,
+        exitPrice,
+        exitTime,
+        reason,
+        grossProfitLoss,
+        commission,
+        swap: 0,
+        fee,
+        profitLoss: grossProfitLoss + commission + fee,
+        costModelUsed: position.costModelSources || ['default'],
+      };
+    });
+
+    const result = await runSharedPortfolioBacktest({
+      combinations: [
+        { symbol: 'EURUSD', strategy: 'TrendFollowing' },
+      ],
+      initialBalance: 10000,
+      ruinThreshold: 0,
+      start: candles[0].time,
+      endExclusive: new Date(new Date(candles[candles.length - 1].time).getTime() + 60 * 60 * 1000).toISOString(),
+      fetchCandles: createFetchCandles(candles),
+      costModel: { commissionPerLot: 7, fixedFeePerTrade: 0.5, slippagePips: 0 },
+    });
+
+    expect(backtestEngine._closeTrade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costModel: expect.objectContaining({ commissionPerLot: 7, fixedFeePerTrade: 0.5 }),
+        costModelSources: expect.arrayContaining(['request']),
+      }),
+      expect.any(Number),
+      expect.any(String),
+      expect.any(String),
+      expect.any(Object)
+    );
+    expect(result.summary.totalCommission).toBe(-7);
+    expect(result.summary.totalFees).toBe(-0.5);
+    expect(result.summary.totalTradingCosts).toBe(-7.5);
+    expect(result.combinationsUsed[0].costModelUsed.sources).toEqual(expect.arrayContaining(['request']));
+    expect(result.trades[0].costModelUsed).toEqual(expect.arrayContaining(['request']));
+  });
 });

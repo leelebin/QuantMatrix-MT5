@@ -13,13 +13,16 @@ const breakevenService = require('./breakevenService');
 const economicCalendarService = require('./economicCalendarService');
 const { positionsDb, tradesDb } = require('../config/db');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
+const { buildPositionExportSnapshot } = require('../utils/tradeDataCapture');
 const auditService = require('./auditService');
 const { getStrategyInstance } = require('./strategyInstanceService');
 const { getInstrument } = require('../config/instruments');
 const RiskProfile = require('../models/RiskProfile');
 const indicatorService = require('./indicatorService');
+const strategyEngine = require('./strategyEngine');
 const tradeManagementService = require('./tradeManagementService');
 const { resolveTradeManagementPolicy } = require('./tradeManagementConfig');
+const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const {
   getPositionCadenceProfile,
   getScanReason,
@@ -124,7 +127,9 @@ class PositionMonitor {
       if (!strategyName) return null;
       const cacheKey = `${position.symbol}:${strategyName}`;
       if (!strategyInstanceCache.has(cacheKey)) {
-        strategyInstanceCache.set(cacheKey, getStrategyInstance(position.symbol, strategyName).catch(() => null));
+        strategyInstanceCache.set(cacheKey, getStrategyInstance(position.symbol, strategyName, {
+          scope: 'live',
+        }).catch(() => null));
       }
       return strategyInstanceCache.get(cacheKey);
     };
@@ -276,6 +281,74 @@ class PositionMonitor {
     return metadata;
   }
 
+  _isOpposingDirection(positionType, signalDirection) {
+    const positionSide = String(positionType || '').toUpperCase();
+    const signalSide = String(signalDirection || '').toUpperCase();
+    return (positionSide === 'BUY' && signalSide === 'SELL')
+      || (positionSide === 'SELL' && signalSide === 'BUY');
+  }
+
+  _extractSignalDirection(result) {
+    if (!result || typeof result !== 'object') return null;
+    const signal = String(result.signal || '').toUpperCase();
+    if (signal === 'BUY' || signal === 'SELL') return signal;
+    const setupDirection = String(result.setupDirection || '').toUpperCase();
+    if (result.setupActive === true && (setupDirection === 'BUY' || setupDirection === 'SELL')) {
+      return setupDirection;
+    }
+    return null;
+  }
+
+  _probeOpposingStrategySignal({
+    position,
+    strategyInstance,
+    candles,
+    higherTfCandles,
+    entryCandles,
+    context,
+  }) {
+    if (!position?.symbol || !position?.strategy || !Array.isArray(candles) || candles.length < 50) {
+      return { opposingSignal: false, details: null };
+    }
+    if (!strategyEngine || typeof strategyEngine.analyzeSymbol !== 'function') {
+      return { opposingSignal: false, details: null };
+    }
+
+    try {
+      const result = strategyEngine.analyzeSymbol(
+        position.symbol,
+        position.strategy,
+        candles,
+        higherTfCandles || null,
+        entryCandles || null,
+        {
+          ...(strategyInstance || {}),
+          scanMode: 'monitor',
+          scanReason: 'invalidation_probe',
+          category: context?.category || null,
+          categoryFallback: context?.categoryFallback === true,
+          recordSignal: false,
+        }
+      );
+      const signalDirection = this._extractSignalDirection(result);
+      return {
+        opposingSignal: this._isOpposingDirection(position.type, signalDirection),
+        details: {
+          signal: result?.signal || 'NONE',
+          setupActive: result?.setupActive === true,
+          setupDirection: result?.setupDirection || null,
+          status: result?.status || null,
+          reason: result?.reason || result?.filterReason || null,
+        },
+      };
+    } catch (err) {
+      return {
+        opposingSignal: false,
+        details: { error: err && err.message ? err.message : String(err) },
+      };
+    }
+  }
+
   /**
    * After trailing/breakeven processing, run the conservative trade-management
    * evaluator on each position. All side-effects (close/partialClose/modifySl)
@@ -307,7 +380,7 @@ class PositionMonitor {
       if (!strategyInstanceCache.has(cacheKey)) {
         strategyInstanceCache.set(
           cacheKey,
-          getStrategyInstance(position.symbol, strategyName, { activeProfile }).catch(() => null)
+          getStrategyInstance(position.symbol, strategyName, { activeProfile, scope: 'live' }).catch(() => null)
         );
       }
       return strategyInstanceCache.get(cacheKey);
@@ -353,8 +426,20 @@ class PositionMonitor {
 
         let invalidationContext = null;
         if (scanMode === 'heavy') {
-          const timeframe = position.timeframe || strategyInstance?.timeframe || 'H1';
+          const executionConfig = position.strategy
+            ? getStrategyExecutionConfig(position.symbol, position.strategy)
+            : null;
+          const timeframe = position.timeframe
+            || strategyInstance?.timeframe
+            || executionConfig?.timeframe
+            || 'H1';
           const candles = await fetchCandles(position.symbol, timeframe);
+          const higherTfCandles = executionConfig?.higherTimeframe
+            ? await fetchCandles(position.symbol, executionConfig.higherTimeframe)
+            : null;
+          const entryCandles = executionConfig?.entryTimeframe
+            ? await fetchCandles(position.symbol, executionConfig.entryTimeframe)
+            : null;
           let indicators = null;
           if (Array.isArray(candles) && candles.length >= 50) {
             const closes = candles.map((c) => Number(c.close)).filter(Number.isFinite);
@@ -364,10 +449,19 @@ class PositionMonitor {
               indicators = null;
             }
           }
+          const opposingSignalProbe = this._probeOpposingStrategySignal({
+            position,
+            strategyInstance,
+            candles,
+            higherTfCandles,
+            entryCandles,
+            context: ctx,
+          });
           invalidationContext = {
             candles: candles || [],
             indicators,
-            opposingSignal: false,
+            opposingSignal: opposingSignalProbe.opposingSignal,
+            opposingSignalDetails: opposingSignalProbe.details,
             higherTrendChanged: false,
           };
         }
@@ -702,11 +796,16 @@ class PositionMonitor {
         commission: closedSnapshot.commission,
         swap: closedSnapshot.swap,
         fee: closedSnapshot.fee,
+        grossProfitLoss: closedSnapshot.grossProfitLoss,
+        finalSl: localPos.currentSl ?? localPos.finalSl ?? localPos.sl ?? null,
+        finalTp: localPos.currentTp ?? localPos.finalTp ?? localPos.tp ?? null,
+        brokerRetcodeModify: localPos.brokerRetcodeModify ?? null,
         mt5CloseDealId: dealSummary?.lastExitDeal?.id || null,
         exitPlanSnapshot: closedSnapshot.exitPlanSnapshot || null,
         managementEvents: closedSnapshot.managementEvents || [],
         realizedRMultiple: closedSnapshot.realizedRMultiple,
         targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
+        positionSnapshot: buildPositionExportSnapshot(localPos),
       },
     });
 

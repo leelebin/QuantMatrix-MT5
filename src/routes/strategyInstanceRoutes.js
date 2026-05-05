@@ -4,8 +4,10 @@ const { protect } = require('../middleware/auth');
 const {
   getStrategyInstances,
   getParametersLibrary,
+  getRuntimeMatrix,
   getStrategyInstancesByStrategyName,
   getStrategyInstanceByKey,
+  updateRuntimeMatrix,
   upsertStrategyInstance,
 } = require('../controllers/strategyInstanceController');
 
@@ -13,6 +15,8 @@ router.use(protect);
 
 router.get('/', getStrategyInstances);
 router.get('/library/parameters', getParametersLibrary);
+router.get('/runtime-matrix', getRuntimeMatrix);
+router.put('/runtime-matrix', updateRuntimeMatrix);
 router.get('/:strategyName', getStrategyInstancesByStrategyName);
 router.get('/:strategyName/:symbol', getStrategyInstanceByKey);
 router.put('/:strategyName/:symbol', upsertStrategyInstance);

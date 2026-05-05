@@ -26,6 +26,16 @@ const VolumeFlowHybridStrategy = require('../strategies/VolumeFlowHybridStrategy
 const { estimateBarDistance } = require('../utils/timeframe');
 
 const HISTORY_WINDOW_SIZE = 251;
+const BREAKEVEN_NEUTRAL_R_EPSILON = 0.05;
+const BREAKEVEN_NEUTRAL_PIPS_EPSILON = 1;
+const PROTECTIVE_STOP_REASONS = new Set([
+  'BREAKEVEN_SL_HIT',
+  'TRAILING_SL_HIT',
+  'PROTECTIVE_SL_HIT',
+  // Legacy aliases kept so old history records still classify correctly.
+  'BREAKEVEN',
+  'TRAILING_STOP',
+]);
 
 const STRATEGY_MAP = {
   TrendFollowing: TrendFollowingStrategy,
@@ -284,7 +294,7 @@ class BacktestEngine {
       symbol,
       strategyType,
       timeframe,
-      candles,
+      candles: inputCandles,
       higherTfCandles = null,
       lowerTfCandles = null,
       initialBalance = 10000,
@@ -302,6 +312,11 @@ class BacktestEngine {
       includeChartData = false,
       costModel: requestCostModel = null,
     } = params;
+
+    const tradeEndMs = tradeEndTime ? new Date(tradeEndTime).getTime() : null;
+    const candles = Number.isFinite(tradeEndMs)
+      ? (inputCandles || []).filter((candle) => this._toTimeMs(candle.time) <= tradeEndMs)
+      : inputCandles;
 
     const instrument = getInstrument(symbol);
     if (!instrument) throw new Error(`Unknown symbol: ${symbol}`);
@@ -427,6 +442,7 @@ class BacktestEngine {
         const trailingResult = this._simulateTrailingStop(openPosition, currentCandle, tradingInstrument);
         if (trailingResult.updated) {
           openPosition.currentSl = trailingResult.newSl;
+          this._markBreakevenState(openPosition, trailingResult.phase);
         }
       }
 
@@ -506,6 +522,9 @@ class BacktestEngine {
             sl: result.sl,
             tp: result.tp,
             currentSl: result.sl,
+            breakevenActivated: false,
+            trailingActivated: false,
+            breakevenPhase: null,
             lotSize,
             atrAtEntry: currentAtr,
             breakevenConfig: effectiveBreakeven,
@@ -656,14 +675,14 @@ class BacktestEngine {
   _checkSlTp(position, candle) {
     if (position.type === 'BUY') {
       if (candle.low <= position.currentSl) {
-        return { exitPrice: position.currentSl, reason: 'SL_HIT' };
+        return { exitPrice: position.currentSl, reason: this._classifyStopExitReason(position) };
       }
       if (candle.high >= position.tp) {
         return { exitPrice: position.tp, reason: 'TP_HIT' };
       }
     } else {
       if (candle.high >= position.currentSl) {
-        return { exitPrice: position.currentSl, reason: 'SL_HIT' };
+        return { exitPrice: position.currentSl, reason: this._classifyStopExitReason(position) };
       }
       if (candle.low <= position.tp) {
         return { exitPrice: position.tp, reason: 'TP_HIT' };
@@ -689,6 +708,67 @@ class BacktestEngine {
     }
 
     return { updated: true, newSl: result.newSl, phase: result.phase };
+  }
+
+  _markBreakevenState(position, phase) {
+    if (!position || !phase) return;
+    if (phase === 'breakeven') {
+      position.breakevenActivated = true;
+      position.breakevenPhase = 'breakeven';
+    } else if (phase === 'trailing') {
+      position.breakevenActivated = true;
+      position.trailingActivated = true;
+      position.breakevenPhase = 'trailing';
+    }
+  }
+
+  _classifyStopExitReason(position) {
+    if (!position) return 'INITIAL_SL_HIT';
+    if (position.trailingActivated) return 'TRAILING_SL_HIT';
+    if (position.breakevenActivated) return 'BREAKEVEN_SL_HIT';
+
+    const currentSl = Number(position.currentSl);
+    const originalSl = Number(position.sl);
+    if (Number.isFinite(currentSl) && Number.isFinite(originalSl)) {
+      const movedProtectively = position.type === 'BUY'
+        ? currentSl > originalSl
+        : currentSl < originalSl;
+      if (movedProtectively) return 'PROTECTIVE_SL_HIT';
+    }
+
+    return 'INITIAL_SL_HIT';
+  }
+
+  _isProtectiveStopTrade(trade) {
+    if (!trade) return false;
+    if (PROTECTIVE_STOP_REASONS.has(trade.exitReason)) return true;
+    if (trade.exitReason === 'TP_HIT') return false;
+    return Boolean(trade.breakevenActivated || trade.trailingActivated);
+  }
+
+  _classifyTradeOutcome(trade, basis = 'pips') {
+    if (!trade) return 'neutral';
+
+    if (this._isProtectiveStopTrade(trade)) {
+      const realizedR = Number(trade.realizedRMultiple);
+      if (Number.isFinite(realizedR)) {
+        if (Math.abs(realizedR) <= BREAKEVEN_NEUTRAL_R_EPSILON) return 'neutral';
+        return realizedR > 0 ? 'win' : 'loss';
+      }
+
+      const profitPips = Number(trade.profitPips);
+      if (Number.isFinite(profitPips)) {
+        if (Math.abs(profitPips) <= BREAKEVEN_NEUTRAL_PIPS_EPSILON) return 'neutral';
+        return profitPips > 0 ? 'win' : 'loss';
+      }
+    }
+
+    const value = basis === 'net'
+      ? Number(trade.profitLoss)
+      : Number(trade.profitPips);
+    if (value > 0) return 'win';
+    if (value < 0) return 'loss';
+    return 'neutral';
   }
 
   /**
@@ -759,6 +839,9 @@ class BacktestEngine {
       plannedRiskAmount: Number(position.plannedRiskAmount) || 0,
       realizedRMultiple,
       targetRMultipleCaptured,
+      breakevenActivated: Boolean(position.breakevenActivated),
+      trailingActivated: Boolean(position.trailingActivated),
+      breakevenPhase: position.breakevenPhase || null,
       exitReason: reason,
       exitReasonText: backtestChartService.humanizeExitReason(reason),
       reason: position.reason,
@@ -821,35 +904,83 @@ class BacktestEngine {
         totalProfitPips: 0, totalLossPips: 0, netProfitPips: 0,
         netProfitMoney: 0, returnPercent: 0, averageWinPips: 0, averageLossPips: 0,
         maxConsecutiveWins: 0, maxConsecutiveLosses: 0, maxDrawdownPercent: 0,
+        neutralTrades: 0, neutralRate: 0, decisiveTrades: 0, lossRate: 0,
         sharpeRatio: 0, averageHoldingPeriodHours: 0,
         totalCommission: 0, totalSwap: 0, totalFees: 0, totalTradingCosts: 0,
-        grossNetDifference: 0,
+        grossNetDifference: 0, netWinningTrades: 0, netLosingTrades: 0,
+        netWinRate: 0, netProfitFactor: 0, netGrossProfitMoney: 0,
+        netGrossLossMoney: 0, averageNetTradeMoney: 0,
+        netNeutralTrades: 0, netDecisiveTrades: 0,
+        breakevenExitTrades: 0, breakevenExitRate: 0,
+        breakevenTriggeredTrades: 0, breakevenTriggerRate: 0,
+        requiredBreakevenWinRate: 0,
       };
     }
 
-    const winners = trades.filter((t) => t.profitPips > 0);
-    const losers = trades.filter((t) => t.profitPips <= 0);
+    const outcomes = trades.map((trade) => this._classifyTradeOutcome(trade, 'pips'));
+    const netOutcomes = trades.map((trade) => this._classifyTradeOutcome(trade, 'net'));
+    const winners = trades.filter((_, index) => outcomes[index] === 'win');
+    const losers = trades.filter((_, index) => outcomes[index] === 'loss');
+    const neutralTrades = trades.filter((_, index) => outcomes[index] === 'neutral');
+    const decisiveTrades = winners.length + losers.length;
     const totalProfitPips = winners.reduce((sum, trade) => sum + trade.profitPips, 0);
     const totalLossPips = losers.reduce((sum, trade) => sum + trade.profitPips, 0);
+    const netProfitPips = trades.reduce((sum, trade) => sum + (Number(trade.profitPips) || 0), 0);
+    const tradeGross = (trade) => {
+      const gross = Number(trade.grossProfitLoss);
+      return Number.isFinite(gross) ? gross : Number(trade.profitLoss) || 0;
+    };
+    const tradeNet = (trade) => Number(trade.profitLoss) || 0;
     // Gross PF uses pre-cost grossProfitLoss so the metric stays comparable
     // across runs with and without a cost model. Net impact is exposed
-    // separately via netProfitMoney + grossNetDifference.
-    const grossWinners = trades.filter((t) => Number(t.grossProfitLoss) > 0);
-    const grossLosers = trades.filter((t) => Number(t.grossProfitLoss) <= 0);
-    const totalProfitMoney = grossWinners.reduce((sum, trade) => sum + Number(trade.grossProfitLoss), 0);
-    const totalLossMoney = grossLosers.reduce((sum, trade) => sum + Math.abs(Number(trade.grossProfitLoss)), 0);
+    // separately via netProfitFactor/netWinRate + grossNetDifference.
+    const grossWinners = trades.filter((t) => tradeGross(t) > 0);
+    const grossLosers = trades.filter((t) => tradeGross(t) <= 0);
+    const totalProfitMoney = grossWinners.reduce((sum, trade) => sum + tradeGross(trade), 0);
+    const totalLossMoney = grossLosers.reduce((sum, trade) => sum + Math.abs(tradeGross(trade)), 0);
+    const netMoneyWinners = trades.filter((t) => tradeNet(t) > 0);
+    const netMoneyLosers = trades.filter((t) => tradeNet(t) < 0);
+    const netWinners = trades.filter((_, index) => netOutcomes[index] === 'win');
+    const netLosers = trades.filter((_, index) => netOutcomes[index] === 'loss');
+    const netNeutralTrades = trades.filter((_, index) => netOutcomes[index] === 'neutral');
+    const netDecisiveTrades = netWinners.length + netLosers.length;
+    const netGrossProfitMoney = netMoneyWinners.reduce((sum, trade) => sum + tradeNet(trade), 0);
+    const netGrossLossMoney = netMoneyLosers.reduce((sum, trade) => sum + Math.abs(tradeNet(trade)), 0);
+    const breakevenExitTrades = trades.filter((trade) => (
+      trade.exitReason === 'BREAKEVEN_SL_HIT' || trade.exitReason === 'BREAKEVEN'
+    )).length;
+    const breakevenTriggeredTrades = trades.filter((trade) => {
+      return Boolean(trade.breakevenActivated || trade.trailingActivated)
+        || PROTECTIVE_STOP_REASONS.has(trade.exitReason);
+    }).length;
+    const decisiveNetWinners = trades.filter((trade, index) => netOutcomes[index] === 'win' && tradeNet(trade) > 0);
+    const decisiveNetLosers = trades.filter((trade, index) => netOutcomes[index] === 'loss' && tradeNet(trade) < 0);
+    const decisiveNetProfitMoney = decisiveNetWinners.reduce((sum, trade) => sum + tradeNet(trade), 0);
+    const decisiveNetLossMoney = decisiveNetLosers.reduce((sum, trade) => sum + Math.abs(tradeNet(trade)), 0);
+    const avgNetWinMoney = decisiveNetWinners.length > 0 ? decisiveNetProfitMoney / decisiveNetWinners.length : 0;
+    const avgNetLossMoney = decisiveNetLosers.length > 0 ? decisiveNetLossMoney / decisiveNetLosers.length : 0;
+    let requiredBreakevenWinRate = 0;
+    if (avgNetWinMoney > 0 && avgNetLossMoney > 0) {
+      requiredBreakevenWinRate = avgNetLossMoney / (avgNetWinMoney + avgNetLossMoney);
+    } else if (avgNetWinMoney <= 0 && avgNetLossMoney > 0) {
+      requiredBreakevenWinRate = 1;
+    }
 
     let maxConsWins = 0;
     let maxConsLosses = 0;
     let consWins = 0;
     let consLosses = 0;
     for (const trade of trades) {
-      if (trade.profitPips > 0) {
+      const outcome = this._classifyTradeOutcome(trade, 'pips');
+      if (outcome === 'win') {
         consWins++;
         consLosses = 0;
-      } else {
+      } else if (outcome === 'loss') {
         consLosses++;
         consWins = 0;
+      } else {
+        consWins = 0;
+        consLosses = 0;
       }
       maxConsWins = Math.max(maxConsWins, consWins);
       maxConsLosses = Math.max(maxConsLosses, consLosses);
@@ -877,23 +1008,44 @@ class BacktestEngine {
     const costs = backtestCostModel.summarizeCosts(trades);
     const grossNet = totalProfitMoney - totalLossMoney;
     const netProfitMoney = parseFloat((finalBalance - initialBalance).toFixed(2));
+    const netProfitFactor = netGrossLossMoney > 0
+      ? parseFloat((netGrossProfitMoney / netGrossLossMoney).toFixed(2))
+      : netGrossProfitMoney > 0 ? 999 : 0;
 
     return {
       totalTrades: trades.length,
       winningTrades: winners.length,
       losingTrades: losers.length,
-      winRate: parseFloat((winners.length / trades.length).toFixed(4)),
+      neutralTrades: neutralTrades.length,
+      decisiveTrades,
+      winRate: decisiveTrades > 0 ? parseFloat((winners.length / decisiveTrades).toFixed(4)) : 0,
+      lossRate: decisiveTrades > 0 ? parseFloat((losers.length / decisiveTrades).toFixed(4)) : 0,
+      neutralRate: parseFloat((neutralTrades.length / trades.length).toFixed(4)),
       profitFactor: totalLossMoney > 0 ? parseFloat((totalProfitMoney / totalLossMoney).toFixed(2)) : totalProfitMoney > 0 ? 999 : 0,
       // grossProfitMoney/grossLossMoney are kept alongside profitFactor so
       // portfolio-level aggregation can compute true PF across many runs
       // without averaging each run's individual PF.
       grossProfitMoney: parseFloat(totalProfitMoney.toFixed(2)),
       grossLossMoney: parseFloat(totalLossMoney.toFixed(2)),
+      netWinningTrades: netWinners.length,
+      netLosingTrades: netLosers.length,
+      netNeutralTrades: netNeutralTrades.length,
+      netDecisiveTrades,
+      netWinRate: netDecisiveTrades > 0 ? parseFloat((netWinners.length / netDecisiveTrades).toFixed(4)) : 0,
+      netProfitFactor,
+      netGrossProfitMoney: parseFloat(netGrossProfitMoney.toFixed(2)),
+      netGrossLossMoney: parseFloat(netGrossLossMoney.toFixed(2)),
+      breakevenExitTrades,
+      breakevenExitRate: parseFloat((breakevenExitTrades / trades.length).toFixed(4)),
+      breakevenTriggeredTrades,
+      breakevenTriggerRate: parseFloat((breakevenTriggeredTrades / trades.length).toFixed(4)),
+      requiredBreakevenWinRate: parseFloat(requiredBreakevenWinRate.toFixed(4)),
       totalProfitPips: parseFloat(totalProfitPips.toFixed(1)),
       totalLossPips: parseFloat(totalLossPips.toFixed(1)),
-      netProfitPips: parseFloat((totalProfitPips + totalLossPips).toFixed(1)),
+      netProfitPips: parseFloat(netProfitPips.toFixed(1)),
       netProfitMoney,
       returnPercent: parseFloat(((finalBalance - initialBalance) / initialBalance * 100).toFixed(2)),
+      averageNetTradeMoney: trades.length > 0 ? parseFloat((netProfitMoney / trades.length).toFixed(2)) : 0,
       averageWinPips: winners.length > 0 ? parseFloat((totalProfitPips / winners.length).toFixed(1)) : 0,
       averageLossPips: losers.length > 0 ? parseFloat((totalLossPips / losers.length).toFixed(1)) : 0,
       maxConsecutiveWins: maxConsWins,
@@ -923,7 +1075,7 @@ class BacktestEngine {
         months[month] = { month, trades: 0, wins: 0, netPips: 0, netMoney: 0 };
       }
       months[month].trades++;
-      if (trade.profitPips > 0) months[month].wins++;
+      if (this._classifyTradeOutcome(trade, 'pips') === 'win') months[month].wins++;
       months[month].netPips += trade.profitPips;
       months[month].netMoney += trade.profitLoss;
     }

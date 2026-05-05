@@ -7,6 +7,17 @@ function getNumeric(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function getMetric(summary, primary, fallback = null) {
+  if (!summary || typeof summary !== 'object') return 0;
+  if (summary[primary] !== undefined && summary[primary] !== null) {
+    return getNumeric(summary[primary]);
+  }
+  if (fallback && summary[fallback] !== undefined && summary[fallback] !== null) {
+    return getNumeric(summary[fallback]);
+  }
+  return 0;
+}
+
 function getStatusPriority(status) {
   switch (status) {
     case 'completed':
@@ -31,7 +42,8 @@ function compareBatchResults(a, b) {
 
   const summaryA = getSummary(a);
   const summaryB = getSummary(b);
-  const pfDiff = getNumeric(summaryB.profitFactor) - getNumeric(summaryA.profitFactor);
+  const pfDiff = getMetric(summaryB, 'netProfitFactor', 'profitFactor')
+    - getMetric(summaryA, 'netProfitFactor', 'profitFactor');
   if (pfDiff !== 0) return pfDiff;
 
   const returnDiff = getNumeric(summaryB.returnPercent) - getNumeric(summaryA.returnPercent);
@@ -64,6 +76,17 @@ function summarizeGroup(items, keyName) {
   };
 
   const sorted = [...items].sort(compareBatchResults);
+  const totalTrades = scoredItems.reduce((sum, item) => sum + getNumeric(getSummary(item).totalTrades), 0);
+  const neutralTrades = scoredItems.reduce((sum, item) => sum + getNumeric(getSummary(item).neutralTrades), 0);
+  const breakevenExitTrades = scoredItems.reduce((sum, item) => sum + getNumeric(getSummary(item).breakevenExitTrades), 0);
+  const breakevenTriggeredTrades = scoredItems.reduce((sum, item) => sum + getNumeric(getSummary(item).breakevenTriggeredTrades), 0);
+  const requiredBreakevenWeighted = totalTrades > 0
+    ? scoredItems.reduce((sum, item) => {
+      const summary = getSummary(item);
+      return sum + (getNumeric(summary.requiredBreakevenWinRate) * getNumeric(summary.totalTrades));
+    }, 0) / totalTrades
+    : 0;
+
   return {
     [keyName]: items[0] ? items[0][keyName] : '',
     totalRuns: items.length,
@@ -73,10 +96,20 @@ function summarizeGroup(items, keyName) {
     insufficientDataRuns: insufficientDataItems.length,
     profitableRuns: profitableItems.length,
     averageProfitFactor: average('profitFactor'),
+    averageNetProfitFactor: average('netProfitFactor'),
     averageReturnPercent: average('returnPercent'),
     averageMaxDrawdownPercent: average('maxDrawdownPercent'),
     averageTrades: average('totalTrades'),
     averageWinRate: average('winRate'),
+    averageNetWinRate: average('netWinRate'),
+    averageTradingCosts: average('totalTradingCosts'),
+    neutralTrades,
+    neutralRate: totalTrades > 0 ? parseFloat((neutralTrades / totalTrades).toFixed(4)) : 0,
+    breakevenExitTrades,
+    breakevenExitRate: totalTrades > 0 ? parseFloat((breakevenExitTrades / totalTrades).toFixed(4)) : 0,
+    breakevenTriggeredTrades,
+    breakevenTriggerRate: totalTrades > 0 ? parseFloat((breakevenTriggeredTrades / totalTrades).toFixed(4)) : 0,
+    requiredBreakevenWinRate: parseFloat(requiredBreakevenWeighted.toFixed(4)),
     bestResult: sorted[0] || null,
     worstResult: sorted.length > 0 ? sorted[sorted.length - 1] : null,
   };
@@ -137,12 +170,34 @@ function buildPortfolioSummary(results, initialBalance) {
     totalTrades: 0,
     winningTrades: 0,
     losingTrades: 0,
+    neutralTrades: 0,
+    decisiveTrades: 0,
     winRate: 0,
     lossRate: 0,
+    neutralRate: 0,
     grossProfitMoney: 0,
     grossLossMoney: 0,
     profitFactor: 0,
+    netWinningTrades: 0,
+    netLosingTrades: 0,
+    netNeutralTrades: 0,
+    netDecisiveTrades: 0,
+    netWinRate: 0,
+    netGrossProfitMoney: 0,
+    netGrossLossMoney: 0,
+    netProfitFactor: 0,
+    breakevenExitTrades: 0,
+    breakevenExitRate: 0,
+    breakevenTriggeredTrades: 0,
+    breakevenTriggerRate: 0,
+    requiredBreakevenWinRate: 0,
     avgTradeMoney: 0,
+    averageNetTradeMoney: 0,
+    totalCommission: 0,
+    totalSwap: 0,
+    totalFees: 0,
+    totalTradingCosts: 0,
+    grossNetDifference: 0,
     avgMaxDrawdownPercent: 0,
     worstRunMaxDrawdownPercent: 0,
   };
@@ -156,8 +211,21 @@ function buildPortfolioSummary(results, initialBalance) {
   let totalTrades = 0;
   let winningTrades = 0;
   let losingTrades = 0;
+  let neutralTrades = 0;
   let grossProfit = 0;
   let grossLoss = 0;
+  let netWinningTrades = 0;
+  let netLosingTrades = 0;
+  let netNeutralTrades = 0;
+  let netGrossProfit = 0;
+  let netGrossLoss = 0;
+  let breakevenExitTrades = 0;
+  let breakevenTriggeredTrades = 0;
+  let totalCommission = 0;
+  let totalSwap = 0;
+  let totalFees = 0;
+  let totalTradingCosts = 0;
+  let grossNetDifference = 0;
   let sumMaxDD = 0;
   let worstMaxDD = 0;
   let profitableRuns = 0;
@@ -171,8 +239,21 @@ function buildPortfolioSummary(results, initialBalance) {
     totalTrades += getNumeric(s.totalTrades);
     winningTrades += getNumeric(s.winningTrades);
     losingTrades += getNumeric(s.losingTrades);
+    neutralTrades += getNumeric(s.neutralTrades);
     grossProfit += getNumeric(s.grossProfitMoney);
     grossLoss += getNumeric(s.grossLossMoney);
+    netWinningTrades += getMetric(s, 'netWinningTrades', 'winningTrades');
+    netLosingTrades += getMetric(s, 'netLosingTrades', 'losingTrades');
+    netNeutralTrades += getMetric(s, 'netNeutralTrades', 'neutralTrades');
+    netGrossProfit += getMetric(s, 'netGrossProfitMoney', 'grossProfitMoney');
+    netGrossLoss += getMetric(s, 'netGrossLossMoney', 'grossLossMoney');
+    breakevenExitTrades += getNumeric(s.breakevenExitTrades);
+    breakevenTriggeredTrades += getNumeric(s.breakevenTriggeredTrades);
+    totalCommission += getNumeric(s.totalCommission);
+    totalSwap += getNumeric(s.totalSwap);
+    totalFees += getNumeric(s.totalFees);
+    totalTradingCosts += getNumeric(s.totalTradingCosts);
+    grossNetDifference += getNumeric(s.grossNetDifference);
 
     const dd = getNumeric(s.maxDrawdownPercent);
     sumMaxDD += dd;
@@ -186,9 +267,24 @@ function buildPortfolioSummary(results, initialBalance) {
   const totalStartingBalance = safeBalance * scored.length;
   const netProfitMoney = totalEndingBalance - totalStartingBalance;
   const returnPercent = totalStartingBalance > 0 ? (netProfitMoney / totalStartingBalance) * 100 : 0;
-  const winRate = totalTrades > 0 ? winningTrades / totalTrades : 0;
-  const lossRate = totalTrades > 0 ? losingTrades / totalTrades : 0;
+  const decisiveTrades = winningTrades + losingTrades;
+  const netDecisiveTrades = netWinningTrades + netLosingTrades;
+  const winRate = decisiveTrades > 0 ? winningTrades / decisiveTrades : 0;
+  const lossRate = decisiveTrades > 0 ? losingTrades / decisiveTrades : 0;
+  const neutralRate = totalTrades > 0 ? neutralTrades / totalTrades : 0;
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
+  const netWinRate = netDecisiveTrades > 0 ? netWinningTrades / netDecisiveTrades : 0;
+  const netProfitFactor = netGrossLoss > 0 ? netGrossProfit / netGrossLoss : netGrossProfit > 0 ? 999 : 0;
+  const breakevenExitRate = totalTrades > 0 ? breakevenExitTrades / totalTrades : 0;
+  const breakevenTriggerRate = totalTrades > 0 ? breakevenTriggeredTrades / totalTrades : 0;
+  const avgNetWin = netWinningTrades > 0 ? netGrossProfit / netWinningTrades : 0;
+  const avgNetLoss = netLosingTrades > 0 ? netGrossLoss / netLosingTrades : 0;
+  let requiredBreakevenWinRate = 0;
+  if (avgNetWin > 0 && avgNetLoss > 0) {
+    requiredBreakevenWinRate = avgNetLoss / (avgNetWin + avgNetLoss);
+  } else if (avgNetWin <= 0 && avgNetLoss > 0) {
+    requiredBreakevenWinRate = 1;
+  }
   const avgTradeMoney = totalTrades > 0 ? netProfitMoney / totalTrades : 0;
   const avgMaxDrawdownPercent = scored.length > 0 ? sumMaxDD / scored.length : 0;
 
@@ -207,12 +303,34 @@ function buildPortfolioSummary(results, initialBalance) {
     totalTrades,
     winningTrades,
     losingTrades,
+    neutralTrades,
+    decisiveTrades,
     winRate: round4(winRate),
     lossRate: round4(lossRate),
+    neutralRate: round4(neutralRate),
     grossProfitMoney: round2(grossProfit),
     grossLossMoney: round2(grossLoss),
     profitFactor: round2(profitFactor),
+    netWinningTrades,
+    netLosingTrades,
+    netNeutralTrades,
+    netDecisiveTrades,
+    netWinRate: round4(netWinRate),
+    netGrossProfitMoney: round2(netGrossProfit),
+    netGrossLossMoney: round2(netGrossLoss),
+    netProfitFactor: round2(netProfitFactor),
+    breakevenExitTrades,
+    breakevenExitRate: round4(breakevenExitRate),
+    breakevenTriggeredTrades,
+    breakevenTriggerRate: round4(breakevenTriggerRate),
+    requiredBreakevenWinRate: round4(requiredBreakevenWinRate),
     avgTradeMoney: round2(avgTradeMoney),
+    averageNetTradeMoney: round2(avgTradeMoney),
+    totalCommission: round2(totalCommission),
+    totalSwap: round2(totalSwap),
+    totalFees: round2(totalFees),
+    totalTradingCosts: round2(totalTradingCosts),
+    grossNetDifference: round2(grossNetDifference),
     avgMaxDrawdownPercent: round2(avgMaxDrawdownPercent),
     worstRunMaxDrawdownPercent: round2(worstMaxDD),
   };
@@ -354,7 +472,9 @@ function formatResultLine(result, index) {
     return `${index}. ${result.strategy} @ ${result.symbol} | ${result.status} | ${result.error || '无可评分结果'}`;
   }
 
-  return `${index}. ${result.strategy} @ ${result.symbol} | PF ${result.summary.profitFactor} | Return ${result.summary.returnPercent}% | DD ${result.summary.maxDrawdownPercent}% | Trades ${result.summary.totalTrades}`;
+  const netPf = result.summary.netProfitFactor != null ? result.summary.netProfitFactor : result.summary.profitFactor;
+  const costs = result.summary.totalTradingCosts != null ? result.summary.totalTradingCosts : 0;
+  return `${index}. ${result.strategy} @ ${result.symbol} | PF ${result.summary.profitFactor} | NetPF ${netPf} | Return ${result.summary.returnPercent}% | DD ${result.summary.maxDrawdownPercent}% | Trades ${result.summary.totalTrades} | Costs ${costs}`;
 }
 
 function formatScopeMode(mode) {
@@ -377,10 +497,13 @@ function buildPortfolioLines(portfolio) {
     `- 初始资金池: ${portfolio.totalStartingBalance} (${portfolio.initialBalancePerRun} × ${portfolio.scoredRuns} 个可评分组合)`,
     `- 结束资金池: ${portfolio.totalEndingBalance}`,
     `- 净盈亏: ${portfolio.netProfitMoney} | 组合收益率: ${portfolio.returnPercent}%`,
-    `- 总交易数: ${portfolio.totalTrades} | 盈利交易: ${portfolio.winningTrades} | 亏损交易: ${portfolio.losingTrades}`,
+    `- 总交易数: ${portfolio.totalTrades} | 盈利交易: ${portfolio.winningTrades} | 亏损交易: ${portfolio.losingTrades} | 中性交易: ${portfolio.neutralTrades || 0}`,
     `- 组合胜率: ${(portfolio.winRate * 100).toFixed(2)}% | 组合败率: ${(portfolio.lossRate * 100).toFixed(2)}%`,
     `- 组合 Profit Factor: ${portfolio.profitFactor} (毛盈 ${portfolio.grossProfitMoney} / 毛亏 ${portfolio.grossLossMoney})`,
+    `- Net Profit Factor (after costs): ${portfolio.netProfitFactor} | Net win rate: ${((portfolio.netWinRate || 0) * 100).toFixed(2)}%`,
+    `- BE metrics: exit ${((portfolio.breakevenExitRate || 0) * 100).toFixed(2)}% (${portfolio.breakevenExitTrades || 0} trades) | trigger ${((portfolio.breakevenTriggerRate || 0) * 100).toFixed(2)}% (${portfolio.breakevenTriggeredTrades || 0} trades) | required win rate ${((portfolio.requiredBreakevenWinRate || 0) * 100).toFixed(2)}%`,
     `- 平均单笔盈亏: ${portfolio.avgTradeMoney}`,
+    `- Trading costs: commission ${portfolio.totalCommission} | swap ${portfolio.totalSwap} | fees ${portfolio.totalFees} | total ${portfolio.totalTradingCosts}`,
     `- 平均单策略最大回撤: ${portfolio.avgMaxDrawdownPercent}% | 最坏单策略回撤: ${portfolio.worstRunMaxDrawdownPercent}%`,
     `- 盈利组合: ${portfolio.profitableRuns} | 亏损组合: ${portfolio.losingRuns} | 无交易组合: ${portfolio.noTradeRuns}`,
   ];
@@ -552,10 +675,12 @@ function buildSharedPortfolioReport(job, portfolioResult) {
     `- 初始余额: ${summary.initialBalance}`,
     `- 结束余额: ${summary.finalBalance}`,
     `- 净盈亏: ${summary.netProfitMoney} | 收益率: ${summary.returnPercent}%`,
-    `- 总交易数: ${summary.totalTrades} | 盈利: ${summary.winningTrades} | 亏损: ${summary.losingTrades}`,
+    `- 总交易数: ${summary.totalTrades} | 盈利: ${summary.winningTrades} | 亏损: ${summary.losingTrades} | 中性: ${summary.neutralTrades || 0}`,
     `- 胜率: ${((summary.winRate || 0) * 100).toFixed(2)}% | 败率: ${((summary.lossRate || 0) * 100).toFixed(2)}%`,
     `- 毛盈: ${summary.grossProfitMoney} | 毛亏: ${summary.grossLossMoney} | Profit Factor: ${summary.profitFactor}`,
+    `- Net Profit Factor (after costs): ${summary.netProfitFactor ?? summary.profitFactor} | Net win rate: ${(((summary.netWinRate ?? summary.winRate) || 0) * 100).toFixed(2)}%`,
     `- 平均单笔盈亏: ${summary.averageTradeMoney}`,
+    `- Trading costs: commission ${summary.totalCommission || 0} | swap ${summary.totalSwap || 0} | fees ${summary.totalFees || 0} | total ${summary.totalTradingCosts || 0}`,
     `- 最大回撤: ${summary.maxDrawdownPercent}%`,
     `- 最大连胜: ${summary.maxConsecutiveWins} | 最大连亏: ${summary.maxConsecutiveLosses}`,
     `- 被拒绝信号: 无容量 ${rejected.noCapacity} | 0 手数 ${rejected.zeroSize}`,
@@ -664,9 +789,12 @@ function sortBatchResults(results, sortBy, sortDir = 'desc') {
         return String(result.status || '');
       case 'totalTrades':
       case 'winRate':
+      case 'netWinRate':
       case 'profitFactor':
+      case 'netProfitFactor':
       case 'returnPercent':
       case 'maxDrawdownPercent':
+      case 'totalTradingCosts':
         return getNumeric(getSummary(result)[sortBy]);
       default:
         return getNumeric(getSummary(result)[sortBy], null);

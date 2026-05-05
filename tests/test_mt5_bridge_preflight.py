@@ -79,6 +79,44 @@ class SerializeTradeCheckTests(unittest.TestCase):
                 self.assertTrue(result["allowed"])
                 self.assertEqual(result["retcode"], retcode)
 
+    def test_handle_connect_explicitly_logs_in_and_verifies_account(self):
+        account = SimpleNamespace(login=44938841, server="Elev8-Real2")
+
+        with patch.object(self.mt5_bridge.mt5, "initialize", return_value=True, create=True) as initialize, \
+             patch.object(self.mt5_bridge.mt5, "login", return_value=True, create=True) as login, \
+             patch.object(self.mt5_bridge.mt5, "account_info", return_value=account, create=True):
+            result = self.mt5_bridge.handle_connect({
+                "login": "44938841",
+                "password": "secret",
+                "server": "Elev8-Real2",
+                "path": "C:/MT5-Live/terminal64.exe",
+            })
+
+        self.assertTrue(result["success"])
+        initialize.assert_called_once_with(
+            login=44938841,
+            password="secret",
+            server="Elev8-Real2",
+            path="C:/MT5-Live/terminal64.exe",
+        )
+        login.assert_called_once_with(login=44938841, password="secret", server="Elev8-Real2")
+
+    def test_handle_connect_leaves_account_mismatch_policy_to_service(self):
+        account = SimpleNamespace(login=230044684, server="Elev8-Demo2")
+
+        with patch.object(self.mt5_bridge.mt5, "initialize", return_value=True, create=True), \
+             patch.object(self.mt5_bridge.mt5, "login", return_value=True, create=True), \
+             patch.object(self.mt5_bridge.mt5, "account_info", return_value=account, create=True), \
+             patch.object(self.mt5_bridge.mt5, "shutdown", return_value=True, create=True) as shutdown:
+            result = self.mt5_bridge.handle_connect({
+                "login": "44938841",
+                "password": "secret",
+                "server": "Elev8-Real2",
+            })
+
+        self.assertTrue(result["success"])
+        shutdown.assert_not_called()
+
     def test_serialize_trade_check_rejects_blocking_retcodes(self):
         cases = (
             (10004, "REQUOTE"),

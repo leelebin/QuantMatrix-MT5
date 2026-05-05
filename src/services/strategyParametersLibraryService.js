@@ -52,6 +52,9 @@ async function listAssignedStrategyRiskStatuses() {
       const strategyInstance = await getStrategyInstance(symbol, strategy.name, { activeProfile });
       const instrument = getInstrument(symbol);
       const effectiveParameters = strategyInstance.parameters || {};
+      const paperEnabled = strategyInstance.paperEnabled !== undefined
+        ? strategyInstance.paperEnabled !== false
+        : strategyInstance.enabled !== false;
 
       rows.push({
         key: `${strategy.name}:${symbol}`,
@@ -59,7 +62,9 @@ async function listAssignedStrategyRiskStatuses() {
         strategyName: strategy.name,
         strategyDisplayName: strategy.displayName || strategy.name,
         strategyDescription: strategy.description || '',
-        instanceEnabled: strategyInstance.enabled !== false,
+        instanceEnabled: paperEnabled,
+        paperEnabled,
+        liveEnabled: strategyInstance.liveEnabled === true,
         parameterSource: strategyInstance.source,
         instanceParameters: strategyInstance.storedParameters || {},
         effectiveParameters,

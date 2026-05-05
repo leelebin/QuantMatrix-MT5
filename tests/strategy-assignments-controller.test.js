@@ -6,6 +6,7 @@ jest.mock('../src/models/Strategy', () => ({
 
 jest.mock('../src/models/StrategyInstance', () => ({
   upsert: jest.fn().mockResolvedValue({}),
+  findByKey: jest.fn().mockResolvedValue(null),
   findByStrategyName: jest.fn().mockResolvedValue([]),
 }));
 
@@ -38,6 +39,7 @@ function createRes() {
 describe('strategy assignments controller', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    require('../src/models/StrategyInstance').findByKey.mockResolvedValue(null);
   });
 
   test('getAssignments returns a full symbol-strategy matrix', async () => {
@@ -136,6 +138,46 @@ describe('strategy assignments controller', () => {
     expect(Strategy.update).toHaveBeenCalledWith('mean-1', { symbols: ['EURUSD'] });
     expect(res.statusCode).toBe(200);
     expect(res.payload.data.assignmentsBySymbol.EURUSD).toEqual(['TrendFollowing', 'MeanReversion']);
+  });
+
+  test('updateAssignments in live scope seeds new instances as live-only', async () => {
+    const StrategyInstance = require('../src/models/StrategyInstance');
+    const existingStrategies = [
+      {
+        _id: 'trend-1',
+        name: 'TrendFollowing',
+        displayName: 'Trend Following',
+        enabled: true,
+        symbols: [],
+      },
+    ];
+
+    Strategy.findAll
+      .mockResolvedValueOnce(existingStrategies)
+      .mockResolvedValueOnce([
+        {
+          ...existingStrategies[0],
+          symbols: ['EURUSD'],
+        },
+      ]);
+    Strategy.update.mockResolvedValue({});
+    StrategyInstance.findByKey.mockResolvedValue(null);
+
+    const res = createRes();
+    await strategyController.updateAssignments({
+      body: {
+        scope: 'live',
+        assignmentsBySymbol: {
+          EURUSD: ['TrendFollowing'],
+        },
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(StrategyInstance.upsert).toHaveBeenCalledWith('TrendFollowing', 'EURUSD', {
+      paperEnabled: false,
+      liveEnabled: true,
+    });
   });
 
   test('updateAssignments rejects invalid symbols', async () => {

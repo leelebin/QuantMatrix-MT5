@@ -26,6 +26,7 @@ const fileLogger = require('./services/fileLogger');
 const remoteAccessService = require('./services/remoteAccessService');
 const strategyEngine = require('./services/strategyEngine');
 const economicCalendarService = require('./services/economicCalendarService');
+const resourceMonitorService = require('./services/resourceMonitorService');
 
 // Install persistent file logging (console.log/warn/error -> logs/system.log,
 // logs/error.log). Console output is preserved.
@@ -139,6 +140,9 @@ app.get('/api/health', (req, res) => {
     message: 'Server is running',
     wsClients: websocketService.getClientCount(),
     notifications: notificationService.getStatus(),
+    resources: {
+      memory: resourceMonitorService.getProcessMemory(),
+    },
   });
 });
 
@@ -184,6 +188,7 @@ async function startServer() {
     await connectDB();
     await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
     await StrategyInstance.migrateFromLegacy();
+    await StrategyInstance.migrateScopedEnabledDefaults();
     try {
       await economicCalendarService.ensureCalendar();
     } catch (e) {

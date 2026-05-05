@@ -50,6 +50,9 @@ describe('strategy instance service', () => {
       symbol: 'XAUUSD',
       parameters: expect.objectContaining({ lookback_period: 33 }),
       enabled: false,
+      paperEnabled: false,
+      liveEnabled: false,
+      enabledForScope: false,
       newsBlackout: DEFAULT_NEWS_BLACKOUT_CONFIG,
       executionPolicy: DEFAULT_EXECUTION_POLICY,
       source: 'instance',
@@ -73,8 +76,35 @@ describe('strategy instance service', () => {
     expect(result.source).toBe('strategy_default');
     expect(result.parameters).toEqual(expect.objectContaining({ lookback_period: 20 }));
     expect(result.enabled).toBe(true);
+    expect(result.paperEnabled).toBe(true);
+    expect(result.liveEnabled).toBe(false);
+    expect(result.enabledForScope).toBe(true);
     expect(result.hasStoredInstance).toBe(false);
     expect(result.storedParameters).toEqual({});
     expect(result.executionPolicy).toEqual(DEFAULT_EXECUTION_POLICY);
+  });
+
+  test('returns live scope enablement separately from paper enablement', async () => {
+    Strategy.findByName.mockResolvedValue({
+      name: 'Breakout',
+      enabled: true,
+      parameters: { lookback_period: 20 },
+    });
+    StrategyInstance.findByKey.mockResolvedValue({
+      _id: 'Breakout:XAUUSD',
+      strategyName: 'Breakout',
+      symbol: 'XAUUSD',
+      parameters: {},
+      enabled: true,
+      paperEnabled: true,
+      liveEnabled: false,
+    });
+
+    const result = await getStrategyInstance('XAUUSD', 'Breakout', { scope: 'live' });
+
+    expect(result.enabled).toBe(true);
+    expect(result.paperEnabled).toBe(true);
+    expect(result.liveEnabled).toBe(false);
+    expect(result.enabledForScope).toBe(false);
   });
 });

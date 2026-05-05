@@ -4,7 +4,10 @@
  * executes trades on demo, and logs everything to trade_log.
  */
 
-const mt5Service = require('./mt5Service');
+const mt5Module = require('./mt5Service');
+const mt5Service = typeof mt5Module.getScopedService === 'function'
+  ? mt5Module.getScopedService('paper')
+  : mt5Module;
 const strategyEngine = require('./strategyEngine');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
@@ -25,6 +28,10 @@ const {
   buildManagedPositionState,
   createManagerAction,
 } = require('../utils/positionExitState');
+const {
+  buildOpenTradeCapture,
+  buildPositionExportSnapshot,
+} = require('../utils/tradeDataCapture');
 const auditService = require('./auditService');
 const strategyDailyStopService = require('./strategyDailyStopService');
 const { getStrategyInstance } = require('./strategyInstanceService');
@@ -96,7 +103,7 @@ class PaperTradingService {
 
   async _getActiveAssignments(activeProfile = null) {
     await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
-    return listActiveAssignments({ activeProfile });
+    return listActiveAssignments({ activeProfile, scope: 'paper' });
   }
 
   _buildEmptyMonitorStatus() {
@@ -180,7 +187,9 @@ class PaperTradingService {
       if (!strategyName) return null;
       const cacheKey = `${position.symbol}:${strategyName}`;
       if (!strategyInstanceCache.has(cacheKey)) {
-        strategyInstanceCache.set(cacheKey, getStrategyInstance(position.symbol, strategyName).catch(() => null));
+        strategyInstanceCache.set(cacheKey, getStrategyInstance(position.symbol, strategyName, {
+          scope: 'paper',
+        }).catch(() => null));
       }
       return strategyInstanceCache.get(cacheKey);
     };
@@ -379,9 +388,15 @@ class PaperTradingService {
 
       // Verify it's a demo account
       const accountInfo = await mt5Service.getAccountInfo();
+      if (typeof mt5Service.validateRuntimeAccountIdentity === 'function') {
+        mt5Service.validateRuntimeAccountIdentity(accountInfo);
+      }
       mt5Service.ensurePaperTradingAccount(accountInfo);
       console.log(`[PaperTrading] Connected to account: ${accountInfo.login} | Server: ${accountInfo.server}`);
       console.log(`[PaperTrading] Balance: ${accountInfo.balance} ${accountInfo.currency} | Leverage: 1:${accountInfo.leverage}`);
+      const runtimeIdentity = typeof mt5Service.buildRuntimeIdentityStatus === 'function'
+        ? mt5Service.buildRuntimeIdentityStatus(accountInfo)
+        : null;
 
       // Initialize strategy configs in DB
       await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
@@ -422,6 +437,7 @@ class PaperTradingService {
             leverage: accountInfo.leverage,
             mode: mt5Service.getAccountModeName(accountInfo),
           },
+          runtimeIdentity,
         },
       };
     } catch (err) {
@@ -653,6 +669,13 @@ class PaperTradingService {
         exitPlan,
         plannedRiskAmount: riskCheck.plannedRiskAmount,
       });
+      const openCapture = buildOpenTradeCapture(signal, managedPositionState);
+      const spreadAtEntry = Number.isFinite(Number(priceData.ask)) && Number.isFinite(Number(priceData.bid))
+        ? Math.abs(Number(priceData.ask) - Number(priceData.bid))
+        : null;
+      const slippageEstimate = Number.isFinite(Number(entryPrice)) && Number.isFinite(Number(quotedEntryPrice))
+        ? parseFloat((Number(entryPrice) - Number(quotedEntryPrice)).toFixed(10))
+        : null;
 
       // Save to paper positions DB
       const position = await paperPositionsDb.insert({
@@ -669,10 +692,15 @@ class PaperTradingService {
         comment: tradeComment,
         confidence: signal.confidence,
         rawConfidence: signal.rawConfidence ?? signal.confidence,
-        reason: signal.reason,
+        reason: openCapture.signalReason || signal.reason,
         atrAtEntry,
         ...managedPositionState,
-        indicatorsSnapshot: signal.indicatorsSnapshot,
+        ...openCapture,
+        requestedEntryPrice: quotedEntryPrice,
+        spreadAtEntry,
+        slippageEstimate,
+        brokerRetcodeOpen: result.retcode ?? null,
+        indicatorsSnapshot: openCapture.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
       });
@@ -685,11 +713,14 @@ class PaperTradingService {
         entryPrice,
         stopLoss: signal.sl,
         takeProfit: signal.tp,
-        signalReason: signal.reason,
+        signalReason: openCapture.signalReason || signal.reason,
+        entryReason: openCapture.entryReason,
+        setupReason: openCapture.setupReason,
+        triggerReason: openCapture.triggerReason,
         strategy: signal.strategy,
         confidence: signal.confidence,
         rawConfidence: signal.rawConfidence ?? signal.confidence,
-        indicatorsSnapshot: signal.indicatorsSnapshot,
+        indicatorsSnapshot: openCapture.indicatorsSnapshot,
         commission: entryCommission,
         swap: entrySwap,
         fee: entryFee,
@@ -709,6 +740,14 @@ class PaperTradingService {
         entryTimeframe: managedPositionState.entryTimeframe,
         setupCandleTime: managedPositionState.setupCandleTime,
         entryCandleTime: managedPositionState.entryCandleTime,
+        initialSl: openCapture.initialSl,
+        initialTp: openCapture.initialTp,
+        finalSl: openCapture.finalSl,
+        finalTp: openCapture.finalTp,
+        requestedEntryPrice: quotedEntryPrice,
+        spreadAtEntry,
+        slippageEstimate,
+        brokerRetcodeOpen: result.retcode ?? null,
         openedAt,
       });
 
@@ -808,6 +847,7 @@ class PaperTradingService {
       scope: 'paper',
       positionsStore: paperPositionsDb,
       tradingEnabled: process.env.PAPER_TRADING_ENABLED === 'true',
+      mt5Service,
     });
   }
 
@@ -1113,6 +1153,11 @@ class PaperTradingService {
       commission: closedSnapshot.commission,
       swap: closedSnapshot.swap,
       fee: closedSnapshot.fee,
+      grossProfitLoss: closedSnapshot.grossProfitLoss,
+      finalSl: localPos.currentSl ?? localPos.finalSl ?? localPos.sl ?? null,
+      finalTp: localPos.currentTp ?? localPos.finalTp ?? localPos.tp ?? null,
+      brokerRetcodeModify: localPos.brokerRetcodeModify ?? null,
+      positionSnapshot: buildPositionExportSnapshot(localPos),
       openedAt,
       closedAt: closedSnapshot.closedAt,
       realizedRMultiple: closedSnapshot.realizedRMultiple,
@@ -1252,6 +1297,12 @@ class PaperTradingService {
       commission: closedSnapshot.commission,
       swap: closedSnapshot.swap,
       fee: closedSnapshot.fee,
+      grossProfitLoss: closedSnapshot.grossProfitLoss,
+      finalSl: position.currentSl ?? position.finalSl ?? position.sl ?? null,
+      finalTp: position.currentTp ?? position.finalTp ?? position.tp ?? null,
+      brokerRetcodeClose: closeResult?.retcode ?? null,
+      brokerRetcodeModify: position.brokerRetcodeModify ?? null,
+      positionSnapshot: buildPositionExportSnapshot(position),
       openedAt,
       closedAt: closedSnapshot.closedAt,
       realizedRMultiple: closedSnapshot.realizedRMultiple,
@@ -1326,11 +1377,32 @@ class PaperTradingService {
       assignments,
       this.scheduler ? this.scheduler.getBucketStates() : new Map()
     );
+    let runtimeIdentity = typeof mt5Service.buildRuntimeIdentityStatus === 'function'
+      ? mt5Service.buildRuntimeIdentityStatus()
+      : null;
+
+    if (mt5Service.isConnected() && typeof mt5Service.buildRuntimeIdentityStatus === 'function') {
+      try {
+        const accountInfo = await mt5Service.getAccountInfo();
+        runtimeIdentity = mt5Service.buildRuntimeIdentityStatus(accountInfo);
+      } catch (err) {
+        runtimeIdentity = {
+          ...(runtimeIdentity || { scope: 'paper', connected: true, mt5Path: null, account: null }),
+          connected: mt5Service.isConnected(),
+          validation: {
+            ok: false,
+            warnings: [],
+            errors: [err.message],
+          },
+        };
+      }
+    }
 
     return {
       running: this.running,
       startedAt: this.startedAt,
       runtime: this.startedAt ? TradeLog.formatHoldingTime(Date.now() - this.startedAt.getTime()) : null,
+      runtimeIdentity,
       openPositions: openPositions.length,
       positions: openPositions,
       todayTrades: todayTrades.length,

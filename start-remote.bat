@@ -44,5 +44,6 @@ if %REMOTE_EXIT% neq 0 (
 )
 
 echo.
-echo [OK] Remote access is ready. Check the output above and Telegram for the latest URL.
+echo [OK] Remote access is ready.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$statePath = '%PROJECT_DIR%data\remote-access-state.json'; if (Test-Path $statePath) { $s = Get-Content $statePath -Raw | ConvertFrom-Json; Write-Host ''; Write-Host ('  Public URL: ' + $s.publicUrl); Write-Host ('  Outer User: ' + $s.basicAuth.username); Write-Host ('  Outer Password: ' + $s.basicAuth.password); Write-Host '' } else { Write-Host '[WARN] remote-access-state.json not found. Check Telegram for the latest URL.' }"
 pause

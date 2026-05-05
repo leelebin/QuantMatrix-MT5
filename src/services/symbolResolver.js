@@ -280,9 +280,15 @@ class SymbolResolver {
   }
 }
 
-const symbolResolver = new SymbolResolver();
+function createSymbolResolver() {
+  return new SymbolResolver();
+}
+
+const symbolResolver = createSymbolResolver();
 
 symbolResolver.STATUS = STATUS;
 symbolResolver.envAliasKey = envAliasKey;
+symbolResolver.SymbolResolver = SymbolResolver;
+symbolResolver.createSymbolResolver = createSymbolResolver;
 
 module.exports = symbolResolver;

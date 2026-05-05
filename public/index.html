@@ -286,7 +286,9 @@ tr:hover{background:var(--bg3)}
       <table>
         <tr><td style="color:var(--text2)">MT5 Connection</td><td id="dMt5Status">--</td></tr>
         <tr><td style="color:var(--text2)">Account Mode</td><td id="dAccountMode">--</td></tr>
-        <tr><td style="color:var(--text2)">Live Trading Enabled</td><td id="dTradingEnabled">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Runtime Enabled</td><td id="dTradingEnabled">--</td></tr>
+        <tr><td style="color:var(--text2)">Live Trading Allowed</td><td id="dLiveTradingAllowed">--</td></tr>
+        <tr><td style="color:var(--text2)">Live MT5 Config</td><td id="dLiveMt5Config">--</td></tr>
         <tr><td style="color:var(--text2)">Risk Profile</td><td id="dRiskProfile">--</td></tr>
         <tr><td style="color:var(--text2)">Live Trading Loop</td><td id="dTradingLoop">--</td></tr>
         <tr><td style="color:var(--text2)">Live Position Monitor</td><td id="dMonitor">--</td></tr>
@@ -504,16 +506,31 @@ tr:hover{background:var(--bg3)}
 
 <!-- Strategies Page -->
 <div class="page" id="page-strategies">
-  <div class="card strategy-assignments-card" style="margin-bottom:16px">
-    <div class="card-header strategy-assignments-header">
-      <span class="card-title">Symbol Assignments</span>
-      <div class="strategy-assignments-actions">
-        <button class="btn-outline btn-sm" onclick="resetStrategyAssignments()">Reset</button>
-        <button class="btn-primary btn-sm" onclick="saveStrategyAssignments()">Save Assignments</button>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">Strategy Runtime</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary btn-sm" id="strategyScopePaperBtn" onclick="setStrategyRuntimeScope('paper')">Paper</button>
+        <button class="btn-outline btn-sm" id="strategyScopeLiveBtn" onclick="setStrategyRuntimeScope('live')">Live</button>
       </div>
     </div>
-    <div id="strategyAssignments">
-      <div class="empty">Loading assignments...</div>
+    <div id="strategyRuntimeScopeSummary" style="font-size:13px;color:var(--text2)">
+      Editing paper strategy enablement.
+    </div>
+  </div>
+  <div class="card strategy-assignments-card" style="margin-bottom:16px">
+    <div class="card-header strategy-assignments-header">
+      <span class="card-title" id="strategyRuntimeMatrixTitle">Paper Runtime Matrix</span>
+      <div class="strategy-assignments-actions">
+        <button class="btn-outline btn-sm" onclick="resetStrategyRuntimeMatrix()">Reset</button>
+        <button class="btn-primary btn-sm" id="strategyRuntimeMatrixSaveBtn" onclick="saveStrategyRuntimeMatrix()">Save Paper Runtime</button>
+      </div>
+    </div>
+    <div id="strategyRuntimeMatrixHint" style="font-size:12px;color:var(--text2);margin:-4px 0 10px">
+      The matrix controls paper runtime enablement only.
+    </div>
+    <div id="strategyRuntimeMatrix">
+      <div class="empty">Loading runtime matrix...</div>
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
@@ -1440,6 +1457,21 @@ tr:hover{background:var(--bg3)}
     </div>
   </div>
 </div>
+
+<div class="modal-overlay" id="saveChangesModal">
+  <div class="modal" style="width:760px;max-width:95vw">
+    <div class="modal-header">
+      <div>
+        <h3 id="saveChangesModalTitle">Saved Changes</h3>
+        <div class="modal-meta" id="saveChangesModalMeta">Review what changed before continuing.</div>
+      </div>
+    </div>
+    <div id="saveChangesModalBody" style="margin-top:16px"><div class="empty">No changes recorded.</div></div>
+    <div class="modal-actions">
+      <button class="btn-outline btn-sm" onclick="closeSaveChangesModal()">Close</button>
+    </div>
+  </div>
+</div>
 <script src="/vendor/plotly-2.35.2.min.js"></script>
 <script>
 // --- State ---
@@ -1463,6 +1495,9 @@ const TRADES_REFRESH_INTERVAL_MS = 10000;
 let strategyConfigs = [];
 let strategyAssignmentsState = null;
 let strategyAssignmentsDraft = {};
+let strategyRuntimeScope = 'paper';
+let strategyRuntimeMatrixState = null;
+let strategyRuntimeMatrixDraft = {};
 let availableSymbols = [];
 let lastOptimizerResult = null;
 let optimizerHistoryRecords = [];
@@ -1801,6 +1836,67 @@ async function fetchStrategyAssignments(force=false) {
     setAvailableSymbols(r.data.symbols || []);
   }
   return strategyAssignmentsState;
+}
+
+async function fetchStrategyRuntimeMatrix(force=false) {
+  const scope = getStrategyRuntimeScope();
+  if (!force && strategyRuntimeMatrixState && strategyRuntimeMatrixState.scope === scope) {
+    return strategyRuntimeMatrixState;
+  }
+
+  try {
+    const r = await api('/api/strategy-instances/runtime-matrix?scope=' + encodeURIComponent(scope));
+    if (!r.success || !r.data) {
+      throw new Error(r.message || 'Runtime matrix API unavailable');
+    }
+    strategyRuntimeMatrixState = r.data;
+    strategyRuntimeMatrixDraft = JSON.parse(JSON.stringify(r.data.enabledBySymbol || {}));
+    setAvailableSymbols(r.data.symbols || []);
+    return strategyRuntimeMatrixState;
+  } catch (error) {
+    const fallback = await buildFallbackRuntimeMatrix(scope, error);
+    strategyRuntimeMatrixState = fallback;
+    strategyRuntimeMatrixDraft = JSON.parse(JSON.stringify(fallback.enabledBySymbol || {}));
+    setAvailableSymbols(fallback.symbols || []);
+    return strategyRuntimeMatrixState;
+  }
+}
+
+async function buildFallbackRuntimeMatrix(scope, sourceError) {
+  const assignments = await fetchStrategyAssignments(true);
+  if (!assignments || !Array.isArray(assignments.symbols) || !Array.isArray(assignments.strategies)) {
+    throw sourceError || new Error('Runtime matrix unavailable');
+  }
+
+  const enabledBySymbol = Object.fromEntries((assignments.symbols || []).map((symbol) => [symbol, []]));
+  try {
+    const libraryResponse = await api('/api/strategy-instances/library/parameters');
+    const rows = (libraryResponse && libraryResponse.success && libraryResponse.data && libraryResponse.data.rows) || [];
+    rows.forEach((row) => {
+      const enabled = scope === 'live'
+        ? row.liveEnabled === true
+        : (row.paperEnabled !== undefined ? row.paperEnabled !== false : row.instanceEnabled !== false);
+      if (!enabled || !enabledBySymbol[row.symbol]) return;
+      if (!enabledBySymbol[row.symbol].includes(row.strategyName)) {
+        enabledBySymbol[row.symbol].push(row.strategyName);
+      }
+    });
+  } catch (_error) {
+    Object.entries(assignments.assignmentsBySymbol || {}).forEach(([symbol, strategyNames]) => {
+      enabledBySymbol[symbol] = Array.isArray(strategyNames) ? [...strategyNames] : [];
+    });
+  }
+
+  return {
+    scope,
+    symbols: assignments.symbols || [],
+    strategies: assignments.strategies || [],
+    enabledBySymbol,
+    enabledByStrategy: {},
+    changes: [],
+    summary: null,
+    warning: 'Runtime matrix API is not active in the running Node process. Restart the server to enable scoped saving; this view is using a read-only compatibility fallback.',
+  };
 }
 
 function getStrategyConfigByName(name) {
@@ -2194,6 +2290,28 @@ async function loadDashboard() {
     document.getElementById('dMt5Status').innerHTML = d.mt5Connected ? '<span style="color:var(--green)">Connected</span>' : '<span style="color:var(--red)">Disconnected</span>';
     document.getElementById('dAccountMode').innerHTML = d.account ? accountModeBadge(d.account.mode) + ' <span style="color:var(--text2)">' + (d.account.login || '--') + '@' + (d.account.server || '--') + '</span>' : '--';
     document.getElementById('dTradingEnabled').innerHTML = d.tradingEnabled ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>';
+    const liveAllowedEl = document.getElementById('dLiveTradingAllowed');
+    if (liveAllowedEl) {
+      liveAllowedEl.innerHTML = d.liveTradingAllowed ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>';
+    }
+    const liveConfigEl = document.getElementById('dLiveMt5Config');
+    if (liveConfigEl) {
+      const config = d.liveConnection && d.liveConnection.config;
+      const match = d.liveConnection && d.liveConnection.accountConfigMatch;
+      const configuredAccount = config
+        ? (escapeHtml(config.login || '--') + '@' + escapeHtml(config.server || '--'))
+        : '--';
+      const sourceNote = config && config.usesLegacy
+        ? ' <span style="color:var(--yellow)">(legacy fallback)</span>'
+        : '';
+      const pathNote = config && config.pathConfigured
+        ? ' <span style="color:var(--text2)">(path set)</span>'
+        : ' <span style="color:var(--yellow)">(no path)</span>';
+      const matchNote = match && match.matches === false
+        ? '<div style="color:var(--red);margin-top:4px">' + escapeHtml(d.liveConnection.warning || 'Connected account does not match configured live account') + '</div>'
+        : '';
+      liveConfigEl.innerHTML = configuredAccount + sourceNote + pathNote + matchNote;
+    }
     document.getElementById('dRiskProfile').innerHTML = d.risk && d.risk.activeRiskProfileName
       ? '<strong>' + d.risk.activeRiskProfileName + '</strong>' + (d.risk.allowAggressiveMinLot ? ' <span style="color:var(--yellow)">(Aggressive Min Lot)</span>' : '')
       : '--';
@@ -2503,11 +2621,64 @@ async function toggleTrading() {
   const isRunning = btn.textContent === 'Stop Trading';
   try {
     btn.disabled = true;
-    if (isRunning) { await api('/api/trading/stop', 'POST'); }
-    else { await api('/api/trading/start', 'POST'); }
+    let r;
+    if (isRunning) {
+      r = await api('/api/trading/stop', 'POST');
+    } else {
+      const confirmed = confirm(
+        'Start LIVE trading on the connected REAL MT5 account?\n\n' +
+        'This will set ALLOW_LIVE_TRADING=true in the backend and persist it to .env.'
+      );
+      if (!confirmed) return;
+      r = await api('/api/trading/start', 'POST', {
+        allowLiveTrading: true,
+        persistAllowLiveTrading: true,
+      });
+    }
+    if (!r.success) {
+      alert(formatTradingToggleError(r, isRunning));
+      return;
+    }
     setTimeout(loadDashboard, 500);
   } catch (e) { alert(e.message); }
   finally { btn.disabled = false; }
+}
+
+function formatTradingToggleError(response, isStopping=false) {
+  const fallback = isStopping ? 'Failed to stop live trading' : 'Failed to start live trading';
+  const lines = [response.message || fallback];
+  const data = response.data || {};
+  const diagnostics = data.diagnostics || {};
+  const config = diagnostics.config || (data.liveConnection && data.liveConnection.config) || null;
+
+  if (config) {
+    lines.push('');
+    lines.push('Live MT5 config:');
+    lines.push('- Account: ' + (config.login || '--') + '@' + (config.server || '--'));
+    lines.push('- Path: ' + (config.pathConfigured ? (config.path || 'configured') : 'NOT SET'));
+    if (config.usesLegacy) lines.push('- Warning: using legacy MT5_* fallback');
+  }
+
+  const peer = diagnostics.peer;
+  if (peer && peer.connected) {
+    lines.push('- Paper/runtime peer connected: ' + peer.scope + ' ' + (peer.login || '--') + '@' + (peer.server || '--'));
+  }
+
+  const likelyReasons = diagnostics.likelyReasons || [];
+  if (likelyReasons.length > 0) {
+    lines.push('');
+    lines.push('Likely reasons:');
+    likelyReasons.slice(0, 4).forEach((reason) => lines.push('- ' + reason));
+  }
+
+  const nextSteps = data.nextSteps || [];
+  if (nextSteps.length > 0) {
+    lines.push('');
+    lines.push('Next steps:');
+    nextSteps.forEach((step) => lines.push('- ' + step));
+  }
+
+  return lines.join('\n');
 }
 
 async function togglePaperTrading() {
@@ -2864,16 +3035,75 @@ async function loadTradeStats() {
 }
 
 // --- Strategies ---
+function getStrategyRuntimeScope() {
+  return strategyRuntimeScope === 'live' ? 'live' : 'paper';
+}
+
+function getStrategyScopeEnabled(row, scope = getStrategyRuntimeScope()) {
+  if (scope === 'live') {
+    return row && row.liveEnabled === true;
+  }
+  if (row && row.paperEnabled !== undefined) {
+    return row.paperEnabled !== false;
+  }
+  return row && row.instanceEnabled !== false;
+}
+
+function getStrategyScopeEnabledField(scope = getStrategyRuntimeScope()) {
+  return scope === 'live' ? 'liveEnabled' : 'paperEnabled';
+}
+
+function updateStrategyRuntimeScopeUi() {
+  const scope = getStrategyRuntimeScope();
+  const paperBtn = document.getElementById('strategyScopePaperBtn');
+  const liveBtn = document.getElementById('strategyScopeLiveBtn');
+  const summary = document.getElementById('strategyRuntimeScopeSummary');
+  const title = document.getElementById('strategyRuntimeMatrixTitle');
+  const hint = document.getElementById('strategyRuntimeMatrixHint');
+  const saveBtn = document.getElementById('strategyRuntimeMatrixSaveBtn');
+  const scopeLabel = scope === 'live' ? 'Live' : 'Paper';
+  if (paperBtn) paperBtn.className = scope === 'paper' ? 'btn-primary btn-sm' : 'btn-outline btn-sm';
+  if (liveBtn) liveBtn.className = scope === 'live' ? 'btn-primary btn-sm' : 'btn-outline btn-sm';
+  if (title) title.textContent = scopeLabel + ' Runtime Matrix';
+  if (saveBtn) saveBtn.textContent = 'Save ' + scopeLabel + ' Runtime';
+  if (hint) {
+    hint.textContent = scope === 'live'
+      ? 'This matrix only turns live strategy runtime on/off. Saving here will not change paper runtime switches.'
+      : 'This matrix only turns paper strategy runtime on/off. Saving here will not change live runtime switches.';
+  }
+  if (summary) {
+    summary.textContent = scope === 'live'
+      ? 'Editing live strategy enablement. Live starts with all assignments disabled until you explicitly enable them.'
+      : 'Editing paper strategy enablement. Parameters and risk settings remain shared with live in this version.';
+  }
+}
+
+async function setStrategyRuntimeScope(scope) {
+  strategyRuntimeScope = scope === 'live' ? 'live' : 'paper';
+  updateStrategyRuntimeScopeUi();
+  try {
+    const matrix = await fetchStrategyRuntimeMatrix(true);
+    renderStrategyRuntimeMatrix(matrix);
+  } catch (e) {
+    const el = document.getElementById('strategyRuntimeMatrix');
+    if (el) el.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message || 'Failed to load runtime matrix') + '</div>';
+  }
+  renderParametersLibrary();
+}
+
 async function loadStrategies() {
   try {
-    const [data, assignments] = await Promise.all([
+    const [data, assignments, runtimeMatrix] = await Promise.all([
       fetchStrategyConfigs(true),
       fetchStrategyAssignments(true),
+      fetchStrategyRuntimeMatrix(true),
     ]);
-    renderStrategyAssignments(assignments);
+    renderStrategyRuntimeMatrix(runtimeMatrix);
     renderStrategyCards(data);
+    updateStrategyRuntimeScopeUi();
     refreshStrategyStickyTracker();
   } catch (e) {
+    updateStrategyRuntimeScopeUi();
     refreshStrategyStickyTracker();
   }
 
@@ -2899,7 +3129,7 @@ function renderStrategyCards(data) {
   }
 
   let html = '<div style="margin-bottom:12px;padding:12px 14px;border:1px solid rgba(59,130,246,.35);border-radius:8px;background:rgba(59,130,246,.08);color:var(--text)">'
-    + 'Runtime settings now live per assignment. Use the Symbol Assignments matrix to choose where a strategy runs, then open a row in Parameters Library to edit enabled state, parameters, news blackout, and execution policy for that exact (symbol, strategy) pair.'
+    + 'Runtime matrix switches are scoped. Paper saves only paperEnabled; Live saves only liveEnabled. Open a Parameters Library row for parameters, news blackout, breakeven, and execution policy.'
     + '</div>';
   data.forEach(s => {
     const effectiveBreakeven = getNormalizedBreakeven(s.effectiveBreakeven);
@@ -3033,10 +3263,11 @@ function getParametersLibraryFilteredRows() {
     if (strategyFilter && row.strategyName !== strategyFilter) {
       return false;
     }
-    if (enabledFilter === 'enabled' && row.instanceEnabled !== true) {
+    const scopeEnabled = getStrategyScopeEnabled(row);
+    if (enabledFilter === 'enabled' && scopeEnabled !== true) {
       return false;
     }
-    if (enabledFilter === 'disabled' && row.instanceEnabled !== false) {
+    if (enabledFilter === 'disabled' && scopeEnabled !== false) {
       return false;
     }
 
@@ -3066,12 +3297,14 @@ function renderParametersLibrary() {
 
   let html = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Showing ' + rows.length + ' of ' + ((parametersLibraryState.rows || []).length) + ' assigned pairs</div>';
   html += '<div style="overflow-x:auto"><table>';
-  html += '<tr><th>Symbol</th><th>Strategy</th><th>Status</th><th>Source</th><th>Risk %</th><th>SL xATR</th><th>TP xATR</th><th>Breakeven</th><th>News Blackout</th><th>View</th></tr>';
+  const scope = getStrategyRuntimeScope();
+  html += '<tr><th>Symbol</th><th>Strategy</th><th>' + (scope === 'live' ? 'Live Status' : 'Paper Status') + '</th><th>Source</th><th>Risk %</th><th>SL xATR</th><th>TP xATR</th><th>Breakeven</th><th>News Blackout</th><th>View</th></tr>';
   rows.forEach((row, index) => {
+    const scopeEnabled = getStrategyScopeEnabled(row, scope);
     html += '<tr>';
     html += '<td><strong>' + escapeHtml(row.symbol || '--') + '</strong></td>';
     html += '<td>' + escapeHtml(row.strategyDisplayName || row.strategyName || '--') + '</td>';
-    html += '<td>' + badge(row.instanceEnabled ? 'ENABLED' : 'DISABLED', row.instanceEnabled ? 'var(--green)' : 'var(--red)') + '</td>';
+    html += '<td>' + badge(scopeEnabled ? 'ENABLED' : 'DISABLED', scopeEnabled ? 'var(--green)' : 'var(--red)') + '</td>';
     html += '<td>' + escapeHtml(row.parameterSource || '--') + '</td>';
     html += '<td>' + formatParametersLibraryRiskPercent(row.riskParameters && row.riskParameters.riskPercentPct) + '</td>';
     html += '<td>' + escapeHtml((row.riskParameters && row.riskParameters.slMultiplier) != null ? row.riskParameters.slMultiplier : '--') + '</td>';
@@ -3223,10 +3456,11 @@ function resetParametersLibraryDetail() {
 
 function renderParametersLibraryDetailModal(row) {
   if (!row) return;
-  parametersLibraryDetailState = { row };
+  const scope = getStrategyRuntimeScope();
+  parametersLibraryDetailState = { row, scope };
 
   closeParametersLibraryDetail();
-  parametersLibraryDetailState = { row };
+  parametersLibraryDetailState = { row, scope };
 
   const overlay = document.createElement('div');
   overlay.id = 'parametersLibraryDetailOverlay';
@@ -3238,6 +3472,8 @@ function renderParametersLibraryDetailModal(row) {
   const breakevenOverrideActive = Boolean(row.storedTradeManagement && row.storedTradeManagement.breakevenOverride);
   const executionPolicyOverrideActive = Boolean(row.storedExecutionPolicy);
   const effectiveExitPlan = JSON.stringify(row.effectiveExitPlan || {}, null, 2);
+  const scopeEnabled = getStrategyScopeEnabled(row, scope);
+  const scopeLabel = scope === 'live' ? 'Live' : 'Paper';
 
   overlay.innerHTML =
     '<div class="modal" style="max-width:880px;max-height:85vh;overflow:auto">'
@@ -3264,7 +3500,7 @@ function renderParametersLibraryDetailModal(row) {
     + escapeHtml(formatParametersLibraryBlackout(row.newsBlackout))
     + '</div>'
     + '<div id="parametersLibraryDetailStatus" style="font-size:12px;color:var(--text2);margin-bottom:12px"></div>'
-    + '<div class="form-group"><label>Assignment Enabled</label><label class="toggle" style="margin-top:8px"><input type="checkbox" id="assignmentDetailEnabled" ' + (row.instanceEnabled ? 'checked ' : '') + '><span class="slider"></span></label></div>'
+    + '<div class="form-group"><label>' + scopeLabel + ' Assignment Enabled</label><label class="toggle" style="margin-top:8px"><input type="checkbox" id="assignmentDetailEnabled" ' + (scopeEnabled ? 'checked ' : '') + '><span class="slider"></span></label></div>'
     + '<div class="section-subtitle">Parameters</div>'
     + '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
     + '<div style="font-size:12px;color:var(--text2)">Saving parameters here only affects ' + escapeHtml(row.symbol || '--') + ' / ' + escapeHtml(row.strategyDisplayName || row.strategyName || '--') + '.</div>'
@@ -3342,6 +3578,8 @@ async function saveParametersLibraryDetail() {
   if (!state || !state.row) return;
 
   const row = state.row;
+  const scope = state.scope === 'live' ? 'live' : 'paper';
+  const enabledField = getStrategyScopeEnabledField(scope);
   const useBreakevenDefaults = Boolean(document.getElementById('assignmentDetailBreakevenDefaults')?.checked);
   const useExecutionDefaults = Boolean(document.getElementById('assignmentDetailExecutionDefaults')?.checked);
   const tradeManagement = {
@@ -3351,23 +3589,31 @@ async function saveParametersLibraryDetail() {
 
   try {
     setParametersLibraryDetailStatus('Saving runtime settings...', 'muted');
+    const payload = {
+      parameters: collectParameterInputs('assignParam'),
+      newsBlackout: collectAssignmentDetailNewsBlackout(),
+      tradeManagement,
+      executionPolicy: useExecutionDefaults ? null : collectAssignmentExecutionPolicyFormValues(),
+    };
+    payload[enabledField] = Boolean(document.getElementById('assignmentDetailEnabled')?.checked);
     const response = await api(
-      '/api/strategy-instances/' + encodeURIComponent(row.strategyName) + '/' + encodeURIComponent(row.symbol),
+      '/api/strategy-instances/' + encodeURIComponent(row.strategyName) + '/' + encodeURIComponent(row.symbol) + '?scope=' + encodeURIComponent(scope),
       'PUT',
-      {
-        enabled: Boolean(document.getElementById('assignmentDetailEnabled')?.checked),
-        parameters: collectParameterInputs('assignParam'),
-        newsBlackout: collectAssignmentDetailNewsBlackout(),
-        tradeManagement,
-        executionPolicy: useExecutionDefaults ? null : collectAssignmentExecutionPolicyFormValues(),
-      }
+      payload
     );
     if (!response.success) {
       throw new Error(response.message || 'Failed to save runtime settings');
     }
 
+    const changes = buildRuntimeSettingsChanges(row, payload, scope, response.data || null);
     await loadStrategies();
     closeParametersLibraryDetail();
+    showSaveChangesModal({
+      title: 'Saved ' + getScopeLabel(scope) + ' Runtime Settings',
+      scope,
+      changes,
+      unchangedMessage: 'Saved runtime settings, but no visible values changed.',
+    });
     wsLog('success', 'Saved runtime settings for ' + row.strategyName + ' @ ' + row.symbol);
   } catch (e) {
     setParametersLibraryDetailStatus(e.message || 'Failed to save runtime settings', 'error');
@@ -3451,33 +3697,246 @@ function syncStrategyAssignmentsStickyOffsets() {
   syncStrategyAssignmentsStickyLayout();
 }
 
-function renderStrategyAssignments(assignments) {
-  const el = document.getElementById('strategyAssignments');
-  if (!assignments || !Array.isArray(assignments.symbols) || !Array.isArray(assignments.strategies)) {
-    el.innerHTML = '<div class="empty">No assignment data available</div>';
+function getScopeLabel(scope = getStrategyRuntimeScope()) {
+  return scope === 'live' ? 'Live' : 'Paper';
+}
+
+function sortForStableJson(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortForStableJson);
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((acc, key) => {
+      acc[key] = sortForStableJson(value[key]);
+      return acc;
+    }, {});
+  }
+  return value;
+}
+
+function stableStringify(value) {
+  return JSON.stringify(sortForStableJson(value === undefined ? null : value));
+}
+
+function valuesDiffer(left, right) {
+  return stableStringify(left) !== stableStringify(right);
+}
+
+function normalizeOptionalConfig(value) {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) {
+    return value.map(normalizeOptionalConfig);
+  }
+  if (value && typeof value === 'object') {
+    const normalized = {};
+    Object.entries(value).forEach(([key, childValue]) => {
+      const child = normalizeOptionalConfig(childValue);
+      if (child === null || child === undefined) return;
+      normalized[key] = child;
+    });
+    return Object.keys(normalized).length > 0 ? normalized : null;
+  }
+  return value;
+}
+
+function formatChangeValue(value) {
+  if (value === true) return 'ON';
+  if (value === false) return 'OFF';
+  if (value === null || value === undefined) return '--';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  return JSON.stringify(sortForStableJson(value));
+}
+
+function buildRuntimeMatrixChanges(beforeBySymbol = {}, afterBySymbol = {}, scope = getStrategyRuntimeScope(), strategies = []) {
+  const strategyLabels = Object.fromEntries((strategies || []).map((strategy) => [
+    strategy.name,
+    strategy.displayName || strategy.name,
+  ]));
+  const symbols = new Set([
+    ...Object.keys(beforeBySymbol || {}),
+    ...Object.keys(afterBySymbol || {}),
+  ]);
+  const changes = [];
+
+  symbols.forEach((symbol) => {
+    const names = new Set([
+      ...((beforeBySymbol && beforeBySymbol[symbol]) || []),
+      ...((afterBySymbol && afterBySymbol[symbol]) || []),
+    ]);
+    names.forEach((strategyName) => {
+      const before = Array.isArray(beforeBySymbol[symbol]) && beforeBySymbol[symbol].includes(strategyName);
+      const after = Array.isArray(afterBySymbol[symbol]) && afterBySymbol[symbol].includes(strategyName);
+      if (before === after) return;
+      changes.push({
+        scope,
+        symbol,
+        strategyName,
+        strategyDisplayName: strategyLabels[strategyName] || strategyName,
+        before,
+        after,
+        action: after ? 'enabled' : 'disabled',
+      });
+    });
+  });
+
+  return changes;
+}
+
+function buildRuntimeSettingsChanges(row, payload, scope, responseData) {
+  const changes = [];
+  const scopeLabel = getScopeLabel(scope);
+  const enabledField = getStrategyScopeEnabledField(scope);
+  const beforeEnabled = getStrategyScopeEnabled(row, scope) === true;
+  const afterEnabled = responseData
+    ? getStrategyScopeEnabled(responseData, scope) === true
+    : Boolean(payload[enabledField]);
+
+  if (beforeEnabled !== afterEnabled) {
+    changes.push({
+      label: scopeLabel + ' Assignment Enabled',
+      before: beforeEnabled,
+      after: afterEnabled,
+    });
+  }
+  if (valuesDiffer(row.effectiveParameters || {}, payload.parameters || {})) {
+    changes.push({
+      label: 'Parameters',
+      before: row.effectiveParameters || {},
+      after: payload.parameters || {},
+    });
+  }
+  if (valuesDiffer(row.newsBlackout || null, payload.newsBlackout || null)) {
+    changes.push({
+      label: 'News Blackout',
+      before: row.newsBlackout || null,
+      after: payload.newsBlackout || null,
+    });
+  }
+  const beforeTradeManagement = normalizeOptionalConfig(row.storedTradeManagement);
+  const afterTradeManagement = normalizeOptionalConfig(payload.tradeManagement);
+  if (valuesDiffer(beforeTradeManagement, afterTradeManagement)) {
+    changes.push({
+      label: 'Trade Management',
+      before: beforeTradeManagement,
+      after: afterTradeManagement,
+    });
+  }
+  const beforeExecutionPolicy = normalizeOptionalConfig(row.storedExecutionPolicy);
+  const afterExecutionPolicy = normalizeOptionalConfig(payload.executionPolicy);
+  if (valuesDiffer(beforeExecutionPolicy, afterExecutionPolicy)) {
+    changes.push({
+      label: 'Execution Policy',
+      before: beforeExecutionPolicy,
+      after: afterExecutionPolicy,
+    });
+  }
+
+  return changes;
+}
+
+function normalizeSaveModalChange(change) {
+  if (change && change.symbol && change.strategyName) {
+    return {
+      label: change.symbol + ' / ' + (change.strategyDisplayName || change.strategyName),
+      before: change.before === true ? 'ON' : 'OFF',
+      after: change.after === true ? 'ON' : 'OFF',
+      detail: change.createdConfiguration ? 'New strategy configuration created' : '',
+    };
+  }
+
+  return {
+    label: (change && (change.label || change.field)) || 'Change',
+    before: formatChangeValue(change && change.before),
+    after: formatChangeValue(change && change.after),
+    detail: (change && change.detail) || '',
+  };
+}
+
+function showSaveChangesModal({ title, scope, changes, summary, unchangedMessage }) {
+  const overlay = document.getElementById('saveChangesModal');
+  const titleEl = document.getElementById('saveChangesModalTitle');
+  const metaEl = document.getElementById('saveChangesModalMeta');
+  const bodyEl = document.getElementById('saveChangesModalBody');
+  if (!overlay || !titleEl || !metaEl || !bodyEl) return;
+
+  const normalizedChanges = (changes || []).map(normalizeSaveModalChange);
+  titleEl.textContent = title || 'Saved Changes';
+  metaEl.textContent = scope
+    ? (getScopeLabel(scope) + ' scope saved. Review the exact changes below.')
+    : 'Review the exact changes below.';
+
+  let html = '';
+  if (summary) {
+    html += '<div class="grid grid-4" style="gap:8px;margin-bottom:12px">';
+    html += '<div class="portfolio-cell"><div class="label">Changed</div><div class="value">' + escapeHtml(summary.changedCount != null ? summary.changedCount : normalizedChanges.length) + '</div></div>';
+    html += '<div class="portfolio-cell"><div class="label">Enabled</div><div class="value pos">' + escapeHtml(summary.enabledCount != null ? summary.enabledCount : '--') + '</div></div>';
+    html += '<div class="portfolio-cell"><div class="label">Disabled</div><div class="value neg">' + escapeHtml(summary.disabledCount != null ? summary.disabledCount : '--') + '</div></div>';
+    html += '<div class="portfolio-cell"><div class="label">New Config</div><div class="value">' + escapeHtml(summary.createdConfigurationCount != null ? summary.createdConfigurationCount : '--') + '</div></div>';
+    html += '</div>';
+  }
+
+  if (normalizedChanges.length === 0) {
+    html += '<div class="empty">' + escapeHtml(unchangedMessage || 'Saved successfully. No visible values changed.') + '</div>';
+  } else {
+    html += '<div style="overflow-x:auto"><table><tr><th>Field</th><th>Before</th><th>After</th><th>Detail</th></tr>';
+    normalizedChanges.forEach((change) => {
+      html += '<tr>';
+      html += '<td><strong>' + escapeHtml(change.label) + '</strong></td>';
+      html += '<td style="max-width:240px;word-break:break-word">' + escapeHtml(change.before) + '</td>';
+      html += '<td style="max-width:240px;word-break:break-word">' + escapeHtml(change.after) + '</td>';
+      html += '<td>' + escapeHtml(change.detail || '') + '</td>';
+      html += '</tr>';
+    });
+    html += '</table></div>';
+  }
+
+  bodyEl.innerHTML = html;
+  overlay.classList.add('show');
+}
+
+function closeSaveChangesModal() {
+  const overlay = document.getElementById('saveChangesModal');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function renderStrategyRuntimeMatrix(matrix) {
+  const el = document.getElementById('strategyRuntimeMatrix');
+  if (!el) return;
+  if (!matrix || !Array.isArray(matrix.symbols) || !Array.isArray(matrix.strategies)) {
+    el.innerHTML = '<div class="empty">No runtime matrix data available</div>';
     syncStrategyAssignmentsStickyOffsets();
     return;
   }
 
-  if (assignments.symbols.length === 0 || assignments.strategies.length === 0) {
+  if (matrix.symbols.length === 0 || matrix.strategies.length === 0) {
     el.innerHTML = '<div class="empty">No symbols or strategies available</div>';
     syncStrategyAssignmentsStickyOffsets();
     return;
   }
 
-  const colGroup = buildStrategyAssignmentsColGroup(assignments.strategies);
-  const headerCells = buildStrategyAssignmentsHeaderCells(assignments.strategies);
-  let html = '<div class="strategy-assignments-columns-sticky"><div class="strategy-assignments-columns-track">';
+  const scope = matrix.scope === 'live' ? 'live' : 'paper';
+  const scopeLabel = scope === 'live' ? 'Live' : 'Paper';
+  const colGroup = buildStrategyAssignmentsColGroup(matrix.strategies);
+  const headerCells = buildStrategyAssignmentsHeaderCells(matrix.strategies);
+  const enabledBySymbol = strategyRuntimeMatrixDraft || {};
+  let html = '';
+  if (matrix.warning) {
+    html += '<div style="margin-bottom:12px;padding:10px 12px;border:1px solid rgba(245,158,11,.35);border-radius:8px;background:rgba(245,158,11,.12);color:var(--yellow);font-size:12px;line-height:1.6">'
+      + escapeHtml(matrix.warning)
+      + '</div>';
+  }
+  html += '<div class="strategy-assignments-columns-sticky"><div class="strategy-assignments-columns-track">';
   html += '<table class="strategy-assignments-table strategy-assignments-columns-table">' + colGroup + '<thead><tr>' + headerCells + '</tr></thead></table>';
   html += '</div></div>';
   html += '<div class="strategy-assignments-scroll">';
   html += '<table class="strategy-assignments-table strategy-assignments-body">' + colGroup + '<tbody>';
 
-  assignments.symbols.forEach((symbol) => {
+  matrix.symbols.forEach((symbol) => {
     html += '<tr><td><strong>' + escapeHtml(symbol) + '</strong></td>';
-    assignments.strategies.forEach((strategy) => {
-      const checked = Array.isArray(strategyAssignmentsDraft[symbol]) && strategyAssignmentsDraft[symbol].includes(strategy.name);
-      html += '<td><input type="checkbox" ' + (checked ? 'checked ' : '') + 'style="width:auto" onchange="toggleStrategyAssignment(\'' + symbol + '\', \'' + strategy.name + '\', this.checked)"></td>';
+    matrix.strategies.forEach((strategy) => {
+      const checked = Array.isArray(enabledBySymbol[symbol]) && enabledBySymbol[symbol].includes(strategy.name);
+      const title = scopeLabel + ' runtime: ' + symbol + ' / ' + (strategy.displayName || strategy.name);
+      html += '<td><input type="checkbox" title="' + escapeHtml(title) + '" ' + (checked ? 'checked ' : '') + 'style="width:auto" onchange="toggleStrategyRuntimeMatrix(\'' + escapeJsString(symbol) + '\', \'' + escapeJsString(strategy.name) + '\', this.checked)"></td>';
     });
     html += '</tr>';
   });
@@ -3491,39 +3950,66 @@ function renderStrategyAssignments(assignments) {
   requestAnimationFrame(() => syncStrategyAssignmentsStickyLayout(scroll));
 }
 
-function toggleStrategyAssignment(symbol, strategyName, checked) {
-  const current = new Set(Array.isArray(strategyAssignmentsDraft[symbol]) ? strategyAssignmentsDraft[symbol] : []);
+function toggleStrategyRuntimeMatrix(symbol, strategyName, checked) {
+  const current = new Set(Array.isArray(strategyRuntimeMatrixDraft[symbol]) ? strategyRuntimeMatrixDraft[symbol] : []);
   if (checked) current.add(strategyName);
   else current.delete(strategyName);
-  strategyAssignmentsDraft[symbol] = Array.from(current);
+  strategyRuntimeMatrixDraft[symbol] = Array.from(current);
 }
 
-async function resetStrategyAssignments() {
+async function resetStrategyRuntimeMatrix() {
   try {
-    const assignments = await fetchStrategyAssignments(true);
-    renderStrategyAssignments(assignments);
+    const matrix = await fetchStrategyRuntimeMatrix(true);
+    renderStrategyRuntimeMatrix(matrix);
   } catch (e) {
     alert(e.message);
   }
 }
 
-async function saveStrategyAssignments() {
+async function saveStrategyRuntimeMatrix() {
+  const scope = getStrategyRuntimeScope();
+  const scopeLabel = scope === 'live' ? 'Live' : 'Paper';
+  if (strategyRuntimeMatrixState && strategyRuntimeMatrixState.warning) {
+    alert('Runtime matrix save API is not active yet. Please restart the Node server, then refresh this page before saving.');
+    return;
+  }
+  const beforeEnabledBySymbol = JSON.parse(JSON.stringify((strategyRuntimeMatrixState && strategyRuntimeMatrixState.enabledBySymbol) || {}));
   try {
-    const r = await api('/api/strategies/assignments', 'PUT', {
-      assignmentsBySymbol: strategyAssignmentsDraft,
+    const r = await api('/api/strategy-instances/runtime-matrix', 'PUT', {
+      enabledBySymbol: strategyRuntimeMatrixDraft,
+      scope,
     });
-    if (!r.success) throw new Error(r.message || 'Failed to save assignments');
+    if (!r.success) throw new Error(r.message || 'Failed to save runtime matrix');
 
-    strategyAssignmentsState = r.data;
-    strategyAssignmentsDraft = JSON.parse(JSON.stringify(r.data.assignmentsBySymbol || {}));
+    strategyRuntimeMatrixState = r.data;
+    strategyRuntimeMatrixDraft = JSON.parse(JSON.stringify(r.data.enabledBySymbol || {}));
     setAvailableSymbols(r.data.symbols || []);
     await fetchStrategyConfigs(true);
-    renderStrategyAssignments(strategyAssignmentsState);
+    await loadParametersLibrary(true);
+    renderStrategyRuntimeMatrix(strategyRuntimeMatrixState);
     renderStrategyCards(strategyConfigs);
-    wsLog('success', 'Saved strategy assignments');
+    const changes = Array.isArray(r.data.changes) && r.data.changes.length > 0
+      ? r.data.changes
+      : buildRuntimeMatrixChanges(beforeEnabledBySymbol, r.data.enabledBySymbol || {}, scope, r.data.strategies || []);
+    showSaveChangesModal({
+      title: 'Saved ' + scopeLabel + ' Runtime Matrix',
+      scope,
+      changes,
+      summary: r.data.summary || null,
+      unchangedMessage: 'No ' + scopeLabel.toLowerCase() + ' runtime switches changed.',
+    });
+    wsLog('success', 'Saved ' + scopeLabel.toLowerCase() + ' runtime matrix');
   } catch (e) {
     alert(e.message);
   }
+}
+
+function resetStrategyAssignments() {
+  return resetStrategyRuntimeMatrix();
+}
+
+function saveStrategyAssignments() {
+  return saveStrategyRuntimeMatrix();
 }
 
 // --- Backtest ---
@@ -3820,13 +4306,13 @@ function renderAllStrategiesResult(data) {
   html += ' | each strategy uses its saved parameters';
   html += '</div>';
   html += '<table><thead><tr>';
-  html += '<th>Strategy</th><th>TF</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Net P/L</th><th>Return</th>';
+  html += '<th>Strategy</th><th>TF</th><th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Net P/L</th><th>Return</th>';
   html += '</tr></thead><tbody>';
   rows.forEach((row) => {
     const label = escapeHtml(row.displayName || row.strategyType);
     const tf = escapeHtml(row.timeframe || '--');
     if (row.error) {
-      html += '<tr><td>' + label + '</td><td>' + tf + '</td><td colspan="5" style="color:' + red + '">' + escapeHtml(row.error) + '</td></tr>';
+      html += '<tr><td>' + label + '</td><td>' + tf + '</td><td colspan="6" style="color:' + red + '">' + escapeHtml(row.error) + '</td></tr>';
       return;
     }
     const s = row.summary || {};
@@ -3843,6 +4329,7 @@ function renderAllStrategiesResult(data) {
     html += '<td>' + tf + '</td>';
     html += '<td>' + (s.totalTrades !== undefined ? s.totalTrades : '--') + '</td>';
     html += '<td style="color:' + wrColor + '">' + wr + '</td>';
+    html += '<td>' + fmtBreakevenCompact(s) + '</td>';
     html += '<td style="color:' + pfColor + '">' + pf + '</td>';
     html += '<td style="color:' + netColor + '">' + net + '</td>';
     html += '<td style="color:' + retColor + '">' + ret + '</td>';
@@ -3979,16 +4466,47 @@ function buildHistoricalBacktestRenderMeta(detail) {
   };
 }
 
+function hasNumericMetric(value) {
+  return value !== undefined && value !== null && Number.isFinite(Number(value));
+}
+
+function fmtRate(value, decimals=1) {
+  return hasNumericMetric(value) ? (Number(value) * 100).toFixed(decimals) + '%' : '--';
+}
+
+function fmtBreakevenCompact(summary) {
+  const s = summary || {};
+  return 'Exit ' + fmtRate(s.breakevenExitRate)
+    + '<div class="batch-table-note">Trigger ' + fmtRate(s.breakevenTriggerRate)
+    + ' | Req ' + fmtRate(s.requiredBreakevenWinRate) + '</div>';
+}
+
+function renderBreakevenSummaryRows(summary) {
+  const s = summary || {};
+  return '<tr><td style="color:var(--text2)">BE Exit Rate</td><td>' + fmtRate(s.breakevenExitRate) + ' <span style="color:var(--text2)">(' + (s.breakevenExitTrades != null ? s.breakevenExitTrades : '--') + ' trades)</span></td></tr>'
+    + '<tr><td style="color:var(--text2)">BE Trigger Rate</td><td>' + fmtRate(s.breakevenTriggerRate) + ' <span style="color:var(--text2)">(' + (s.breakevenTriggeredTrades != null ? s.breakevenTriggeredTrades : '--') + ' trades)</span></td></tr>'
+    + '<tr><td style="color:var(--text2)">Required BE Win Rate</td><td>' + fmtRate(s.requiredBreakevenWinRate) + '</td></tr>';
+}
+
+function renderNeutralOutcomeSummaryRow(summary) {
+  const s = summary || {};
+  return '<tr><td style="color:var(--text2)">Neutral Trades</td><td>'
+    + (s.neutralTrades != null ? s.neutralTrades : '--')
+    + ' <span style="color:var(--text2)">(' + fmtRate(s.neutralRate) + ')</span></td></tr>';
+}
+
 function renderBacktestResult(data, resultElementId='btResult', canvasId='equityCanvas', overrideMeta=null) {
   const s = data.summary;
   const fallbackTradeEvents = normalizeBacktestTradeEvents(data.trades);
   let html = '<table>';
   html += '<tr><td style="color:var(--text2)">Total Trades</td><td>' + s.totalTrades + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Win Rate</td><td style="color:' + (s.winRate>=0.5?'var(--green)':'var(--red)') + '">' + (s.winRate*100).toFixed(1) + '%</td></tr>';
+  html += renderNeutralOutcomeSummaryRow(s);
   html += '<tr><td style="color:var(--text2)">Profit Factor</td><td style="color:' + (s.profitFactor>=1?'var(--green)':'var(--red)') + '">' + s.profitFactor + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Return</td><td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td></tr>';
   html += '<tr><td style="color:var(--text2)">Net Profit</td><td>$' + num(s.netProfitMoney) + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td style="color:var(--red)">' + s.maxDrawdownPercent + '%</td></tr>';
+  html += renderBreakevenSummaryRows(s);
   html += '<tr><td style="color:var(--text2)">Sharpe Ratio</td><td>' + s.sharpeRatio + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Avg Win</td><td style="color:var(--green)">' + s.averageWinPips + ' pips</td></tr>';
   html += '<tr><td style="color:var(--text2)">Avg Loss</td><td style="color:var(--red)">' + s.averageLossPips + ' pips</td></tr>';
@@ -4602,13 +5120,14 @@ async function loadBacktestHistory() {
     if (!r.success) return;
     const el = document.getElementById('btHistory');
     if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No previous backtests</div>'; return; }
-    let html = '<table class="backtest-history-table"><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th><th>Action</th></tr>';
+    let html = '<table class="backtest-history-table"><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Action</th></tr>';
     r.data.forEach(b => {
       const s = b.summary;
       const rowClass = 'backtest-history-row' + (String(activeHistoricalBacktestId || '') === String(b._id) ? ' active' : '');
       html += '<tr class="' + rowClass + '" data-backtest-id="' + escapeHtml(String(b._id)) + '" onclick="loadHistoricalBacktest(\'' + escapeJsString(String(b._id)) + '\')"><td>' + fmtTime(b.createdAt) + '</td><td>' + b.symbol + '</td><td>' + b.strategy + '</td>';
       html += '<td>' + s.totalTrades + '</td>';
       html += '<td>' + (s.winRate*100).toFixed(1) + '%</td>';
+      html += '<td>' + fmtBreakevenCompact(s) + '</td>';
       html += '<td>' + s.profitFactor + '</td>';
       html += '<td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td>';
       html += '<td class="actions"><button class="btn-danger btn-sm" onclick="deleteBacktestResult(event, \'' + escapeJsString(String(b._id)) + '\', \'' + escapeJsString(b.symbol + ' / ' + b.strategy) + '\')">Delete</button></td></tr>';
@@ -4959,6 +5478,9 @@ function renderBatchPortfolioSummary(job) {
   grid += portfolioCell('Total Trades', num(portfolio.totalTrades), '', portfolio.winningTrades + ' W / ' + portfolio.losingTrades + ' L');
   grid += portfolioCell('Win Rate', winPct + '%', '', 'Aggregate (wins / total trades)');
   grid += portfolioCell('Loss Rate', lossPct + '%', '', 'Aggregate (losses / total trades)');
+  grid += portfolioCell('BE Exit Rate', fmtRate(portfolio.breakevenExitRate), '', (portfolio.breakevenExitTrades != null ? portfolio.breakevenExitTrades : '--') + ' BE exits');
+  grid += portfolioCell('BE Trigger Rate', fmtRate(portfolio.breakevenTriggerRate), '', (portfolio.breakevenTriggeredTrades != null ? portfolio.breakevenTriggeredTrades : '--') + ' protected trades');
+  grid += portfolioCell('Required BE Win', fmtRate(portfolio.requiredBreakevenWinRate), '', 'Net avg win/loss');
   grid += portfolioCell('Profit Factor', num(portfolio.profitFactor), pfTone, '$' + num(portfolio.grossProfitMoney) + ' / $' + num(portfolio.grossLossMoney));
   grid += portfolioCell('Avg Trade', '$' + num(portfolio.avgTradeMoney), portfolio.avgTradeMoney >= 0 ? 'pos' : 'neg');
   grid += portfolioCell('Avg Max DD', num(portfolio.avgMaxDrawdownPercent) + '%', '', 'Mean per-run max drawdown');
@@ -5026,6 +5548,9 @@ function renderSharedPortfolioSummary(job) {
   grid += portfolioCell('Total Trades', num(s.totalTrades), '', s.winningTrades + ' W / ' + s.losingTrades + ' L');
   grid += portfolioCell('Win Rate', (s.winRate * 100).toFixed(2) + '%', '', 'Wins / total trades');
   grid += portfolioCell('Loss Rate', (s.lossRate * 100).toFixed(2) + '%', '', 'Losses / total trades');
+  grid += portfolioCell('BE Exit Rate', fmtRate(s.breakevenExitRate), '', (s.breakevenExitTrades != null ? s.breakevenExitTrades : '--') + ' BE exits');
+  grid += portfolioCell('BE Trigger Rate', fmtRate(s.breakevenTriggerRate), '', (s.breakevenTriggeredTrades != null ? s.breakevenTriggeredTrades : '--') + ' protected trades');
+  grid += portfolioCell('Required BE Win', fmtRate(s.requiredBreakevenWinRate), '', 'Net avg win/loss');
   grid += portfolioCell('Profit Factor', num(s.profitFactor), pfTone, '$' + num(s.grossProfitMoney) + ' / $' + num(s.grossLossMoney));
   grid += portfolioCell('Avg Trade', '$' + num(s.averageTradeMoney), s.averageTradeMoney >= 0 ? 'pos' : 'neg');
   grid += portfolioCell('Max Drawdown', num(s.maxDrawdownPercent) + '%', ddTone, 'Real portfolio-level peak-to-trough');
@@ -5050,12 +5575,13 @@ function renderSharedPortfolioSummary(job) {
     if (perStrategy.length === 0) {
       contribHtml += '<div class="empty">No strategy contributed trades.</div>';
     } else {
-      contribHtml += '<table><tr><th>Strategy</th><th>Trades</th><th>Win %</th><th>Net P/L</th><th>PF</th></tr>';
+      contribHtml += '<table><tr><th>Strategy</th><th>Trades</th><th>Win %</th><th>BE</th><th>Net P/L</th><th>PF</th></tr>';
       perStrategy.forEach((item) => {
         const tone = item.netMoney > 0 ? 'var(--green)' : item.netMoney < 0 ? 'var(--red)' : 'var(--text)';
         contribHtml += '<tr><td>' + escapeHtml(item.strategy) + '</td>';
         contribHtml += '<td>' + num(item.trades) + '</td>';
         contribHtml += '<td>' + (item.winRate * 100).toFixed(2) + '%</td>';
+        contribHtml += '<td>' + fmtBreakevenCompact(item) + '</td>';
         contribHtml += '<td style="color:' + tone + '">$' + num(item.netMoney) + '</td>';
         contribHtml += '<td>' + num(item.profitFactor) + '</td></tr>';
       });
@@ -5067,12 +5593,13 @@ function renderSharedPortfolioSummary(job) {
     if (perSymbol.length === 0) {
       contribHtml += '<div class="empty">No symbol contributed trades.</div>';
     } else {
-      contribHtml += '<table><tr><th>Symbol</th><th>Trades</th><th>Win %</th><th>Net P/L</th><th>PF</th></tr>';
+      contribHtml += '<table><tr><th>Symbol</th><th>Trades</th><th>Win %</th><th>BE</th><th>Net P/L</th><th>PF</th></tr>';
       perSymbol.forEach((item) => {
         const tone = item.netMoney > 0 ? 'var(--green)' : item.netMoney < 0 ? 'var(--red)' : 'var(--text)';
         contribHtml += '<tr><td>' + escapeHtml(item.symbol) + '</td>';
         contribHtml += '<td>' + num(item.trades) + '</td>';
         contribHtml += '<td>' + (item.winRate * 100).toFixed(2) + '%</td>';
+        contribHtml += '<td>' + fmtBreakevenCompact(item) + '</td>';
         contribHtml += '<td style="color:' + tone + '">$' + num(item.netMoney) + '</td>';
         contribHtml += '<td>' + num(item.profitFactor) + '</td></tr>';
       });
@@ -5189,13 +5716,14 @@ function renderBatchResultsTable(items, pagination) {
     html += '</div></div>';
     html += '<div class="batch-symbol-meta" style="text-align:right">Click to expand strategy results</div>';
     html += '</div></summary>';
-    html += '<div class="batch-group-table"><table><tr><th>Strategy</th><th>Status</th><th>TF</th><th>Trades</th><th>PF</th><th>Return</th><th>DD</th><th>View</th></tr>';
+    html += '<div class="batch-group-table"><table><tr><th>Strategy</th><th>Status</th><th>TF</th><th>Trades</th><th>BE</th><th>PF</th><th>Return</th><th>DD</th><th>View</th></tr>';
     group.items.forEach((item) => {
       const s = item.summary || {};
       html += '<tr><td>' + escapeHtml(item.strategy || '--') + '</td>';
       html += '<td>' + batchStatusBadge(item.status) + '</td>';
       html += '<td>' + escapeHtml(item.timeframe || '--') + '</td>';
       html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
+      html += '<td>' + fmtBreakevenCompact(s) + '</td>';
       html += '<td>' + (s.profitFactor != null ? num(s.profitFactor) : '--') + '</td>';
       html += '<td style="color:' + ((s.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? num(s.returnPercent) + '%' : '--') + '</td>';
       html += '<td>' + (s.maxDrawdownPercent != null ? num(s.maxDrawdownPercent) + '%' : '--') + '</td>';
@@ -5220,12 +5748,13 @@ function renderBatchAggregateTable(elementId, groups, keyName) {
     return;
   }
 
-  let html = '<table><tr><th>' + (keyName === 'strategy' ? 'Strategy' : 'Symbol') + '</th><th>Profitable</th><th>Avg PF</th><th>Avg Return</th><th>Avg DD</th><th>Avg Trades</th></tr>';
+  let html = '<table><tr><th>' + (keyName === 'strategy' ? 'Strategy' : 'Symbol') + '</th><th>Profitable</th><th>Avg PF</th><th>Avg Return</th><th>BE</th><th>Avg DD</th><th>Avg Trades</th></tr>';
   groups.forEach((group) => {
     html += '<tr><td>' + group[keyName] + '</td>';
     html += '<td>' + group.profitableRuns + '/' + group.totalRuns + '</td>';
     html += '<td>' + group.averageProfitFactor + '</td>';
     html += '<td style="color:' + (group.averageReturnPercent >= 0 ? 'var(--green)' : 'var(--red)') + '">' + group.averageReturnPercent + '%</td>';
+    html += '<td>' + fmtBreakevenCompact(group) + '</td>';
     html += '<td>' + group.averageMaxDrawdownPercent + '%</td>';
     html += '<td>' + group.averageTrades + '</td></tr>';
   });
@@ -5641,16 +6170,18 @@ function renderOptResult(data) {
   html += '<table>';
   html += '<tr><td style="color:var(--text2)">Trades</td><td>' + (selectedSummary.totalTrades != null ? selectedSummary.totalTrades : '--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Win Rate</td><td>' + (selectedSummary.winRate != null ? (selectedSummary.winRate*100).toFixed(1) + '%' : '--') + '</td></tr>';
+  html += renderNeutralOutcomeSummaryRow(selectedSummary);
   html += '<tr><td style="color:var(--text2)">Profit Factor</td><td>' + (selectedSummary.profitFactor != null ? selectedSummary.profitFactor : '--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Return</td><td style="color:' + ((selectedSummary.returnPercent || 0)>=0?'var(--green)':'var(--red)') + '">' + (selectedSummary.returnPercent != null ? selectedSummary.returnPercent + '%' : '--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td>' + (selectedSummary.maxDrawdownPercent != null ? selectedSummary.maxDrawdownPercent + '%' : '--') + '</td></tr>';
+  html += renderBreakevenSummaryRows(selectedSummary);
   html += '<tr><td style="color:var(--text2)">Sharpe Ratio</td><td>' + (selectedSummary.sharpeRatio != null ? selectedSummary.sharpeRatio : '--') + '</td></tr>';
   html += '</table>';
 
   if (data.top10 && data.top10.length > 1) {
     html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Top 10 Combinations</h4>';
     html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Click any row to preview and apply that optimizer result.</div>';
-    html += '<table><tr><th>#</th><th>Win Rate</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th></tr>';
+    html += '<table><tr><th>#</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th></tr>';
     data.top10.forEach((r, i) => {
       const isSelected = selectedState.selectedIndex === i;
       const rowStyle = isSelected
@@ -5658,6 +6189,7 @@ function renderOptResult(data) {
         : (i === 0 ? 'background:rgba(6,182,212,.1);cursor:pointer' : 'cursor:pointer');
       html += '<tr onclick="selectOptimizerResult(' + i + ')" style="' + rowStyle + '"><td>' + (i+1) + '</td>';
       html += '<td>' + (r.summary.winRate*100).toFixed(1) + '%</td>';
+      html += '<td>' + fmtBreakevenCompact(r.summary || {}) + '</td>';
       html += '<td>' + r.summary.profitFactor + '</td>';
       html += '<td style="color:' + (r.summary.returnPercent>=0?'var(--green)':'var(--red)') + '">' + r.summary.returnPercent + '%</td>';
       html += '<td>' + r.summary.sharpeRatio + '</td>';
@@ -5879,20 +6411,23 @@ function renderOptimizerHistoryDetail(data) {
   html += '<table>';
   html += '<tr><td style="color:var(--text2)">Trades</td><td>' + (summary.totalTrades != null ? summary.totalTrades : '--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Win Rate</td><td>' + (summary.winRate != null ? (summary.winRate * 100).toFixed(1) + '%' : '--') + '</td></tr>';
+  html += renderNeutralOutcomeSummaryRow(summary);
   html += '<tr><td style="color:var(--text2)">Profit Factor</td><td>' + (summary.profitFactor != null ? summary.profitFactor : '--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Return</td><td style="color:' + ((summary.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (summary.returnPercent != null ? summary.returnPercent + '%' : '--') + '</td></tr>';
   html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td>' + (summary.maxDrawdownPercent != null ? summary.maxDrawdownPercent + '%' : '--') + '</td></tr>';
+  html += renderBreakevenSummaryRows(summary);
   html += '<tr><td style="color:var(--text2)">Sharpe Ratio</td><td>' + (summary.sharpeRatio != null ? summary.sharpeRatio : '--') + '</td></tr>';
   html += '</table>';
 
   if (Array.isArray(data.top10) && data.top10.length > 1) {
     html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Top 10 Combinations</h4>';
-    html += '<table><tr><th>#</th><th>Win Rate</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th></tr>';
+    html += '<table><tr><th>#</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th></tr>';
     data.top10.forEach((row, index) => {
       const rowSummary = row.summary || {};
       const rowStyle = index === 0 ? 'background:rgba(6,182,212,.1)' : '';
       html += '<tr style="' + rowStyle + '"><td>' + (index + 1) + '</td>';
       html += '<td>' + (rowSummary.winRate != null ? (rowSummary.winRate * 100).toFixed(1) + '%' : '--') + '</td>';
+      html += '<td>' + fmtBreakevenCompact(rowSummary) + '</td>';
       html += '<td>' + (rowSummary.profitFactor != null ? rowSummary.profitFactor : '--') + '</td>';
       html += '<td style="color:' + ((rowSummary.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (rowSummary.returnPercent != null ? rowSummary.returnPercent + '%' : '--') + '</td>';
       html += '<td>' + (rowSummary.sharpeRatio != null ? rowSummary.sharpeRatio : '--') + '</td>';
@@ -7402,7 +7937,7 @@ function renderOptimizerFullResults() {
 
   let html = '<div style="overflow-x:auto"><table><tr><th>#</th>';
   paramKeys.forEach((k) => { html += '<th>' + escapeHtml(k) + '</th>'; });
-  html += '<th>Trades</th><th>Win Rate</th><th>PF</th><th>Return</th><th>DD</th><th>Sharpe</th></tr>';
+  html += '<th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>DD</th><th>Sharpe</th></tr>';
   pageRows.forEach((row, idx) => {
     const globalIdx = start + idx + 1;
     const s = row.summary || {};
@@ -7414,6 +7949,7 @@ function renderOptimizerFullResults() {
     });
     html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
     html += '<td>' + (s.winRate != null ? (s.winRate * 100).toFixed(1) + '%' : '--') + '</td>';
+    html += '<td>' + fmtBreakevenCompact(s) + '</td>';
     html += '<td>' + (s.profitFactor != null ? s.profitFactor : '--') + '</td>';
     html += '<td style="color:' + ((s.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? s.returnPercent + '%' : '--') + '</td>';
     html += '<td>' + (s.maxDrawdownPercent != null ? s.maxDrawdownPercent + '%' : '--') + '</td>';

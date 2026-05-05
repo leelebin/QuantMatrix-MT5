@@ -134,6 +134,7 @@ class BatchBacktestService {
       strategyScopeMode,
       timeframeMode,
       forcedTimeframe,
+      costModel: params.costModel || null,
       progress,
       aggregate: null,
       results: [],
@@ -228,6 +229,7 @@ class BatchBacktestService {
               buildCombinationKey(combo.symbol, combo.strategy)
             ) || null,
             forcedTimeframe: jobForcedTimeframe,
+            costModel: job.costModel || null,
           });
         } catch (err) {
           resultItem = {
@@ -353,6 +355,7 @@ class BatchBacktestService {
       fetchCandles,
       strategyInstancesByCombination,
       forcedTimeframe: jobForcedTimeframe,
+      costModel: job.costModel || null,
       onProgress: async (update) => {
         if (update.phase === 'prepare') {
           progress.phase = 'prepare';
@@ -452,6 +455,7 @@ class BatchBacktestService {
     candleCache,
     strategyInstance = null,
     forcedTimeframe = null,
+    costModel = null,
   }) {
     const executionConfig = forcedTimeframe
       ? getForcedTimeframeExecutionConfig(combo.symbol, combo.strategy, forcedTimeframe)
@@ -530,6 +534,7 @@ class BatchBacktestService {
       executionPolicy: strategyInstance?.executionPolicy || null,
       batchJobId: jobId,
       executionConfigOverride: forcedTimeframe ? executionConfig : null,
+      costModel,
     });
 
     return {
@@ -545,6 +550,7 @@ class BatchBacktestService {
       summary: result.summary,
       parameters: result.parameters,
       parameterSource: result.parameterSource,
+      costModelUsed: result.costModelUsed || null,
       error: null,
       backtestId: result.backtestId,
     };

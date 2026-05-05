@@ -538,9 +538,11 @@ class TrailingStopService {
               managementEvents: workingPosition.managementEvents,
             });
           }
-          await modifyFn(position.mt5PositionId, result.newSl, position.currentTp);
+          const modifyResult = await modifyFn(position.mt5PositionId, result.newSl, position.currentTp);
+          const brokerRetcodeModify = modifyResult?.retcode ?? modifyResult?.retcodeExternal ?? null;
           workingPosition.managementEvents = appendManagementEvent(workingPosition, action, {
             status: 'APPLIED',
+            brokerRetcodeModify,
           });
           workingPosition.currentSl = result.newSl;
           workingPosition.protectiveStopState = {
@@ -555,6 +557,7 @@ class TrailingStopService {
               managerActionId: action.id,
               managementEvents: workingPosition.managementEvents,
               protectiveStopState: workingPosition.protectiveStopState,
+              brokerRetcodeModify,
             });
           }
           updates.push({
@@ -566,6 +569,7 @@ class TrailingStopService {
             kind: 'SL_UPDATE',
             currentPrice,
             managerActionId: action.id,
+            brokerRetcodeModify,
             scanMode,
             scanReason: scanMetadata.scanReason || 'cadence',
             category: scanMetadata.category || null,

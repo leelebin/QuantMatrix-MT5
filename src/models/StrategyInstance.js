@@ -24,17 +24,30 @@ function buildNotFoundError(strategyName) {
   return error;
 }
 
+function resolvePaperEnabled(data = {}) {
+  if (data.paperEnabled !== undefined) return data.paperEnabled !== false;
+  if (data.enabled !== undefined) return data.enabled !== false;
+  return true;
+}
+
+function resolveLiveEnabled(data = {}) {
+  return data.liveEnabled === true;
+}
+
 async function buildSeedRecord(strategyName, symbol) {
   const strategy = await Strategy.findByName(strategyName);
   if (!strategy) {
     throw buildNotFoundError(strategyName);
   }
 
+  const paperEnabled = strategy.enabled !== undefined ? strategy.enabled : true;
   return {
     strategyName,
     symbol,
     parameters: {},
-    enabled: strategy.enabled !== undefined ? strategy.enabled : true,
+    enabled: paperEnabled,
+    paperEnabled,
+    liveEnabled: false,
     newsBlackout: null,
     tradeManagement: null,
     executionPolicy: null,
@@ -42,14 +55,27 @@ async function buildSeedRecord(strategyName, symbol) {
 }
 
 const StrategyInstance = {
-  async create({ strategyName, symbol, parameters, enabled, newsBlackout, tradeManagement, executionPolicy }) {
+  async create({
+    strategyName,
+    symbol,
+    parameters,
+    enabled,
+    paperEnabled,
+    liveEnabled,
+    newsBlackout,
+    tradeManagement,
+    executionPolicy,
+  }) {
     const now = new Date();
+    const resolvedPaperEnabled = resolvePaperEnabled({ enabled, paperEnabled });
     return await strategyInstancesDb.insert({
       _id: buildCompositeId(strategyName, symbol),
       strategyName,
       symbol,
       parameters: cloneValue(parameters === undefined ? {} : parameters),
-      enabled: enabled !== undefined ? enabled : true,
+      enabled: resolvedPaperEnabled,
+      paperEnabled: resolvedPaperEnabled,
+      liveEnabled: resolveLiveEnabled({ liveEnabled }),
       newsBlackout: newsBlackout === undefined ? null : cloneValue(newsBlackout),
       tradeManagement: tradeManagement === undefined ? null : cloneValue(tradeManagement),
       executionPolicy: executionPolicy === undefined ? null : cloneValue(executionPolicy),
@@ -79,6 +105,10 @@ const StrategyInstance = {
     const seedRecord = existing
       ? null
       : await buildSeedRecord(strategyName, symbol);
+    const isLiveOnlyCreate = !existing
+      && patch.liveEnabled !== undefined
+      && patch.paperEnabled === undefined
+      && patch.enabled === undefined;
     const now = new Date();
     const updateFields = {
       strategyName,
@@ -93,10 +123,26 @@ const StrategyInstance = {
       updateFields.parameters = cloneValue(seedRecord.parameters);
     }
 
-    if (patch.enabled !== undefined) {
-      updateFields.enabled = patch.enabled;
+    if (patch.paperEnabled !== undefined) {
+      updateFields.paperEnabled = patch.paperEnabled !== false;
+      updateFields.enabled = updateFields.paperEnabled;
+    } else if (patch.enabled !== undefined) {
+      updateFields.paperEnabled = patch.enabled !== false;
+      updateFields.enabled = updateFields.paperEnabled;
     } else if (!existing) {
-      updateFields.enabled = seedRecord.enabled;
+      updateFields.paperEnabled = isLiveOnlyCreate ? false : seedRecord.paperEnabled;
+      updateFields.enabled = updateFields.paperEnabled;
+    } else if (existing.paperEnabled === undefined) {
+      updateFields.paperEnabled = resolvePaperEnabled(existing);
+      updateFields.enabled = updateFields.paperEnabled;
+    }
+
+    if (patch.liveEnabled !== undefined) {
+      updateFields.liveEnabled = patch.liveEnabled === true;
+    } else if (!existing) {
+      updateFields.liveEnabled = seedRecord.liveEnabled;
+    } else if (existing.liveEnabled === undefined) {
+      updateFields.liveEnabled = false;
     }
 
     if (patch.newsBlackout !== undefined) {
@@ -153,6 +199,8 @@ const StrategyInstance = {
           symbol,
           parameters: {},
           enabled: strategy.enabled,
+          paperEnabled: strategy.enabled,
+          liveEnabled: false,
           newsBlackout: null,
           tradeManagement: null,
           executionPolicy: null,
@@ -192,6 +240,46 @@ const StrategyInstance = {
 
     if (migrated > 0) {
       console.log(`[StrategyInstance] migrateLegacyNewsBlackoutDefaults migrated=${migrated}`);
+    }
+
+    return {
+      migrated,
+      skipped: Math.max(0, instances.length - migrated),
+    };
+  },
+
+  async migrateScopedEnabledDefaults() {
+    const instances = await this.findAll();
+    let migrated = 0;
+
+    for (const instance of instances) {
+      const updateFields = {};
+      if (instance.paperEnabled === undefined) {
+        updateFields.paperEnabled = resolvePaperEnabled(instance);
+        updateFields.enabled = updateFields.paperEnabled;
+      }
+      if (instance.liveEnabled === undefined) {
+        updateFields.liveEnabled = false;
+      }
+
+      if (Object.keys(updateFields).length === 0) {
+        continue;
+      }
+
+      await strategyInstancesDb.update(
+        { _id: instance._id },
+        {
+          $set: {
+            ...updateFields,
+            updatedAt: new Date(),
+          },
+        }
+      );
+      migrated += 1;
+    }
+
+    if (migrated > 0) {
+      console.log(`[StrategyInstance] migrateScopedEnabledDefaults migrated=${migrated}`);
     }
 
     return {

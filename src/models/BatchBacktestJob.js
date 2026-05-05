@@ -14,6 +14,7 @@ function toSummary(job) {
     strategyScopeMode: job.strategyScopeMode || 'enabled_assigned_only',
     timeframeMode: job.timeframeMode,
     forcedTimeframe: job.forcedTimeframe || null,
+    costModel: job.costModel || null,
     progress: job.progress || null,
     aggregate: job.aggregate || null,
     portfolioResult: job.portfolioResult || null,

@@ -6,10 +6,13 @@ const breakevenService = require('../services/breakevenService');
 const { getAllSymbols } = require('../config/instruments');
 const { getStrategyParameterDefinitions } = require('../config/strategyParameters');
 
-async function ensureStrategyInstancesForSymbols(strategyName, symbols = []) {
+async function ensureStrategyInstancesForSymbols(strategyName, symbols = [], seedPatch = {}) {
   const uniqueSymbols = [...new Set(Array.isArray(symbols) ? symbols : [])];
   for (const symbol of uniqueSymbols) {
-    await StrategyInstance.upsert(strategyName, symbol, {});
+    const existing = typeof StrategyInstance.findByKey === 'function'
+      ? await StrategyInstance.findByKey(strategyName, symbol)
+      : null;
+    await StrategyInstance.upsert(strategyName, symbol, existing ? {} : seedPatch);
   }
 }
 
@@ -143,6 +146,9 @@ exports.getAssignments = async (req, res) => {
 exports.updateAssignments = async (req, res) => {
   try {
     const { assignmentsBySymbol } = req.body || {};
+    const assignmentScope = String(req.body?.scope || 'paper').toLowerCase() === 'live'
+      ? 'live'
+      : 'paper';
     if (!assignmentsBySymbol || typeof assignmentsBySymbol !== 'object' || Array.isArray(assignmentsBySymbol)) {
       return res.status(400).json({
         success: false,
@@ -195,8 +201,12 @@ exports.updateAssignments = async (req, res) => {
       return Strategy.update(strategy._id, { symbols: nextSymbols });
     }));
 
+    const seedPatch = assignmentScope === 'live'
+      ? { paperEnabled: false, liveEnabled: true }
+      : {};
+
     for (const strategy of strategies) {
-      await ensureStrategyInstancesForSymbols(strategy.name, nextAssignmentsByStrategy[strategy.name]);
+      await ensureStrategyInstancesForSymbols(strategy.name, nextAssignmentsByStrategy[strategy.name], seedPatch);
     }
 
     const updatedStrategies = await Strategy.findAll();

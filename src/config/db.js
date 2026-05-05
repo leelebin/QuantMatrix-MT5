@@ -7,39 +7,96 @@ const IS_TEST_ENV = process.env.NODE_ENV === 'test'
 
 // Data directory for storing database files
 const DATA_DIR = path.resolve(process.cwd(), 'data');
+const DATA_GROUP_DIRS = Object.freeze({
+  config: path.join(DATA_DIR, 'config'),
+  trading: path.join(DATA_DIR, 'trading'),
+  history: path.join(DATA_DIR, 'history'),
+});
 
-// Ensure data directory exists
-if (!IS_TEST_ENV && !fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 }
 
-function createDatastore(filename) {
+function getDataFilePath(filename, group = 'config') {
+  const groupDir = DATA_GROUP_DIRS[group] || DATA_DIR;
+  return path.join(groupDir, filename);
+}
+
+function migrateLegacyDataFile(filename, targetPath) {
+  const legacyPath = path.join(DATA_DIR, filename);
+  if (legacyPath === targetPath || !fs.existsSync(legacyPath) || fs.existsSync(targetPath)) {
+    return;
+  }
+
+  fs.renameSync(legacyPath, targetPath);
+  console.log(`[DB] Moved legacy data file ${filename} -> ${path.relative(DATA_DIR, targetPath)}`);
+}
+
+// Ensure data directories exist
+if (!IS_TEST_ENV) {
+  ensureDir(DATA_DIR);
+  Object.values(DATA_GROUP_DIRS).forEach(ensureDir);
+}
+
+function createDatastore(filename, group = 'config') {
   if (IS_TEST_ENV) {
     return Datastore.create({ inMemoryOnly: true });
   }
 
+  const datastorePath = getDataFilePath(filename, group);
+  migrateLegacyDataFile(filename, datastorePath);
+
   return Datastore.create({
-    filename: path.join(DATA_DIR, filename),
+    filename: datastorePath,
     autoload: true,
   });
 }
 
 // Create database instances
-const usersDb = createDatastore('users.db');
-const strategiesDb = createDatastore('strategies.db');
-const tradesDb = createDatastore('trades.db');
-const positionsDb = createDatastore('positions.db');
-const backtestsDb = createDatastore('backtests.db');
-const tradeLogDb = createDatastore('trade_log.db');
-const paperPositionsDb = createDatastore('paper_positions.db');
-const riskStateDb = createDatastore('risk_state.db');
-const riskProfilesDb = createDatastore('risk_profiles.db');
-const executionAuditDb = createDatastore('execution_audit.db');
-const batchBacktestJobsDb = createDatastore('batch_backtest_jobs.db');
-const decisionAuditDb = createDatastore('decision_audit.db');
-const optimizerRunsDb = createDatastore('optimizer_runs.db');
-const strategyInstancesDb = createDatastore('strategyInstances.db');
-const strategyDailyStopsDb = createDatastore('strategy_daily_stops.db');
+const usersDb = createDatastore('users.db', 'config');
+const strategiesDb = createDatastore('strategies.db', 'config');
+const tradesDb = createDatastore('trades.db', 'trading');
+const positionsDb = createDatastore('positions.db', 'trading');
+const backtestsDb = createDatastore('backtests.db', 'history');
+const tradeLogDb = createDatastore('trade_log.db', 'trading');
+const paperPositionsDb = createDatastore('paper_positions.db', 'trading');
+const riskStateDb = createDatastore('risk_state.db', 'config');
+const riskProfilesDb = createDatastore('risk_profiles.db', 'config');
+const executionAuditDb = createDatastore('execution_audit.db', 'history');
+const batchBacktestJobsDb = createDatastore('batch_backtest_jobs.db', 'history');
+const decisionAuditDb = createDatastore('decision_audit.db', 'history');
+const optimizerRunsDb = createDatastore('optimizer_runs.db', 'history');
+const strategyInstancesDb = createDatastore('strategyInstances.db', 'config');
+const strategyDailyStopsDb = createDatastore('strategy_daily_stops.db', 'trading');
+
+function dbEntry(group, filename, db) {
+  return {
+    group,
+    filename,
+    path: getDataFilePath(filename, group),
+    db,
+  };
+}
+
+const DATABASES = Object.freeze({
+  users: dbEntry('config', 'users.db', usersDb),
+  strategies: dbEntry('config', 'strategies.db', strategiesDb),
+  trades: dbEntry('trading', 'trades.db', tradesDb),
+  positions: dbEntry('trading', 'positions.db', positionsDb),
+  backtests: dbEntry('history', 'backtests.db', backtestsDb),
+  tradeLog: dbEntry('trading', 'trade_log.db', tradeLogDb),
+  paperPositions: dbEntry('trading', 'paper_positions.db', paperPositionsDb),
+  riskState: dbEntry('config', 'risk_state.db', riskStateDb),
+  riskProfiles: dbEntry('config', 'risk_profiles.db', riskProfilesDb),
+  executionAudit: dbEntry('history', 'execution_audit.db', executionAuditDb),
+  batchBacktestJobs: dbEntry('history', 'batch_backtest_jobs.db', batchBacktestJobsDb),
+  decisionAudit: dbEntry('history', 'decision_audit.db', decisionAuditDb),
+  optimizerRuns: dbEntry('history', 'optimizer_runs.db', optimizerRunsDb),
+  strategyInstances: dbEntry('config', 'strategyInstances.db', strategyInstancesDb),
+  strategyDailyStops: dbEntry('trading', 'strategy_daily_stops.db', strategyDailyStopsDb),
+});
 
 // Ensure indexes
 usersDb.ensureIndex({ fieldName: 'email', unique: true });
@@ -107,6 +164,9 @@ const connectDB = async () => {
     } else {
       console.log('Database Connected: NeDB (local file storage)');
       console.log(`Data directory: ${DATA_DIR}`);
+      console.log(`Config data: ${DATA_GROUP_DIRS.config}`);
+      console.log(`Trading data: ${DATA_GROUP_DIRS.trading}`);
+      console.log(`History data: ${DATA_GROUP_DIRS.history}`);
     }
   } catch (error) {
     console.error(`Database error: ${error.message}`);
@@ -130,3 +190,6 @@ module.exports.optimizerRunsDb = optimizerRunsDb;
 module.exports.strategyInstancesDb = strategyInstancesDb;
 module.exports.strategyDailyStopsDb = strategyDailyStopsDb;
 module.exports.decisionAuditDb = decisionAuditDb;
+module.exports.DATA_DIR = DATA_DIR;
+module.exports.DATA_GROUP_DIRS = DATA_GROUP_DIRS;
+module.exports.DATABASES = DATABASES;

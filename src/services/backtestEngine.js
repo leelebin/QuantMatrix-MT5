@@ -14,6 +14,7 @@ const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const { backtestsDb } = require('../config/db');
 const instrumentValuation = require('../utils/instrumentValuation');
 const backtestCostModel = require('../utils/backtestCostModel');
+const { calculateBacktestRobustScore } = require('../utils/backtestRobustScore');
 const {
   resolveStrategyParameters,
 } = require('../config/strategyParameters');
@@ -898,7 +899,7 @@ class BacktestEngine {
 
   _generateSummary(trades, initialBalance, finalBalance, equityCurve = null) {
     if (trades.length === 0) {
-      return {
+      const emptySummary = {
         totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0,
         profitFactor: 0, grossProfitMoney: 0, grossLossMoney: 0,
         totalProfitPips: 0, totalLossPips: 0, netProfitPips: 0,
@@ -914,6 +915,14 @@ class BacktestEngine {
         breakevenExitTrades: 0, breakevenExitRate: 0,
         breakevenTriggeredTrades: 0, breakevenTriggerRate: 0,
         requiredBreakevenWinRate: 0,
+        averageWinMoney: 0, averageLossMoney: 0, payoffRatio: 0, expectancyPerTrade: 0,
+        avgRealizedR: 0, medianRealizedR: 0,
+        profitConcentrationTop1: 0, profitConcentrationTop3: 0, profitConcentrationTop5: 0,
+        returnToDrawdown: 0,
+      };
+      return {
+        ...emptySummary,
+        ...calculateBacktestRobustScore(emptySummary),
       };
     }
 
@@ -1011,8 +1020,41 @@ class BacktestEngine {
     const netProfitFactor = netGrossLossMoney > 0
       ? parseFloat((netGrossProfitMoney / netGrossLossMoney).toFixed(2))
       : netGrossProfitMoney > 0 ? 999 : 0;
+    const averageWinMoney = netMoneyWinners.length > 0 ? netGrossProfitMoney / netMoneyWinners.length : 0;
+    const averageLossMoney = netMoneyLosers.length > 0 ? -(netGrossLossMoney / netMoneyLosers.length) : 0;
+    const payoffRatio = Math.abs(averageLossMoney) > 0
+      ? averageWinMoney / Math.abs(averageLossMoney)
+      : averageWinMoney > 0 ? 999 : 0;
+    const positiveNetProfits = trades
+      .map((trade) => tradeNet(trade))
+      .filter((value) => value > 0)
+      .sort((a, b) => b - a);
+    const concentrationBase = netProfitMoney > 0 ? netProfitMoney : 0;
+    const topProfit = (count) => positiveNetProfits
+      .slice(0, count)
+      .reduce((sum, value) => sum + value, 0);
+    const realizedRValues = trades
+      .map((trade) => Number(trade.realizedRMultiple))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => a - b);
+    const realizedRCount = realizedRValues.length;
+    const avgRealizedR = realizedRCount > 0
+      ? realizedRValues.reduce((sum, value) => sum + value, 0) / realizedRCount
+      : 0;
+    const medianRealizedR = realizedRCount > 0
+      ? (
+          realizedRCount % 2 === 1
+            ? realizedRValues[Math.floor(realizedRCount / 2)]
+            : (realizedRValues[(realizedRCount / 2) - 1] + realizedRValues[realizedRCount / 2]) / 2
+        )
+      : 0;
+    const returnPercent = parseFloat(((finalBalance - initialBalance) / initialBalance * 100).toFixed(2));
+    const maxDrawdownPercent = parseFloat((maxDD * 100).toFixed(2));
+    const returnToDrawdown = maxDrawdownPercent > 0
+      ? returnPercent / maxDrawdownPercent
+      : returnPercent > 0 ? 5 : 0;
 
-    return {
+    const summary = {
       totalTrades: trades.length,
       winningTrades: winners.length,
       losingTrades: losers.length,
@@ -1044,13 +1086,29 @@ class BacktestEngine {
       totalLossPips: parseFloat(totalLossPips.toFixed(1)),
       netProfitPips: parseFloat(netProfitPips.toFixed(1)),
       netProfitMoney,
-      returnPercent: parseFloat(((finalBalance - initialBalance) / initialBalance * 100).toFixed(2)),
+      returnPercent,
       averageNetTradeMoney: trades.length > 0 ? parseFloat((netProfitMoney / trades.length).toFixed(2)) : 0,
+      averageWinMoney: parseFloat(averageWinMoney.toFixed(2)),
+      averageLossMoney: parseFloat(averageLossMoney.toFixed(2)),
+      payoffRatio: parseFloat(payoffRatio.toFixed(4)),
+      expectancyPerTrade: trades.length > 0 ? parseFloat((netProfitMoney / trades.length).toFixed(2)) : 0,
       averageWinPips: winners.length > 0 ? parseFloat((totalProfitPips / winners.length).toFixed(1)) : 0,
       averageLossPips: losers.length > 0 ? parseFloat((totalLossPips / losers.length).toFixed(1)) : 0,
       maxConsecutiveWins: maxConsWins,
       maxConsecutiveLosses: maxConsLosses,
-      maxDrawdownPercent: parseFloat((maxDD * 100).toFixed(2)),
+      maxDrawdownPercent,
+      returnToDrawdown: parseFloat(returnToDrawdown.toFixed(4)),
+      avgRealizedR: parseFloat(avgRealizedR.toFixed(4)),
+      medianRealizedR: parseFloat(medianRealizedR.toFixed(4)),
+      profitConcentrationTop1: concentrationBase > 0
+        ? parseFloat(Math.min(topProfit(1) / concentrationBase, 1).toFixed(4))
+        : 0,
+      profitConcentrationTop3: concentrationBase > 0
+        ? parseFloat(Math.min(topProfit(3) / concentrationBase, 1).toFixed(4))
+        : 0,
+      profitConcentrationTop5: concentrationBase > 0
+        ? parseFloat(Math.min(topProfit(5) / concentrationBase, 1).toFixed(4))
+        : 0,
       sharpeRatio: parseFloat(sharpe.toFixed(2)),
       averageHoldingPeriodHours: holdingCount > 0 ? parseFloat((totalHours / holdingCount).toFixed(1)) : 0,
       totalCommission: parseFloat(costs.totalCommission.toFixed(2)),
@@ -1060,6 +1118,11 @@ class BacktestEngine {
       // grossNetDifference = (gross gain - gross loss) - net P&L. With cost
       // model active this equals -totalTradingCosts; with no costs it's 0.
       grossNetDifference: parseFloat((grossNet - netProfitMoney).toFixed(2)),
+    };
+
+    return {
+      ...summary,
+      ...calculateBacktestRobustScore(summary),
     };
   }
 

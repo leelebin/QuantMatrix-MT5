@@ -316,6 +316,192 @@ describe('optimizer controller', () => {
     expect(optimizerService.run).not.toHaveBeenCalled();
   });
 
+  test('runOptimizer rejects invalid optimizeFor values before fetching candles', async () => {
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        optimizeFor: 'unknown',
+      },
+    };
+    const res = createRes();
+
+    await optimizerController.runOptimizer(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: false,
+      message: expect.stringContaining('Invalid optimizeFor: unknown'),
+    }));
+    expect(mt5Service.getCandles).not.toHaveBeenCalled();
+    expect(optimizerService.run).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [0],
+    ['abc'],
+    [1000],
+  ])('runOptimizer rejects invalid minimumTrades=%p before fetching candles', async (minimumTrades) => {
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        minimumTrades,
+      },
+    };
+    const res = createRes();
+
+    await optimizerController.runOptimizer(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: false,
+      message: expect.stringContaining('minimumTrades'),
+    }));
+    expect(mt5Service.getCandles).not.toHaveBeenCalled();
+    expect(optimizerService.run).not.toHaveBeenCalled();
+  });
+
+  test('runOptimizer keeps the legacy request body working with default minimumTrades', async () => {
+    const primaryCandles = createCandles('2026-03-01T00:00:00.000Z', 60, 900);
+    mt5Service.getCandles.mockResolvedValue(primaryCandles);
+    optimizerService.getDefaultRanges.mockReturnValue({
+      ema_fast: { min: 20, max: 20, step: 1 },
+    });
+
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        startDate: '2026-04-01',
+        endDate: '2026-04-05',
+      },
+    };
+    const res = createRes();
+
+    await optimizerController.runOptimizer(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        optimizeFor: 'profitFactor',
+        minimumTrades: 30,
+      }),
+    }));
+    expect(optimizerService.run).toHaveBeenCalledWith(expect.objectContaining({
+      optimizeFor: 'profitFactor',
+      minimumTrades: 30,
+    }));
+  });
+
+  test('runOptimizer accepts new backend optimizeFor values', async () => {
+    const primaryCandles = createCandles('2026-03-01T00:00:00.000Z', 60, 900);
+    mt5Service.getCandles.mockResolvedValue(primaryCandles);
+    optimizerService.getDefaultRanges.mockReturnValue({
+      ema_fast: { min: 20, max: 20, step: 1 },
+    });
+
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        startDate: '2026-04-01',
+        endDate: '2026-04-05',
+        optimizeFor: 'robustScore',
+      },
+    };
+    const res = createRes();
+
+    await optimizerController.runOptimizer(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        optimizeFor: 'robustScore',
+      }),
+    }));
+    expect(optimizerService.run).toHaveBeenCalledWith(expect.objectContaining({
+      optimizeFor: 'robustScore',
+    }));
+  });
+
+  test('runOptimizer accepts and normalizes legal costModel input', async () => {
+    const primaryCandles = createCandles('2026-03-01T00:00:00.000Z', 60, 900);
+    mt5Service.getCandles.mockResolvedValue(primaryCandles);
+    optimizerService.getDefaultRanges.mockReturnValue({
+      ema_fast: { min: 20, max: 20, step: 1 },
+    });
+
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        startDate: '2026-04-01',
+        endDate: '2026-04-05',
+        costModel: {
+          spreadPips: '1.2',
+          slippagePips: 0.4,
+          commissionPerLot: '7',
+          commissionPerSide: true,
+          swapLongPerLotPerDay: '-2.5',
+          swapShortPerLotPerDay: 1.25,
+          fixedFeePerTrade: '0.5',
+        },
+      },
+    };
+    const res = createRes();
+
+    await optimizerController.runOptimizer(req, res);
+
+    const expectedCostModel = {
+      spreadPips: 1.2,
+      slippagePips: 0.4,
+      commissionPerLot: 7,
+      commissionPerSide: true,
+      swapLongPerLotPerDay: -2.5,
+      swapShortPerLotPerDay: 1.25,
+      fixedFeePerTrade: 0.5,
+    };
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        costModelUsed: expectedCostModel,
+      }),
+    }));
+    expect(optimizerService.run).toHaveBeenCalledWith(expect.objectContaining({
+      costModel: expectedCostModel,
+    }));
+  });
+
+  test.each([
+    ['not-an-object'],
+    [{ commissionPerLot: 'abc' }],
+    [{ commissionPerSide: 'true' }],
+    [{ unsupportedFee: 1 }],
+  ])('runOptimizer rejects invalid costModel=%p before fetching candles', async (costModel) => {
+    const req = {
+      body: {
+        symbol: 'EURUSD',
+        strategyType: 'TrendFollowing',
+        costModel,
+      },
+    };
+    const res = createRes();
+
+    await optimizerController.runOptimizer(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.payload).toEqual(expect.objectContaining({
+      success: false,
+      message: expect.stringContaining('costModel'),
+    }));
+    expect(mt5Service.getCandles).not.toHaveBeenCalled();
+    expect(optimizerService.run).not.toHaveBeenCalled();
+  });
+
   test('stopOptimizer requests a graceful stop and broadcasts the stop request', () => {
     const req = {};
     const res = createRes();

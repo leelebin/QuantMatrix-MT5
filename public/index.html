@@ -955,19 +955,76 @@ tr:hover{background:var(--bg3)}
           <input type="date" id="optEndDate">
         </div>
       </div>
-      <div class="form-group">
-        <label>Optimize For</label>
-        <select id="optMetric">
-          <option value="profitFactor">Profit Factor</option>
-          <option value="sharpeRatio">Sharpe Ratio</option>
-          <option value="returnPercent">Return %</option>
-          <option value="winRate">Win Rate</option>
-        </select>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Optimize For</label>
+          <select id="optMetric">
+            <option value="robustScore" selected>Robust Score</option>
+            <option value="profitFactor">Profit Factor</option>
+            <option value="sharpeRatio">Sharpe Ratio</option>
+            <option value="returnPercent">Return %</option>
+            <option value="winRate">Win Rate</option>
+            <option value="returnToDrawdown">Return / Drawdown</option>
+            <option value="expectancyPerTrade">Expectancy / Trade</option>
+            <option value="avgRealizedR">Average R</option>
+            <option value="medianRealizedR">Median R</option>
+          </select>
+          <div class="batch-table-note">Robust Score is recommended for live parameter screening.</div>
+        </div>
+        <div class="form-group">
+          <label>Minimum Trades</label>
+          <input type="number" id="optMinimumTrades" min="5" max="500" step="1" value="30">
+          <div class="batch-table-note">Lower values are useful for low-frequency strategies but may produce sample-sensitive results.</div>
+        </div>
       </div>
       <div class="form-group">
         <label>Initial Balance (USD)</label>
         <input type="number" id="optInitialBalance" min="1" step="100" value="10000">
       </div>
+      <details class="batch-symbol-group" style="margin-top:12px">
+        <summary>
+          <div class="batch-symbol-summary">
+            <div>
+              <div class="batch-symbol-title" style="font-size:14px">Backtest Cost Model</div>
+              <div class="batch-symbol-meta">Optional trading costs used during optimizer backtests.</div>
+            </div>
+            <div class="batch-symbol-meta">Click to configure</div>
+          </div>
+        </summary>
+        <div class="batch-group-table" style="padding-top:16px">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Spread Pips</label>
+              <input type="number" id="optCostSpreadPips" min="0" step="any" placeholder="Empty = ignored">
+            </div>
+            <div class="form-group">
+              <label>Slippage Pips</label>
+              <input type="number" id="optCostSlippagePips" min="0" step="any" placeholder="Empty = ignored">
+            </div>
+            <div class="form-group">
+              <label>Commission Per Lot</label>
+              <input type="number" id="optCostCommissionPerLot" step="any" placeholder="Empty = ignored">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Swap Long Per Lot Per Day</label>
+              <input type="number" id="optCostSwapLongPerLotPerDay" step="any" placeholder="Empty = ignored">
+            </div>
+            <div class="form-group">
+              <label>Swap Short Per Lot Per Day</label>
+              <input type="number" id="optCostSwapShortPerLotPerDay" step="any" placeholder="Empty = ignored">
+            </div>
+            <div class="form-group">
+              <label>Fixed Fee Per Trade</label>
+              <input type="number" id="optCostFixedFeePerTrade" step="any" placeholder="Empty = ignored">
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin-top:4px">
+            <input type="checkbox" id="optCostCommissionPerSide"> Commission Per Side
+          </label>
+        </div>
+      </details>
       <div class="card-header" style="margin-top:12px"><span class="card-title">Parameter Ranges</span></div>
       <div id="optRanges"><div class="empty">Select a strategy</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
@@ -5992,6 +6049,176 @@ function formatOptimizerInitialBalance(data) {
   return '$' + num(resolveOptimizerInitialBalance(data));
 }
 
+const OPTIMIZER_MINIMUM_TRADES_DEFAULT = 30;
+const OPTIMIZER_MINIMUM_TRADES_MIN = 5;
+const OPTIMIZER_MINIMUM_TRADES_MAX = 500;
+const OPTIMIZER_IMPORTANT_WARNING_FLAGS = new Set([
+  'SMALL_SAMPLE',
+  'VERY_SMALL_SAMPLE',
+  'PROFIT_CONCENTRATED',
+  'AVG_LOSS_GT_AVG_WIN',
+  'HIGH_DRAWDOWN',
+]);
+
+function getOptimizerMinimumTradesInput() {
+  const el = document.getElementById('optMinimumTrades');
+  const raw = (el && el.value != null ? String(el.value).trim() : '');
+  if (raw === '') return OPTIMIZER_MINIMUM_TRADES_DEFAULT;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) {
+    throw new Error('Minimum Trades must be a whole number');
+  }
+  if (value < OPTIMIZER_MINIMUM_TRADES_MIN || value > OPTIMIZER_MINIMUM_TRADES_MAX) {
+    throw new Error('Minimum Trades must be between 5 and 500');
+  }
+  return value;
+}
+
+function getOptionalOptimizerNumberInput(id, label) {
+  const el = document.getElementById(id);
+  const raw = (el && el.value != null ? String(el.value).trim() : '');
+  if (raw === '') return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new Error(label + ' must be a valid number');
+  }
+  return value;
+}
+
+function buildOptimizerCostModelPayload() {
+  const fieldMap = [
+    ['spreadPips', 'optCostSpreadPips', 'Spread Pips'],
+    ['slippagePips', 'optCostSlippagePips', 'Slippage Pips'],
+    ['commissionPerLot', 'optCostCommissionPerLot', 'Commission Per Lot'],
+    ['swapLongPerLotPerDay', 'optCostSwapLongPerLotPerDay', 'Swap Long Per Lot Per Day'],
+    ['swapShortPerLotPerDay', 'optCostSwapShortPerLotPerDay', 'Swap Short Per Lot Per Day'],
+    ['fixedFeePerTrade', 'optCostFixedFeePerTrade', 'Fixed Fee Per Trade'],
+  ];
+  const costModel = {};
+  fieldMap.forEach(([key, id, label]) => {
+    const value = getOptionalOptimizerNumberInput(id, label);
+    if (value !== undefined) costModel[key] = value;
+  });
+  const commissionPerSide = document.getElementById('optCostCommissionPerSide');
+  if (commissionPerSide && commissionPerSide.checked) {
+    costModel.commissionPerSide = true;
+  }
+  return Object.keys(costModel).length ? costModel : undefined;
+}
+
+function optimizerNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function fmtOptimizerNumber(value, digits = 2) {
+  const numeric = optimizerNumber(value);
+  if (numeric == null) return '--';
+  return numeric.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function fmtOptimizerRatioPercent(value, digits = 1) {
+  const numeric = optimizerNumber(value);
+  if (numeric == null) return '--';
+  return (numeric * 100).toFixed(digits) + '%';
+}
+
+function getOptimizerWarningFlags(summary) {
+  return Array.isArray(summary && summary.warningFlags)
+    ? summary.warningFlags.filter(Boolean).map((flag) => String(flag))
+    : [];
+}
+
+function optimizerWarningFlagColor(flag) {
+  if (flag === 'VERY_SMALL_SAMPLE' || flag === 'HIGH_DRAWDOWN') return 'var(--red)';
+  if (OPTIMIZER_IMPORTANT_WARNING_FLAGS.has(flag)) return 'var(--yellow)';
+  return 'var(--text2)';
+}
+
+function renderOptimizerWarningFlags(summary, importantOnly = false) {
+  const flags = getOptimizerWarningFlags(summary)
+    .filter((flag) => !importantOnly || OPTIMIZER_IMPORTANT_WARNING_FLAGS.has(flag));
+  if (!flags.length) return '--';
+  return '<div style="display:flex;gap:4px;flex-wrap:wrap">'
+    + flags.map((flag) => (
+      '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:rgba(255,255,255,0.06);color:'
+      + optimizerWarningFlagColor(flag)
+      + '">'
+      + escapeHtml(flag.replace(/_/g, ' '))
+      + '</span>'
+    )).join('')
+    + '</div>';
+}
+
+function deriveOptimizerSampleQuality(summary) {
+  const s = summary || {};
+  if (s.sampleQuality) return String(s.sampleQuality);
+  const flags = new Set(getOptimizerWarningFlags(s));
+  const trades = optimizerNumber(s.totalTrades);
+  if (flags.has('VERY_SMALL_SAMPLE') || (trades != null && trades < 20)) return 'Very small';
+  if (flags.has('SMALL_SAMPLE') || flags.has('LOW_TRADE_COUNT') || (trades != null && trades < 50)) return 'Small';
+  if (trades != null && trades >= 100) return 'High';
+  if (trades != null && trades >= 50) return 'Medium';
+  return '--';
+}
+
+function renderOptimizerRiskNotice(summary) {
+  const flags = new Set(getOptimizerWarningFlags(summary));
+  if (!flags.has('AVG_LOSS_GT_AVG_WIN')) return '';
+  return '<div style="font-size:12px;color:var(--yellow);margin:8px 0">'
+    + 'Avg loss is larger than avg win. This can still be profitable only if win rate remains safely above required breakeven win rate.'
+    + '</div>';
+}
+
+function renderOptimizerRiskSummaryRows(summary) {
+  const s = summary || {};
+  let html = '';
+  html += '<tr><td style="color:var(--text2)">Robust Score</td><td>' + fmtOptimizerNumber(s.robustScore, 1) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Sample Quality</td><td>' + escapeHtml(deriveOptimizerSampleQuality(s)) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Warning Flags</td><td>' + renderOptimizerWarningFlags(s) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Expectancy / Trade</td><td>' + fmtOptimizerNumber(s.expectancyPerTrade, 2) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Return / Drawdown</td><td>' + fmtOptimizerNumber(s.returnToDrawdown, 2) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Average R</td><td>' + fmtOptimizerNumber(s.avgRealizedR, 2) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Median R</td><td>' + fmtOptimizerNumber(s.medianRealizedR, 2) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Profit Concentration Top 1</td><td>' + fmtOptimizerRatioPercent(s.profitConcentrationTop1, 1) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Max Consecutive Losses</td><td>' + (s.maxConsecutiveLosses != null ? escapeHtml(String(s.maxConsecutiveLosses)) : '--') + '</td></tr>';
+  return html;
+}
+
+function optimizerRecommendationColor(tier) {
+  if (tier === 'LIVE_CANDIDATE') return 'var(--green)';
+  if (tier === 'PAPER_ONLY') return 'var(--blue)';
+  if (tier === 'INSUFFICIENT_SAMPLE') return 'var(--yellow)';
+  if (tier === 'REJECT') return 'var(--red)';
+  return 'var(--text2)';
+}
+
+function renderOptimizerRecommendationBadge(recommendation) {
+  const tier = recommendation && recommendation.tier ? recommendation.tier : '--';
+  return badge(escapeHtml(String(tier).replace(/_/g, ' ')), optimizerRecommendationColor(tier));
+}
+
+function renderOptimizerRecommendationList(items) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!list.length) return '--';
+  return '<ul style="margin:0;padding-left:16px;color:var(--text2);font-size:12px">'
+    + list.map((item) => '<li>' + escapeHtml(item) + '</li>').join('')
+    + '</ul>';
+}
+
+function renderOptimizerRecommendationRows(recommendation) {
+  const rec = recommendation || {};
+  let html = '';
+  html += '<tr><td style="color:var(--text2)">Recommendation Tier</td><td>' + renderOptimizerRecommendationBadge(rec) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Recommendation Reasons</td><td>' + renderOptimizerRecommendationList(rec.reasons) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Risk Notes</td><td>' + renderOptimizerRecommendationList(rec.riskNotes) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Suggested Risk / Trade</td><td>' + (rec.suggestedRiskPerTrade != null ? fmtOptimizerRatioPercent(rec.suggestedRiskPerTrade, 2) : '--') + '</td></tr>';
+  return html;
+}
+
 function formatOptimizerProgressLabel(progress) {
   if (!progress) return '0%';
   let label = (progress.current || 0) + '/' + (progress.total || 0) + ' (' + (progress.percent || 0) + '%)';
@@ -6057,7 +6284,9 @@ async function runOptimizer() {
 
   try {
     const initialBalance = getOptimizerInitialBalanceInput();
-    const startResponse = await api('/api/optimizer/run', 'POST', {
+    const minimumTrades = getOptimizerMinimumTradesInput();
+    const costModel = buildOptimizerCostModelPayload();
+    const optimizerPayload = {
       symbol: document.getElementById('optSymbol').value,
       strategyType: strategy,
       timeframe: document.getElementById('optTimeframe').value || undefined,
@@ -6065,8 +6294,12 @@ async function runOptimizer() {
       endDate: document.getElementById('optEndDate').value,
       paramRanges: Object.keys(paramRanges).length > 0 ? paramRanges : undefined,
       optimizeFor: document.getElementById('optMetric').value,
+      minimumTrades,
       initialBalance,
-    });
+    };
+    if (costModel) optimizerPayload.costModel = costModel;
+
+    const startResponse = await api('/api/optimizer/run', 'POST', optimizerPayload);
     if (!startResponse.success) {
       document.getElementById('optResult').innerHTML = '<div class="empty" style="color:var(--red)">' + (startResponse.message || 'Optimizer failed to start') + '</div>';
       document.getElementById('optProgress').style.display = 'none';
@@ -6161,23 +6394,40 @@ function renderOptResult(data) {
     ? ((data.processedCombinations || 0) + '/' + data.totalCombinations)
     : String(data.totalCombinations);
   const initialBalanceLabel = formatOptimizerInitialBalance(data);
+  const minimumTradesLabel = data.minimumTrades != null ? data.minimumTrades : OPTIMIZER_MINIMUM_TRADES_DEFAULT;
+  const costModelEnabled = Boolean(data.costModelUsed && Object.keys(data.costModelUsed).length);
+  const recommendationSummary = data.recommendationSummary || {};
 
   let html = '<div style="margin-bottom:16px">';
   html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Initial Balance: '
     + escapeHtml(initialBalanceLabel)
     + ' | Timeframe: ' + escapeHtml(data.timeframe || '--')
     + ' | Optimized for: ' + escapeHtml(data.optimizeFor || '--')
+    + ' | Min trades: ' + escapeHtml(String(minimumTradesLabel))
+    + ' | Cost model: ' + (costModelEnabled ? 'On' : 'Off')
     + ' | Processed: ' + escapeHtml(processedLabel)
     + ' | Valid: ' + escapeHtml(String(data.validResults || 0))
     + '</div>';
   if (data.stopped) {
     html += '<div style="font-size:12px;color:var(--yellow);margin-bottom:8px">Optimizer was stopped early. Showing the best result found so far.</div>';
   }
+  if (data.minimumTradesWarning) {
+    html += '<div style="font-size:12px;color:var(--yellow);margin-bottom:8px">'
+      + escapeHtml(data.minimumTradesWarningMessage || 'minimumTrades below recommended threshold; results may be sample-sensitive')
+      + '</div>';
+  }
+  html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Recommendation summary: '
+    + 'Live ' + escapeHtml(String(recommendationSummary.liveCandidateCount || 0))
+    + ' | Paper ' + escapeHtml(String(recommendationSummary.paperOnlyCount || 0))
+    + ' | Reject ' + escapeHtml(String(recommendationSummary.rejectCount || 0))
+    + ' | Insufficient ' + escapeHtml(String(recommendationSummary.insufficientSampleCount || 0))
+    + '</div>';
   html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Best params source: stored strategy params '
     + (data.bestResult.parameterSource && data.bestResult.parameterSource.hasStoredParameters ? 'Yes' : 'No')
     + ' | runtime overrides Yes</div>';
   html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Selected combination: #' + selectedRank
     + (selectedRank === 1 ? ' (best result)' : '') + '</div>';
+  html += renderOptimizerRiskNotice(selectedSummary);
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
   html += '<button class="btn-primary btn-sm" onclick="applyBestOptimizerParams()">Apply Selected Params</button>';
   html += '<button class="btn-outline btn-sm" onclick="rerunBestOptimizerBacktest()">Run Backtest With Selected Params</button>';
@@ -6203,26 +6453,39 @@ function renderOptResult(data) {
   html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td>' + (selectedSummary.maxDrawdownPercent != null ? selectedSummary.maxDrawdownPercent + '%' : '--') + '</td></tr>';
   html += renderBreakevenSummaryRows(selectedSummary);
   html += '<tr><td style="color:var(--text2)">Sharpe Ratio</td><td>' + (selectedSummary.sharpeRatio != null ? selectedSummary.sharpeRatio : '--') + '</td></tr>';
+  html += renderOptimizerRecommendationRows(selectedRow.recommendation);
+  html += renderOptimizerRiskSummaryRows(selectedSummary);
   html += '</table>';
 
   if (data.top10 && data.top10.length > 1) {
     html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Top 10 Combinations</h4>';
     html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Click any row to preview and apply that optimizer result.</div>';
-    html += '<table><tr><th>#</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th></tr>';
+    html += '<div style="overflow-x:auto"><table><tr><th>#</th><th>Tier</th><th>Robust</th><th>Quality</th><th>Warnings</th><th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th><th>Expectancy</th><th>Ret/DD</th><th>Avg R</th><th>Top1 Conc</th><th>Max CL</th></tr>';
     data.top10.forEach((r, i) => {
+      const s = r.summary || {};
       const isSelected = selectedState.selectedIndex === i;
       const rowStyle = isSelected
         ? 'background:rgba(6,182,212,.16);cursor:pointer'
         : (i === 0 ? 'background:rgba(6,182,212,.1);cursor:pointer' : 'cursor:pointer');
       html += '<tr onclick="selectOptimizerResult(' + i + ')" style="' + rowStyle + '"><td>' + (i+1) + '</td>';
-      html += '<td>' + (r.summary.winRate*100).toFixed(1) + '%</td>';
-      html += '<td>' + fmtBreakevenCompact(r.summary || {}) + '</td>';
-      html += '<td>' + r.summary.profitFactor + '</td>';
-      html += '<td style="color:' + (r.summary.returnPercent>=0?'var(--green)':'var(--red)') + '">' + r.summary.returnPercent + '%</td>';
-      html += '<td>' + r.summary.sharpeRatio + '</td>';
-      html += '<td>' + r.summary.maxDrawdownPercent + '%</td></tr>';
+      html += '<td>' + renderOptimizerRecommendationBadge(r.recommendation) + '</td>';
+      html += '<td>' + fmtOptimizerNumber(s.robustScore, 1) + '</td>';
+      html += '<td>' + escapeHtml(deriveOptimizerSampleQuality(s)) + '</td>';
+      html += '<td>' + renderOptimizerWarningFlags(s, true) + '</td>';
+      html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
+      html += '<td>' + (s.winRate != null ? (s.winRate*100).toFixed(1) + '%' : '--') + '</td>';
+      html += '<td>' + fmtBreakevenCompact(s) + '</td>';
+      html += '<td>' + fmtOptimizerNumber(s.profitFactor, 2) + '</td>';
+      html += '<td style="color:' + ((s.returnPercent || 0)>=0?'var(--green)':'var(--red)') + '">' + (s.returnPercent != null ? fmtOptimizerNumber(s.returnPercent, 2) + '%' : '--') + '</td>';
+      html += '<td>' + fmtOptimizerNumber(s.sharpeRatio, 2) + '</td>';
+      html += '<td>' + (s.maxDrawdownPercent != null ? fmtOptimizerNumber(s.maxDrawdownPercent, 2) + '%' : '--') + '</td>';
+      html += '<td>' + fmtOptimizerNumber(s.expectancyPerTrade, 2) + '</td>';
+      html += '<td>' + fmtOptimizerNumber(s.returnToDrawdown, 2) + '</td>';
+      html += '<td>' + fmtOptimizerNumber(s.avgRealizedR, 2) + '</td>';
+      html += '<td>' + fmtOptimizerRatioPercent(s.profitConcentrationTop1, 1) + '</td>';
+      html += '<td>' + (s.maxConsecutiveLosses != null ? s.maxConsecutiveLosses : '--') + '</td></tr>';
     });
-    html += '</table>';
+    html += '</table></div>';
   }
 
   el.innerHTML = html;
@@ -6404,6 +6667,8 @@ function renderOptimizerHistoryDetail(data) {
     'Status: ' + escapeHtml(data.status || 'completed')
     + ' | Metric: ' + escapeHtml(data.optimizeFor || '--')
     + ' | Workers: ' + escapeHtml(String(data.workerCount || 1))
+    + ' | Min trades: ' + escapeHtml(String(data.minimumTrades != null ? data.minimumTrades : '--'))
+    + ' | Cost model: ' + (data.costModelUsed && Object.keys(data.costModelUsed).length ? 'On' : 'Off')
     + '<br>Initial Balance: ' + escapeHtml(formatOptimizerInitialBalance(data))
     + ' | Combinations: ' + escapeHtml(String(data.processedCombinations || 0)) + '/' + escapeHtml(String(data.totalCombinations || 0))
     + ' | Valid: ' + escapeHtml(String(data.validResults || 0))
@@ -6426,6 +6691,7 @@ function renderOptimizerHistoryDetail(data) {
   html += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">Best params source: stored strategy params '
     + (best.parameterSource && best.parameterSource.hasStoredParameters ? 'Yes' : 'No')
     + ' | runtime overrides Yes</div>';
+  html += renderOptimizerRiskNotice(summary);
 
   html += '<h4 style="margin-bottom:8px;color:var(--cyan)">Best Parameters</h4>';
   html += '<table>';
@@ -6444,23 +6710,35 @@ function renderOptimizerHistoryDetail(data) {
   html += '<tr><td style="color:var(--text2)">Max Drawdown</td><td>' + (summary.maxDrawdownPercent != null ? summary.maxDrawdownPercent + '%' : '--') + '</td></tr>';
   html += renderBreakevenSummaryRows(summary);
   html += '<tr><td style="color:var(--text2)">Sharpe Ratio</td><td>' + (summary.sharpeRatio != null ? summary.sharpeRatio : '--') + '</td></tr>';
+  html += renderOptimizerRecommendationRows(best.recommendation);
+  html += renderOptimizerRiskSummaryRows(summary);
   html += '</table>';
 
   if (Array.isArray(data.top10) && data.top10.length > 1) {
     html += '<h4 style="margin:16px 0 8px;color:var(--cyan)">Top 10 Combinations</h4>';
-    html += '<table><tr><th>#</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th></tr>';
+    html += '<div style="overflow-x:auto"><table><tr><th>#</th><th>Tier</th><th>Robust</th><th>Quality</th><th>Warnings</th><th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Sharpe</th><th>DD</th><th>Expectancy</th><th>Ret/DD</th><th>Avg R</th><th>Top1 Conc</th><th>Max CL</th></tr>';
     data.top10.forEach((row, index) => {
       const rowSummary = row.summary || {};
       const rowStyle = index === 0 ? 'background:rgba(6,182,212,.1)' : '';
       html += '<tr style="' + rowStyle + '"><td>' + (index + 1) + '</td>';
+      html += '<td>' + renderOptimizerRecommendationBadge(row.recommendation) + '</td>';
+      html += '<td>' + fmtOptimizerNumber(rowSummary.robustScore, 1) + '</td>';
+      html += '<td>' + escapeHtml(deriveOptimizerSampleQuality(rowSummary)) + '</td>';
+      html += '<td>' + renderOptimizerWarningFlags(rowSummary, true) + '</td>';
+      html += '<td>' + (rowSummary.totalTrades != null ? rowSummary.totalTrades : '--') + '</td>';
       html += '<td>' + (rowSummary.winRate != null ? (rowSummary.winRate * 100).toFixed(1) + '%' : '--') + '</td>';
       html += '<td>' + fmtBreakevenCompact(rowSummary) + '</td>';
-      html += '<td>' + (rowSummary.profitFactor != null ? rowSummary.profitFactor : '--') + '</td>';
-      html += '<td style="color:' + ((rowSummary.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (rowSummary.returnPercent != null ? rowSummary.returnPercent + '%' : '--') + '</td>';
-      html += '<td>' + (rowSummary.sharpeRatio != null ? rowSummary.sharpeRatio : '--') + '</td>';
-      html += '<td>' + (rowSummary.maxDrawdownPercent != null ? rowSummary.maxDrawdownPercent + '%' : '--') + '</td></tr>';
+      html += '<td>' + fmtOptimizerNumber(rowSummary.profitFactor, 2) + '</td>';
+      html += '<td style="color:' + ((rowSummary.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (rowSummary.returnPercent != null ? fmtOptimizerNumber(rowSummary.returnPercent, 2) + '%' : '--') + '</td>';
+      html += '<td>' + fmtOptimizerNumber(rowSummary.sharpeRatio, 2) + '</td>';
+      html += '<td>' + (rowSummary.maxDrawdownPercent != null ? fmtOptimizerNumber(rowSummary.maxDrawdownPercent, 2) + '%' : '--') + '</td>';
+      html += '<td>' + fmtOptimizerNumber(rowSummary.expectancyPerTrade, 2) + '</td>';
+      html += '<td>' + fmtOptimizerNumber(rowSummary.returnToDrawdown, 2) + '</td>';
+      html += '<td>' + fmtOptimizerNumber(rowSummary.avgRealizedR, 2) + '</td>';
+      html += '<td>' + fmtOptimizerRatioPercent(rowSummary.profitConcentrationTop1, 1) + '</td>';
+      html += '<td>' + (rowSummary.maxConsecutiveLosses != null ? rowSummary.maxConsecutiveLosses : '--') + '</td></tr>';
     });
-    html += '</table>';
+    html += '</table></div>';
   }
 
   bodyEl.innerHTML = html;
@@ -8095,7 +8373,7 @@ function renderOptimizerFullResults() {
 
   let html = '<div style="overflow-x:auto"><table><tr><th>#</th>';
   paramKeys.forEach((k) => { html += '<th>' + escapeHtml(k) + '</th>'; });
-  html += '<th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>DD</th><th>Sharpe</th></tr>';
+  html += '<th>Tier</th><th>Robust</th><th>Quality</th><th>Warnings</th><th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>DD</th><th>Sharpe</th><th>Expectancy</th><th>Ret/DD</th><th>Avg R</th><th>Top1 Conc</th><th>Max CL</th></tr>';
   pageRows.forEach((row, idx) => {
     const globalIdx = start + idx + 1;
     const s = row.summary || {};
@@ -8105,13 +8383,22 @@ function renderOptimizerFullResults() {
       const v = row.parameters ? row.parameters[k] : undefined;
       html += '<td>' + escapeHtml(v != null ? String(v) : '--') + '</td>';
     });
+    html += '<td>' + renderOptimizerRecommendationBadge(row.recommendation) + '</td>';
+    html += '<td>' + fmtOptimizerNumber(s.robustScore, 1) + '</td>';
+    html += '<td>' + escapeHtml(deriveOptimizerSampleQuality(s)) + '</td>';
+    html += '<td>' + renderOptimizerWarningFlags(s, true) + '</td>';
     html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
     html += '<td>' + (s.winRate != null ? (s.winRate * 100).toFixed(1) + '%' : '--') + '</td>';
     html += '<td>' + fmtBreakevenCompact(s) + '</td>';
-    html += '<td>' + (s.profitFactor != null ? s.profitFactor : '--') + '</td>';
-    html += '<td style="color:' + ((s.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? s.returnPercent + '%' : '--') + '</td>';
-    html += '<td>' + (s.maxDrawdownPercent != null ? s.maxDrawdownPercent + '%' : '--') + '</td>';
-    html += '<td>' + (s.sharpeRatio != null ? s.sharpeRatio : '--') + '</td></tr>';
+    html += '<td>' + fmtOptimizerNumber(s.profitFactor, 2) + '</td>';
+    html += '<td style="color:' + ((s.returnPercent || 0) >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? fmtOptimizerNumber(s.returnPercent, 2) + '%' : '--') + '</td>';
+    html += '<td>' + (s.maxDrawdownPercent != null ? fmtOptimizerNumber(s.maxDrawdownPercent, 2) + '%' : '--') + '</td>';
+    html += '<td>' + fmtOptimizerNumber(s.sharpeRatio, 2) + '</td>';
+    html += '<td>' + fmtOptimizerNumber(s.expectancyPerTrade, 2) + '</td>';
+    html += '<td>' + fmtOptimizerNumber(s.returnToDrawdown, 2) + '</td>';
+    html += '<td>' + fmtOptimizerNumber(s.avgRealizedR, 2) + '</td>';
+    html += '<td>' + fmtOptimizerRatioPercent(s.profitConcentrationTop1, 1) + '</td>';
+    html += '<td>' + (s.maxConsecutiveLosses != null ? s.maxConsecutiveLosses : '--') + '</td></tr>';
   });
   html += '</table></div>';
   bodyEl.innerHTML = html;

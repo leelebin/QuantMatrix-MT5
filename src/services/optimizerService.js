@@ -16,6 +16,18 @@ const {
   countCombinations,
   iterateCombinations,
 } = require('./optimizerGrid');
+const {
+  DEFAULT_OPTIMIZER_OBJECTIVE,
+  DEFAULT_OPTIMIZER_MINIMUM_TRADES,
+  OPTIMIZER_OBJECTIVES,
+  buildMinimumTradesWarning,
+  normalizeOptimizerMinimumTrades,
+  normalizeOptimizerObjective,
+} = require('../utils/optimizerInputs');
+const {
+  attachOptimizerRecommendations,
+  buildRecommendationSummary,
+} = require('../utils/optimizerRecommendations');
 
 let WorkerThread = null;
 try {
@@ -30,6 +42,9 @@ const MIN_COMBINATIONS_PER_WORKER = 25;
 const MEDIUM_DATASET_CANDLE_THRESHOLD = 120000;
 const LARGE_DATASET_CANDLE_THRESHOLD = 300000;
 const VERY_LARGE_DATASET_CANDLE_THRESHOLD = 900000;
+const VERY_SMALL_SAMPLE_FLAG = 'VERY_SMALL_SAMPLE';
+const DEFAULT_SECONDARY_OBJECTIVES = ['robustScore', 'profitFactor', 'returnToDrawdown', 'totalTrades'];
+const ROBUST_SCORE_SECONDARY_OBJECTIVES = ['profitFactor', 'returnToDrawdown', 'expectancyPerTrade', 'totalTrades'];
 
 class OptimizerService {
   constructor() {
@@ -104,12 +119,77 @@ class OptimizerService {
     }
   }
 
-  _sortResults(results, optimizeFor) {
+  _getSortableSummaryValue(result, summaryKey) {
+    const rawValue = result?.summary?.[summaryKey];
+    if (rawValue == null) {
+      return Number.NEGATIVE_INFINITY;
+    }
+    const value = Number(rawValue);
+    return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+  }
+
+  _hasVerySmallSampleWarning(result) {
+    return Array.isArray(result?.summary?.warningFlags)
+      && result.summary.warningFlags.includes(VERY_SMALL_SAMPLE_FLAG);
+  }
+
+  _getPrimarySortValue(result, objective) {
+    const value = this._getSortableSummaryValue(result, objective.summaryKey);
+    if (objective.summaryKey === 'robustScore' || !this._hasVerySmallSampleWarning(result)) {
+      return value;
+    }
+
+    if (value === Number.NEGATIVE_INFINITY) {
+      return value;
+    }
+
+    if (objective.summaryKey === 'profitFactor') {
+      return Math.min(value, 1.2);
+    }
+
+    if (objective.summaryKey === 'winRate') {
+      return Math.min(value, 0.5);
+    }
+
+    if (
+      objective.summaryKey === 'returnPercent'
+      || objective.summaryKey === 'sharpeRatio'
+      || objective.summaryKey === 'returnToDrawdown'
+      || objective.summaryKey === 'expectancyPerTrade'
+      || objective.summaryKey === 'avgRealizedR'
+      || objective.summaryKey === 'medianRealizedR'
+    ) {
+      return Math.min(value, 0);
+    }
+
+    return value * 0.5;
+  }
+
+  _getSortKeysForObjective(objective) {
+    const secondaryKeys = objective.summaryKey === 'robustScore'
+      ? ROBUST_SCORE_SECONDARY_OBJECTIVES
+      : DEFAULT_SECONDARY_OBJECTIVES;
+    return [
+      { key: objective.summaryKey, primary: true },
+      ...secondaryKeys
+        .filter((key) => key !== objective.summaryKey)
+        .map((key) => ({ key, primary: false })),
+    ];
+  }
+
+  _sortResults(results, objective) {
+    const sortKeys = this._getSortKeysForObjective(objective);
     results.sort((a, b) => {
-      const valueA = a.summary[optimizeFor] || 0;
-      const valueB = b.summary[optimizeFor] || 0;
-      if (valueB !== valueA) {
-        return valueB - valueA;
+      for (const sortKey of sortKeys) {
+        const valueA = sortKey.primary
+          ? this._getPrimarySortValue(a, objective)
+          : this._getSortableSummaryValue(a, sortKey.key);
+        const valueB = sortKey.primary
+          ? this._getPrimarySortValue(b, objective)
+          : this._getSortableSummaryValue(b, sortKey.key);
+        if (valueB !== valueA) {
+          return valueB - valueA;
+        }
       }
       return (a.combinationIndex ?? 0) - (b.combinationIndex ?? 0);
     });
@@ -117,6 +197,10 @@ class OptimizerService {
 
   _stripInternalResultFields(results) {
     return results.map(({ combinationIndex, ...row }) => row);
+  }
+
+  _prepareOptimizerResults(results, context) {
+    return attachOptimizerRecommendations(this._stripInternalResultFields(results), context);
   }
 
   async _runSequential(params) {
@@ -128,13 +212,14 @@ class OptimizerService {
       higherTfCandles = null,
       lowerTfCandles = null,
       initialBalance = 10000,
+      costModel = null,
       tradeStartTime = null,
       tradeEndTime = null,
       storedStrategyParameters = null,
       breakevenConfig = null,
       executionPolicy = null,
       onProgress = null,
-      minimumTrades = 5,
+      minimumTrades = DEFAULT_OPTIMIZER_MINIMUM_TRADES,
       paramSpecs,
       totalCombinations,
       workerCount,
@@ -166,6 +251,7 @@ class OptimizerService {
           higherTfCandles,
           lowerTfCandles,
           initialBalance,
+          costModel,
           tradeStartTime,
           tradeEndTime,
           strategyParams: combo,
@@ -232,13 +318,14 @@ class OptimizerService {
       higherTfCandles = null,
       lowerTfCandles = null,
       initialBalance = 10000,
+      costModel = null,
       tradeStartTime = null,
       tradeEndTime = null,
       storedStrategyParameters = null,
       breakevenConfig = null,
       executionPolicy = null,
       onProgress = null,
-      minimumTrades = 5,
+      minimumTrades = DEFAULT_OPTIMIZER_MINIMUM_TRADES,
       paramSpecs,
       totalCombinations,
       workerCount,
@@ -256,6 +343,7 @@ class OptimizerService {
       higherTfCandles,
       lowerTfCandles,
       initialBalance,
+      costModel,
       tradeStartTime,
       tradeEndTime,
       storedStrategyParameters,
@@ -389,21 +477,26 @@ class OptimizerService {
       higherTfCandles = null,
       lowerTfCandles = null,
       initialBalance = 10000,
+      costModel = null,
       paramRanges = null,
-      optimizeFor = 'profitFactor',
+      optimizeFor = DEFAULT_OPTIMIZER_OBJECTIVE,
       tradeStartTime = null,
       tradeEndTime = null,
       storedStrategyParameters = null,
       breakevenConfig = null,
       executionPolicy = null,
       onProgress = null,
-      minimumTrades = 5,
+      minimumTrades = DEFAULT_OPTIMIZER_MINIMUM_TRADES,
       parallelWorkers = null,
     } = params;
 
     if (this.running) {
       throw new Error('Optimizer is already running');
     }
+
+    const objective = normalizeOptimizerObjective(optimizeFor);
+    const normalizedMinimumTrades = normalizeOptimizerMinimumTrades(minimumTrades);
+    const minimumTradesWarningMessage = buildMinimumTradesWarning(normalizedMinimumTrades);
 
     const ranges = paramRanges || getOptimizerParameterRanges(strategyType);
     if (!ranges || Object.keys(ranges).length === 0) {
@@ -447,13 +540,14 @@ class OptimizerService {
             higherTfCandles,
             lowerTfCandles,
             initialBalance,
+            costModel,
             tradeStartTime,
             tradeEndTime,
             storedStrategyParameters,
             breakevenConfig,
             executionPolicy,
             onProgress,
-            minimumTrades,
+            minimumTrades: normalizedMinimumTrades,
             paramSpecs,
             totalCombinations,
             workerCount,
@@ -466,20 +560,24 @@ class OptimizerService {
             higherTfCandles,
             lowerTfCandles,
             initialBalance,
+            costModel,
             tradeStartTime,
             tradeEndTime,
             storedStrategyParameters,
             breakevenConfig,
             executionPolicy,
             onProgress,
-            minimumTrades,
+            minimumTrades: normalizedMinimumTrades,
             paramSpecs,
             totalCombinations,
             workerCount,
           });
 
-      this._sortResults(runState.results, optimizeFor);
-      const normalizedResults = this._stripInternalResultFields(runState.results);
+      this._sortResults(runState.results, objective);
+      const normalizedResults = this._prepareOptimizerResults(runState.results, {
+        symbol,
+        strategy: strategyType,
+      });
       const processedCombinations = runState.processedCombinations || 0;
       const stopped = this.stopRequested && processedCombinations < totalCombinations;
       const optimizerResult = {
@@ -490,7 +588,14 @@ class OptimizerService {
         totalCombinations,
         processedCombinations,
         validResults: normalizedResults.length,
-        optimizeFor,
+        optimizeFor: objective.key,
+        requestedOptimizeFor: objective.requestedKey,
+        optimizeForLabel: objective.label,
+        costModelUsed: costModel || null,
+        minimumTrades: normalizedMinimumTrades,
+        minimumTradesWarning: Boolean(minimumTradesWarningMessage),
+        minimumTradesWarningMessage,
+        recommendationSummary: buildRecommendationSummary(normalizedResults),
         stopped,
         status: stopped ? 'stopped' : 'completed',
         workerCount,
@@ -507,12 +612,12 @@ class OptimizerService {
         console.log(
           `[Optimizer] Stopped: ${normalizedResults.length} valid results from `
           + `${processedCombinations}/${totalCombinations} combinations`
-          + (normalizedResults[0] ? ` | Best ${optimizeFor}: ${normalizedResults[0].summary[optimizeFor]}` : '')
+          + (normalizedResults[0] ? ` | Best ${objective.key}: ${normalizedResults[0].summary[objective.summaryKey]}` : '')
         );
       } else {
         console.log(
           `[Optimizer] Complete: ${normalizedResults.length} valid results from ${totalCombinations} combinations`
-          + (normalizedResults[0] ? ` | Best ${optimizeFor}: ${normalizedResults[0].summary[optimizeFor]}` : '')
+          + (normalizedResults[0] ? ` | Best ${objective.key}: ${normalizedResults[0].summary[objective.summaryKey]}` : '')
         );
       }
 
@@ -539,20 +644,24 @@ class OptimizerService {
           higherTfCandles,
           lowerTfCandles,
           initialBalance,
+          costModel,
           tradeStartTime,
           tradeEndTime,
           storedStrategyParameters,
           breakevenConfig,
           executionPolicy,
           onProgress,
-          minimumTrades,
+          minimumTrades: normalizedMinimumTrades,
           paramSpecs,
           totalCombinations,
           workerCount: 1,
         });
 
-        this._sortResults(sequentialState.results, optimizeFor);
-        const normalizedResults = this._stripInternalResultFields(sequentialState.results);
+        this._sortResults(sequentialState.results, objective);
+        const normalizedResults = this._prepareOptimizerResults(sequentialState.results, {
+          symbol,
+          strategy: strategyType,
+        });
         const processedCombinations = sequentialState.processedCombinations || 0;
         const stopped = this.stopRequested && processedCombinations < totalCombinations;
         const optimizerResult = {
@@ -563,7 +672,14 @@ class OptimizerService {
           totalCombinations,
           processedCombinations,
           validResults: normalizedResults.length,
-          optimizeFor,
+          optimizeFor: objective.key,
+          requestedOptimizeFor: objective.requestedKey,
+          optimizeForLabel: objective.label,
+          costModelUsed: costModel || null,
+          minimumTrades: normalizedMinimumTrades,
+          minimumTradesWarning: Boolean(minimumTradesWarningMessage),
+          minimumTradesWarningMessage,
+          recommendationSummary: buildRecommendationSummary(normalizedResults),
           stopped,
           status: stopped ? 'stopped' : 'completed',
           workerCount: 1,
@@ -642,5 +758,7 @@ class OptimizerService {
 
 const optimizerService = new OptimizerService();
 optimizerService.MAX_OPTIMIZER_COMBINATIONS = MAX_OPTIMIZER_COMBINATIONS;
+optimizerService.OPTIMIZER_OBJECTIVES = OPTIMIZER_OBJECTIVES;
+optimizerService.DEFAULT_OPTIMIZER_MINIMUM_TRADES = DEFAULT_OPTIMIZER_MINIMUM_TRADES;
 
 module.exports = optimizerService;

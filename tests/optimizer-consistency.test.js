@@ -64,7 +64,7 @@ describe('optimizer/backtest consistency', () => {
     }
   });
 
-  test('optimizer single-combination results match the formal backtest engine output', async () => {
+  test('optimizer filters single-combination formal backtest output below minimumTrades', async () => {
     const candles = makeCandles(270, 95);
     const initialBalance = 25000;
     const params = {
@@ -84,6 +84,7 @@ describe('optimizer/backtest consistency', () => {
       tradeEndTime: candles[candles.length - 1].time,
       strategyParams: params,
     });
+    expect(simulation.summary.totalTrades).toBeLessThan(5);
 
     const optimization = await optimizerService.run({
       symbol: 'XTIUSD',
@@ -99,12 +100,14 @@ describe('optimizer/backtest consistency', () => {
         slMultiplier: { min: 2, max: 2, step: 0.1 },
         tpMultiplier: { min: 5, max: 5, step: 0.1 },
       },
-      minimumTrades: 0,
+      minimumTrades: 5,
     });
 
     expect(optimization.initialBalance).toBe(initialBalance);
-    expect(optimization.bestResult.parameters).toEqual(simulation.parameters);
-    expect(optimization.bestResult.summary).toEqual(simulation.summary);
+    expect(optimization.minimumTrades).toBe(5);
+    expect(optimization.minimumTradesWarning).toBe(true);
+    expect(optimization.validResults).toBe(0);
+    expect(optimization.bestResult).toBeNull();
   });
 
   test('parallel optimizer workers produce the same exact results as sequential mode', async () => {
@@ -118,7 +121,7 @@ describe('optimizer/backtest consistency', () => {
       initialBalance,
       tradeStartTime: candles[250].time,
       tradeEndTime: candles[candles.length - 1].time,
-      minimumTrades: 0,
+      minimumTrades: 5,
       paramRanges: {
         lookback_period: { min: 20, max: 29, step: 1 },
         body_multiplier: { min: 1.0, max: 2.0, step: 0.2 },
@@ -156,7 +159,7 @@ describe('optimizer/backtest consistency', () => {
       candles,
       tradeStartTime: candles[250].time,
       tradeEndTime: candles[candles.length - 1].time,
-      minimumTrades: 0,
+      minimumTrades: 5,
       paramRanges: {
         lookback_period: { min: 1, max: 200, step: 1 },
         body_multiplier: { min: 1, max: 200, step: 1 },
@@ -185,7 +188,7 @@ describe('optimizer/backtest consistency', () => {
       candles,
       tradeStartTime: candles[250].time,
       tradeEndTime: candles[candles.length - 1].time,
-      minimumTrades: 0,
+      minimumTrades: 5,
       paramRanges: {
         lookback_period: { min: 20, max: 21, step: 1 },
         body_multiplier: { min: 1.2, max: 1.2, step: 0.1 },
@@ -203,6 +206,7 @@ describe('optimizer/backtest consistency', () => {
     expect(optimization.status).toBe('stopped');
     expect(optimization.processedCombinations).toBe(1);
     expect(optimization.totalCombinations).toBe(2);
-    expect(optimization.validResults).toBe(1);
+    expect(optimization.validResults).toBe(0);
+    expect(optimization.bestResult).toBeNull();
   });
 });

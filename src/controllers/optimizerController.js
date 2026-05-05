@@ -22,8 +22,21 @@ const {
   getWarmupStart,
   normalizeDateRange,
 } = require('../utils/candleRange');
+const {
+  normalizeOptimizerMinimumTrades,
+  normalizeOptimizerObjective,
+} = require('../utils/optimizerInputs');
 
 const DEFAULT_OPTIMIZER_INITIAL_BALANCE = 10000;
+const OPTIMIZER_COST_MODEL_NUMERIC_FIELDS = new Set([
+  'spreadPips',
+  'slippagePips',
+  'commissionPerLot',
+  'swapLongPerLotPerDay',
+  'swapShortPerLotPerDay',
+  'fixedFeePerTrade',
+]);
+const OPTIMIZER_COST_MODEL_BOOLEAN_FIELDS = new Set(['commissionPerSide']);
 
 function normalizeInitialBalanceInput(value) {
   if (value == null || value === '') return DEFAULT_OPTIMIZER_INITIAL_BALANCE;
@@ -36,6 +49,43 @@ function normalizeInitialBalanceInput(value) {
   }
 
   return parsed;
+}
+
+function buildBadRequest(message) {
+  const err = new Error(message);
+  err.statusCode = 400;
+  return err;
+}
+
+function normalizeOptimizerCostModelInput(value) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw buildBadRequest('costModel must be an object');
+  }
+
+  const normalized = {};
+  for (const [field, rawValue] of Object.entries(value)) {
+    if (OPTIMIZER_COST_MODEL_NUMERIC_FIELDS.has(field)) {
+      const parsed = Number(rawValue);
+      if (!Number.isFinite(parsed)) {
+        throw buildBadRequest(`costModel.${field} must be a finite number`);
+      }
+      normalized[field] = parsed;
+      continue;
+    }
+
+    if (OPTIMIZER_COST_MODEL_BOOLEAN_FIELDS.has(field)) {
+      if (typeof rawValue !== 'boolean') {
+        throw buildBadRequest(`costModel.${field} must be a boolean`);
+      }
+      normalized[field] = rawValue;
+      continue;
+    }
+
+    throw buildBadRequest(`Unsupported costModel field: ${field}`);
+  }
+
+  return normalized;
 }
 
 // @desc    Run optimizer
@@ -52,8 +102,13 @@ exports.runOptimizer = async (req, res) => {
       optimizeFor,
       parallelWorkers,
       initialBalance,
+      minimumTrades,
+      costModel,
     } = req.body;
     const normalizedInitialBalance = normalizeInitialBalanceInput(initialBalance);
+    const normalizedObjective = normalizeOptimizerObjective(optimizeFor);
+    const normalizedMinimumTrades = normalizeOptimizerMinimumTrades(minimumTrades);
+    const normalizedCostModel = normalizeOptimizerCostModelInput(costModel);
     const instrument = getInstrument(symbol);
     if (!instrument) {
       return res.status(400).json({
@@ -166,6 +221,9 @@ exports.runOptimizer = async (req, res) => {
         symbol,
         strategyType,
         initialBalance: normalizedInitialBalance,
+        optimizeFor: normalizedObjective.key,
+        minimumTrades: normalizedMinimumTrades,
+        costModelUsed: normalizedCostModel,
         candles: candles.length,
         paramRanges: paramRanges || optimizerService.getDefaultRanges(strategyType),
       },
@@ -182,7 +240,9 @@ exports.runOptimizer = async (req, res) => {
         lowerTfCandles,
         initialBalance: normalizedInitialBalance,
         paramRanges: paramRanges || undefined,
-        optimizeFor: optimizeFor || 'profitFactor',
+        optimizeFor: normalizedObjective.key,
+        minimumTrades: normalizedMinimumTrades,
+        costModel: normalizedCostModel,
         parallelWorkers: parallelWorkers || undefined,
         tradeStartTime: (effectiveStart || start).toISOString(),
         tradeEndTime: effectiveEnd.toISOString(),

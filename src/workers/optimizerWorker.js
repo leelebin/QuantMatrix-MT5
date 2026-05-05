@@ -22,6 +22,9 @@ require.cache[dbModulePath] = {
 
 const backtestEngine = require('../services/backtestEngine');
 const { combinationAt } = require('../services/optimizerGrid');
+const {
+  DEFAULT_OPTIMIZER_MINIMUM_TRADES,
+} = require('../utils/optimizerInputs');
 
 let stopRequested = false;
 
@@ -39,7 +42,7 @@ async function run() {
     endIndex,
     paramSpecs,
     sharedRunParams,
-    minimumTrades,
+    minimumTrades = DEFAULT_OPTIMIZER_MINIMUM_TRADES,
     progressEvery,
   } = workerData;
 

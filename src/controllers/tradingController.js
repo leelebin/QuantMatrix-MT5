@@ -6,7 +6,7 @@ const riskManager = require('../services/riskManager');
 const strategyDailyStopService = require('../services/strategyDailyStopService');
 const indicatorService = require('../services/indicatorService');
 const websocketService = require('../services/websocketService');
-const notificationService = require('../services/notificationService');
+const tradeNotificationService = require('../services/tradeNotificationService');
 const Strategy = require('../models/Strategy');
 const ExecutionAudit = require('../models/ExecutionAudit');
 const { positionsDb, tradesDb } = require('../config/db');
@@ -267,7 +267,10 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
 
   websocketService.broadcast('trades', 'trade_opened', position);
   websocketService.broadcast('positions', 'position_update', { action: 'opened', position });
-  await notificationService.notifyTradeOpened(position);
+  await tradeNotificationService.notifyTradeOpened({
+    scope: 'live',
+    ...position,
+  });
 
   return position;
 }

@@ -12,6 +12,7 @@ const strategyEngine = require('./strategyEngine');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
 const notificationService = require('./notificationService');
+const tradeNotificationService = require('./tradeNotificationService');
 const trailingStopService = require('./trailingStopService');
 const breakevenService = require('./breakevenService');
 const economicCalendarService = require('./economicCalendarService');
@@ -837,7 +838,10 @@ class PaperTradingService {
 
       // Broadcast + notify
       websocketService.broadcast('trades', 'paper_trade_opened', position);
-      await notificationService.notifyTradeOpened(position);
+      await tradeNotificationService.notifyTradeOpened({
+        scope: 'paper',
+        ...position,
+      });
 
     } catch (err) {
       console.error(`[PaperTrading] Execute error for ${signal.symbol}:`, err.message);

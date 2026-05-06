@@ -38,6 +38,10 @@ jest.mock('../src/services/notificationService', () => ({
   notifyTradeOpened: jest.fn(),
 }));
 
+jest.mock('../src/services/tradeNotificationService', () => ({
+  notifyTradeOpened: jest.fn(),
+}));
+
 jest.mock('../src/services/liveTradingPermissionService', () => ({
   isAllowLiveTradingEnabled: jest.fn(),
   setAllowLiveTrading: jest.fn(),
@@ -105,7 +109,7 @@ const mt5Service = require('../src/services/mt5Service');
 const riskManager = require('../src/services/riskManager');
 const strategyEngine = require('../src/services/strategyEngine');
 const websocketService = require('../src/services/websocketService');
-const notificationService = require('../src/services/notificationService');
+const tradeNotificationService = require('../src/services/tradeNotificationService');
 const liveTradingPermissionService = require('../src/services/liveTradingPermissionService');
 const positionMonitor = require('../src/services/positionMonitor');
 const {
@@ -178,7 +182,7 @@ describe('tradingController.testOrder', () => {
     positionsDb.insert.mockImplementation(async (doc) => ({ _id: 'pos-1', ...doc }));
     tradesDb.insert.mockImplementation(async (doc) => ({ _id: 'trade-1', ...doc }));
     ExecutionAudit.create.mockResolvedValue({ _id: 'audit-1' });
-    notificationService.notifyTradeOpened.mockResolvedValue();
+    tradeNotificationService.notifyTradeOpened.mockResolvedValue();
   });
 
   test('opens a manual debug order with custom lot size and stores it locally', async () => {
@@ -223,7 +227,12 @@ describe('tradingController.testOrder', () => {
       mt5PositionId: '7001',
       status: 'OPEN',
     }));
-    expect(notificationService.notifyTradeOpened).toHaveBeenCalled();
+    expect(tradeNotificationService.notifyTradeOpened).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'live',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      strategy: 'ManualDebug',
+    }));
     expect(websocketService.broadcast).toHaveBeenCalled();
     expect(ExecutionAudit.create).toHaveBeenCalled();
   });

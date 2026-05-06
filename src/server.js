@@ -18,6 +18,7 @@ const paperTradingRoutes = require('./routes/paperTradingRoutes');
 const riskSettingsRoutes = require('./routes/riskSettingsRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const maintenanceRoutes = require('./routes/maintenanceRoutes');
+const dataSyncRoutes = require('./routes/dataSyncRoutes');
 const Strategy = require('./models/Strategy');
 const StrategyInstance = require('./models/StrategyInstance');
 const websocketService = require('./services/websocketService');
@@ -27,6 +28,7 @@ const remoteAccessService = require('./services/remoteAccessService');
 const strategyEngine = require('./services/strategyEngine');
 const economicCalendarService = require('./services/economicCalendarService');
 const resourceMonitorService = require('./services/resourceMonitorService');
+const dataSyncSchedulerService = require('./services/dataSyncSchedulerService');
 
 // Install persistent file logging (console.log/warn/error -> logs/system.log,
 // logs/error.log). Console output is preserved.
@@ -121,6 +123,7 @@ app.use('/api/paper-trading', paperTradingRoutes);
 app.use('/api/risk-settings', riskSettingsRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/data-sync', dataSyncRoutes);
 
 // WebSocket status endpoint
 app.get('/api/ws/status', protect, (req, res) => {
@@ -201,6 +204,11 @@ async function startServer() {
       console.log(`Dashboard: http://localhost:${PORT}`);
 
       websocketService.init(server);
+      try {
+        dataSyncSchedulerService.start();
+      } catch (error) {
+        console.error(`[DataSync] Scheduler failed to start: ${error.message}`);
+      }
     });
 
     server.on('error', handleServerError);
@@ -216,6 +224,7 @@ startServer();
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[Server] SIGTERM received, shutting down...');
+  dataSyncSchedulerService.stop();
   websocketService.shutdown();
   if (!server) {
     process.exit(0);
@@ -226,6 +235,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('[Server] SIGINT received, shutting down...');
+  dataSyncSchedulerService.stop();
   websocketService.shutdown();
   if (!server) {
     process.exit(0);

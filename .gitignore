@@ -6,6 +6,12 @@ coverage/
 logs/
 data/
 data/economic-calendar.json
+backups/
+rclone.conf
+.rclone.conf
+.rclone/
+.config/rclone/
+rclone-token*.json
 node-portable/
 ngrok-portable/
 __pycache__/

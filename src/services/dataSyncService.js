@@ -1,4 +1,5 @@
 const childProcess = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
 const { createSnapshot } = require('../../scripts/create-data-snapshot');
@@ -6,6 +7,9 @@ const { createSnapshot } = require('../../scripts/create-data-snapshot');
 const DEFAULT_PROVIDER = 'rclone';
 const DEFAULT_REMOTE = 'quantmatrix-drive';
 const DEFAULT_REMOTE_PATH = 'QuantMatrix/backups';
+const DEFAULT_KEEP_LOCAL_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LOCAL_SNAPSHOT_FILE_PATTERN = /^quantmatrix-data-snapshot-\d{4}-\d{2}-\d{2}-\d{6}\.(zip|manifest\.json)$/;
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -39,9 +43,17 @@ function resolveConfig(env = process.env) {
     provider: normalizeProvider(env.DATA_SYNC_PROVIDER),
     remote: String(env.DATA_SYNC_REMOTE || DEFAULT_REMOTE).trim(),
     remoteBasePath: normalizeRemotePath(env.DATA_SYNC_REMOTE_PATH),
-    keepLocalDays: Number.parseInt(env.DATA_SYNC_KEEP_LOCAL_DAYS || '14', 10),
+    keepLocalDays: normalizeKeepLocalDays(env.DATA_SYNC_KEEP_LOCAL_DAYS),
     notifyTelegram: parseBoolean(env.DATA_SYNC_NOTIFY_TELEGRAM, true),
   };
+}
+
+function normalizeKeepLocalDays(value) {
+  const source = value === undefined || value === null || value === ''
+    ? String(DEFAULT_KEEP_LOCAL_DAYS)
+    : value;
+  const parsed = Number.parseInt(source, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_KEEP_LOCAL_DAYS;
 }
 
 function getSnapshotDateFolder(snapshotResult) {
@@ -113,7 +125,7 @@ function makeError(code, message, details = {}) {
   };
 }
 
-function makeBaseResult(config, snapshotResult, remotePath) {
+function makeBaseResult(config, snapshotResult, remotePath, deletedLocalBackups = []) {
   const skipped = snapshotResult && Array.isArray(snapshotResult.skipped)
     ? snapshotResult.skipped
     : [];
@@ -129,9 +141,63 @@ function makeBaseResult(config, snapshotResult, remotePath) {
     totalBytes: snapshotResult ? snapshotResult.totalBytes : 0,
     partial: skipped.length > 0,
     skipped,
+    deletedLocalBackups,
     uploadedFiles: [],
     error: null,
   };
+}
+
+function cleanupOldLocalBackups(snapshotResult, keepLocalDays, now = new Date()) {
+  if (!snapshotResult || !snapshotResult.zipPath) return [];
+
+  const backupDir = path.dirname(snapshotResult.zipPath);
+  if (
+    path.basename(backupDir).toLowerCase() !== 'local'
+    || path.basename(path.dirname(backupDir)).toLowerCase() !== 'backups'
+  ) {
+    return [];
+  }
+
+  const protectedPaths = new Set(
+    [snapshotResult.zipPath, snapshotResult.manifestPath]
+      .filter(Boolean)
+      .map((filePath) => path.resolve(filePath))
+  );
+  const cutoffMs = now.getTime() - (normalizeKeepLocalDays(keepLocalDays) * DAY_MS);
+  const deleted = [];
+
+  let entries;
+  try {
+    entries = fs.readdirSync(backupDir, { withFileTypes: true });
+  } catch (error) {
+    return deleted;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !LOCAL_SNAPSHOT_FILE_PATTERN.test(entry.name)) {
+      continue;
+    }
+
+    const filePath = path.join(backupDir, entry.name);
+    const resolvedPath = path.resolve(filePath);
+    if (protectedPaths.has(resolvedPath)) {
+      continue;
+    }
+
+    try {
+      const stats = fs.statSync(resolvedPath);
+      if (stats.mtimeMs >= cutoffMs) {
+        continue;
+      }
+
+      fs.rmSync(resolvedPath, { force: true });
+      deleted.push(resolvedPath);
+    } catch (error) {
+      // Cleanup is best-effort and should never fail a successful snapshot.
+    }
+  }
+
+  return deleted;
 }
 
 async function ensureRcloneAvailable() {
@@ -206,6 +272,7 @@ async function syncDataToCloud(options = {}) {
   const force = Boolean(options.force);
 
   let snapshotResult = null;
+  let deletedLocalBackups = [];
   let remotePath = `${config.remote}:${joinRemotePath(config.remoteBasePath, new Date().toISOString().slice(0, 10))}/`;
 
   try {
@@ -224,7 +291,8 @@ async function syncDataToCloud(options = {}) {
 
     const dateFolder = getSnapshotDateFolder(snapshotResult);
     remotePath = buildRemoteFolder(config, dateFolder);
-    const result = makeBaseResult(config, snapshotResult, remotePath);
+    deletedLocalBackups = cleanupOldLocalBackups(snapshotResult, config.keepLocalDays);
+    const result = makeBaseResult(config, snapshotResult, remotePath, deletedLocalBackups);
 
     if (!config.enabled && !force) {
       return {
@@ -271,7 +339,7 @@ async function syncDataToCloud(options = {}) {
       uploadedFiles,
     };
   } catch (error) {
-    const result = makeBaseResult(config, snapshotResult, remotePath);
+    const result = makeBaseResult(config, snapshotResult, remotePath, deletedLocalBackups);
     return {
       ...result,
       error: error && error.code
@@ -284,4 +352,8 @@ async function syncDataToCloud(options = {}) {
 module.exports = {
   syncDataToCloud,
   resolveConfig,
+  _internals: {
+    cleanupOldLocalBackups,
+    normalizeKeepLocalDays,
+  },
 };

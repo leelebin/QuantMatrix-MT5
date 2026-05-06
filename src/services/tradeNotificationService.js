@@ -145,6 +145,7 @@ function buildFingerprint(event) {
     event.symbol,
     event.strategy.toLowerCase(),
     event.side,
+    event.timeframe.toLowerCase(),
   ].join('|');
 }
 
@@ -207,6 +208,16 @@ function buildDataSyncMessage(result = {}) {
       `[DATA SYNC ${'\u2705'}]`,
       `Files ${Number(result.fileCount || 0)} | Size ${formatBytes(result.totalBytes)}`,
       `Remote: ${escapeHtml(formatRemotePath(result.remotePath))}`,
+      `Host: ${escapeHtml(os.hostname())}`,
+    ].join('\n');
+  }
+
+  if (result.uploadSkipped && result.skipReason === 'DATA_SYNC_DISABLED') {
+    return [
+      `[DATA SYNC ${'\u26A0\uFE0F'}]`,
+      'Local snapshot created',
+      'Cloud upload: disabled',
+      `Files ${Number(result.fileCount || 0)} | Size ${formatBytes(result.totalBytes)}`,
       `Host: ${escapeHtml(os.hostname())}`,
     ].join('\n');
   }

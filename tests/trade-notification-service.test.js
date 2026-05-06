@@ -79,6 +79,22 @@ describe('tradeNotificationService', () => {
     expect(message).toContain('Vol 0.04');
   });
 
+  test('same symbol strategy and side with different timeframe does not merge', async () => {
+    await tradeNotificationService.notifyTradeOpened(openEvent({ timeframe: '15m' }));
+    await tradeNotificationService.notifyTradeOpened(openEvent({
+      scope: 'live',
+      timeframe: '1h',
+      timestamp: '2026-05-06T10:00:05.000Z',
+    }));
+
+    await advanceMergeWindow();
+
+    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(2);
+    const messages = notificationService.sendTelegram.mock.calls.map((call) => call[0]).join('\n---\n');
+    expect(messages).toContain('EURUSD BUY | Momentum | 15m');
+    expect(messages).toContain('EURUSD BUY | Momentum | 1h');
+  });
+
   test('live open only sends LIVE OPEN', async () => {
     await tradeNotificationService.notifyTradeOpened(openEvent({ scope: 'live' }));
 
@@ -137,6 +153,24 @@ describe('tradeNotificationService', () => {
     const message = notificationService.sendTelegram.mock.calls[0][0];
     expect(message).toContain('[DATA SYNC');
     expect(message).toContain('Error: UPLOAD_FAILED');
+  });
+
+  test('data sync disabled sends warning notification instead of failure', async () => {
+    await tradeNotificationService.notifyDataSyncResult({
+      success: true,
+      uploadSkipped: true,
+      skipReason: 'DATA_SYNC_DISABLED',
+      fileCount: 49,
+      totalBytes: 503633083,
+    });
+
+    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
+    const message = notificationService.sendTelegram.mock.calls[0][0];
+    expect(message).toContain('[DATA SYNC');
+    expect(message).toContain('Local snapshot created');
+    expect(message).toContain('Cloud upload: disabled');
+    expect(message).toContain('Files 49 | Size');
+    expect(message).not.toContain('Error: DATA_SYNC_DISABLED');
   });
 
   test('Telegram disabled does not throw', async () => {

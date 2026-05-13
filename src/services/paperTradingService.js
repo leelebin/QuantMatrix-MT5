@@ -20,10 +20,10 @@ const TradeLog = require('../models/TradeLog');
 const ExecutionAudit = require('../models/ExecutionAudit');
 const RiskProfile = require('../models/RiskProfile');
 const { paperPositionsDb } = require('../config/db');
-const { getInstrument } = require('../config/instruments');
+const { getInstrument, INSTRUMENT_CATEGORIES } = require('../config/instruments');
 const Strategy = require('../models/Strategy');
 const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
-const { buildBrokerComment, buildTradeComment } = require('../utils/tradeComment');
+const { buildBrokerComment, buildTradeComment, parseStrategyFromBrokerComment } = require('../utils/tradeComment');
 const {
   appendManagementEvent,
   buildManagedPositionState,
@@ -32,6 +32,7 @@ const {
 const {
   buildOpenTradeCapture,
   buildPositionExportSnapshot,
+  buildSignalPlaybookTradeFields,
 } = require('../utils/tradeDataCapture');
 const auditService = require('./auditService');
 const strategyDailyStopService = require('./strategyDailyStopService');
@@ -49,6 +50,126 @@ const {
 
 const BASE_MONITOR_TICK_MS = 15 * 1000;
 const JUST_OPENED_WINDOW_MS = 5 * 60 * 1000;
+const PAPER_OPEN_SYNC_GRACE_MS = 2 * 60 * 1000;
+const MARKET_STOP_STALE_TICK_MS = 30 * 60 * 1000;
+const MARKET_STOP_UNTRADEABLE_MODES = new Set(['DISABLED', 'CLOSEONLY']);
+
+function isCryptoSymbol(symbol) {
+  const instrument = getInstrument(symbol);
+  if (instrument?.category === INSTRUMENT_CATEGORIES.CRYPTO) {
+    return true;
+  }
+
+  const normalized = String(symbol || '').toUpperCase();
+  return /^(BTC|ETH|LTC|XRP|BCH|SOL|ADA|DOGE).*(USD|USDT)/.test(normalized);
+}
+
+function toEpochMs(value) {
+  if (value == null) return null;
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value > 1e12 ? value : value * 1000;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getPriceTickEpochMs(priceData = {}) {
+  const candidates = [
+    priceData.timeMsc,
+    priceData.time_msc,
+    priceData.tick?.timeMsc,
+    priceData.tick?.time_msc,
+    priceData.time,
+    priceData.tick?.time,
+  ];
+
+  for (const candidate of candidates) {
+    const timestamp = toEpochMs(candidate);
+    if (timestamp) return timestamp;
+  }
+  return null;
+}
+
+function getTradeModeName(source = {}) {
+  return String(
+    source.tradeModeName
+    || source.symbolInfo?.tradeModeName
+    || source.info?.tradeModeName
+    || source.tick?.tradeModeName
+    || ''
+  ).toUpperCase();
+}
+
+function getMarketStopReasonFromError(err) {
+  const retcodeName = String(
+    err?.retcodeName
+    || err?.codeName
+    || err?.details?.retcodeName
+    || err?.details?.codeName
+    || ''
+  ).toUpperCase();
+  const numericCode = Number(
+    err?.retcode
+    ?? err?.code
+    ?? err?.details?.retcode
+    ?? err?.details?.code
+  );
+  const message = String(err?.message || err?.error || '').toLowerCase();
+
+  if (retcodeName.includes('MARKET_CLOSED') || numericCode === 10018 || message.includes('market closed')) {
+    return 'MARKET_CLOSED';
+  }
+  if (retcodeName.includes('TRADE_DISABLED') || numericCode === 10017 || message.includes('trade disabled')) {
+    return 'TRADE_DISABLED';
+  }
+  return null;
+}
+
+function valuesEqualForSnapshot(left, right) {
+  if (left == null && right == null) return true;
+
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return Math.abs(leftNumber - rightNumber) <= 1e-10;
+  }
+
+  return left === right;
+}
+
+function normalizeComparableText(value) {
+  return String(value || '').trim();
+}
+
+function brokerCommentsMatch(left, right) {
+  const a = normalizeComparableText(left);
+  const b = normalizeComparableText(right);
+  if (!a || !b) return false;
+  return a === b
+    || a.startsWith(b)
+    || b.startsWith(a)
+    || a.slice(0, 28) === b.slice(0, 28);
+}
+
+function volumesMatch(left, right) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (!Number.isFinite(leftNumber) || !Number.isFinite(rightNumber)) return true;
+  return Math.abs(leftNumber - rightNumber) <= 1e-8;
+}
+
+function isAdoptablePaperMt5Position(mt5Position = {}) {
+  const comment = normalizeComparableText(mt5Position.comment);
+  return comment.startsWith('PT|');
+}
 
 function buildDefaultValidation() {
   return { ok: false, warnings: [], errors: [] };
@@ -172,6 +293,7 @@ class PaperTradingService {
       lightDuePositions: [],
       heavyDuePositions: [],
       fastModePositions: [],
+      marketStoppedPositions: [],
       lastScanAt: null,
       lastForcedSyncAt: null,
     };
@@ -209,6 +331,128 @@ class PaperTradingService {
     return false;
   }
 
+  _isMarketStoppedPosition(position) {
+    return position?.marketStop?.active === true;
+  }
+
+  _hasSnapshotChanges(position, patch) {
+    return Object.entries(patch).some(([key, value]) => !valuesEqualForSnapshot(position?.[key], value));
+  }
+
+  _isWithinPaperOpenSyncGrace(position, now = new Date()) {
+    const openedAt = toEpochMs(position?.openedAt || position?.createdAt);
+    if (!openedAt) return false;
+
+    const ageMs = now.getTime() - openedAt;
+    return ageMs >= -PAPER_OPEN_SYNC_GRACE_MS && ageMs <= PAPER_OPEN_SYNC_GRACE_MS;
+  }
+
+  _findMatchingPaperPosition(mt5Position, localPositions, matchedLocalIds = new Set()) {
+    const directMatch = localPositions.find((localPos) => (
+      !matchedLocalIds.has(localPos._id)
+      && localPos.mt5PositionId
+      && String(localPos.mt5PositionId) === String(mt5Position.id)
+    ));
+    if (directMatch) return directMatch;
+
+    return localPositions.find((localPos) => {
+      if (matchedLocalIds.has(localPos._id)) return false;
+      if (String(localPos.symbol || '').toUpperCase() !== String(mt5Position.symbol || '').toUpperCase()) return false;
+      if (String(localPos.type || '').toUpperCase() !== String(mt5Position.type || '').toUpperCase()) return false;
+      if (!volumesMatch(localPos.lotSize ?? localPos.originalLotSize, mt5Position.volume)) return false;
+      return brokerCommentsMatch(localPos.mt5Comment, mt5Position.comment)
+        || brokerCommentsMatch(localPos.comment, mt5Position.comment);
+    });
+  }
+
+  async _adoptPaperPositionFromMt5(mt5Position, now = new Date()) {
+    const side = String(mt5Position?.type || '').toUpperCase();
+    if (side !== 'BUY' && side !== 'SELL') return null;
+
+    const symbol = String(mt5Position?.symbol || '').trim();
+    if (!symbol || !mt5Position?.id) return null;
+
+    const entryPrice = Number(mt5Position.openPrice ?? mt5Position.currentPrice);
+    const currentPrice = Number(mt5Position.currentPrice ?? entryPrice);
+    const openedAtMs = toEpochMs(mt5Position.time);
+    const openedAt = openedAtMs ? new Date(openedAtMs) : now;
+    const mt5Comment = normalizeComparableText(mt5Position.comment);
+    const strategy = parseStrategyFromBrokerComment(mt5Comment) || 'Unknown';
+    const lotSize = Number(mt5Position.volume) || 0;
+    const currentSl = Number(mt5Position.stopLoss) || null;
+    const currentTp = Number(mt5Position.takeProfit) || null;
+    const unrealizedPl = Number(mt5Position.unrealizedProfit ?? mt5Position.profit) || 0;
+
+    const position = await paperPositionsDb.insert({
+      symbol,
+      type: side,
+      entryPrice: Number.isFinite(entryPrice) ? entryPrice : currentPrice,
+      currentSl,
+      currentTp,
+      lotSize,
+      originalLotSize: lotSize,
+      mt5PositionId: String(mt5Position.id),
+      mt5Comment,
+      strategy,
+      comment: buildTradeComment({ symbol, signal: side, strategy, reason: 'Adopted from MT5 paper position' }, mt5Comment),
+      confidence: null,
+      rawConfidence: null,
+      reason: 'Adopted from MT5 paper position',
+      atrAtEntry: 0,
+      currentPrice: Number.isFinite(currentPrice) ? currentPrice : null,
+      unrealizedPl,
+      maxFavourablePrice: Number.isFinite(entryPrice) ? entryPrice : currentPrice,
+      openedAt,
+      status: 'OPEN',
+      syncSource: 'mt5_orphan_adoption',
+      adoptedAt: now,
+    });
+
+    try {
+      await TradeLog.logOpen({
+        symbol,
+        type: side,
+        lotSize,
+        entryPrice: Number.isFinite(entryPrice) ? entryPrice : currentPrice,
+        stopLoss: currentSl,
+        takeProfit: currentTp,
+        signalReason: 'Adopted from MT5 paper position',
+        strategy,
+        confidence: null,
+        rawConfidence: null,
+        indicatorsSnapshot: null,
+        mt5PositionId: String(mt5Position.id),
+        mt5Comment,
+        comment: position.comment,
+        positionDbId: position._id,
+        openedAt,
+      });
+    } catch (err) {
+      console.warn(`[PaperTrading] Failed to log adopted paper position ${symbol}: ${err.message}`);
+    }
+
+    auditService.orderOpened({
+      symbol,
+      strategy,
+      module: 'paperTradingService',
+      scope: 'paper',
+      signal: side,
+      calculatedLot: lotSize,
+      price: Number.isFinite(entryPrice) ? entryPrice : currentPrice,
+      sl: currentSl,
+      tp: currentTp,
+      positionDbId: position._id,
+      reasonText: `Adopted existing MT5 paper position ${side} ${lotSize} ${symbol}`,
+      details: {
+        mt5PositionId: String(mt5Position.id),
+        mt5Comment,
+        syncSource: 'mt5_orphan_adoption',
+      },
+    });
+
+    return position;
+  }
+
   _isProtectedPosition(position, instrument) {
     if (!instrument) return false;
 
@@ -233,6 +477,150 @@ class PaperTradingService {
     return currentSl >= threshold;
   }
 
+  async _resolvePaperMarketStopState(position, mt5Position, now = new Date()) {
+    const symbol = position?.symbol || mt5Position?.symbol;
+    if (!symbol) {
+      return { active: false, reason: 'NO_SYMBOL' };
+    }
+
+    const crypto = isCryptoSymbol(symbol);
+
+    try {
+      const priceData = await mt5Service.getPrice(symbol);
+      const tradeModeName = getTradeModeName(priceData);
+      if (MARKET_STOP_UNTRADEABLE_MODES.has(tradeModeName)) {
+        return {
+          active: true,
+          reason: `TRADE_MODE_${tradeModeName}`,
+          details: { symbol, tradeModeName, crypto },
+        };
+      }
+
+      const side = String(position?.type || '').toUpperCase();
+      const quote = side === 'SELL' ? Number(priceData.ask) : Number(priceData.bid);
+      const fallbackQuote = Number(mt5Position?.currentPrice ?? position?.currentPrice);
+      if (!crypto && !Number.isFinite(quote) && !Number.isFinite(fallbackQuote)) {
+        return {
+          active: true,
+          reason: 'PRICE_UNAVAILABLE',
+          details: { symbol, crypto },
+        };
+      }
+
+      const tickEpochMs = getPriceTickEpochMs(priceData);
+      if (!crypto && tickEpochMs) {
+        const tickAgeMs = now.getTime() - tickEpochMs;
+        if (tickAgeMs > MARKET_STOP_STALE_TICK_MS) {
+          return {
+            active: true,
+            reason: 'STALE_TICK',
+            details: {
+              symbol,
+              crypto,
+              tickTime: new Date(tickEpochMs).toISOString(),
+              tickAgeSeconds: Math.round(tickAgeMs / 1000),
+            },
+          };
+        }
+      }
+
+      return { active: false, reason: 'MARKET_OPEN', details: { symbol, crypto } };
+    } catch (err) {
+      const explicitReason = getMarketStopReasonFromError(err);
+      if (explicitReason) {
+        return {
+          active: true,
+          reason: explicitReason,
+          details: {
+            symbol,
+            crypto,
+            message: err.message,
+          },
+        };
+      }
+
+      if (!crypto) {
+        return {
+          active: true,
+          reason: 'PRICE_UNAVAILABLE',
+          details: {
+            symbol,
+            crypto,
+            message: err.message,
+          },
+        };
+      }
+
+      return {
+        active: false,
+        reason: 'CRYPTO_PRICE_UNAVAILABLE_IGNORED',
+        details: {
+          symbol,
+          crypto,
+          message: err.message,
+        },
+      };
+    }
+  }
+
+  async _applyPaperMarketStopState(position, marketState, now = new Date()) {
+    const existing = position?.marketStop || null;
+    const active = marketState?.active === true;
+    const existingActive = existing?.active === true;
+    const nowDate = now instanceof Date ? now : new Date(now);
+
+    if (active) {
+      const nextMarketStop = {
+        active: true,
+        startedAt: existingActive && existing?.startedAt ? existing.startedAt : nowDate,
+        endedAt: null,
+        reason: marketState.reason || 'MARKET_STOP',
+        detectedAt: existingActive && existing?.detectedAt ? existing.detectedAt : nowDate,
+        updatedAt: nowDate,
+        details: marketState.details || null,
+      };
+
+      const reasonChanged = existingActive && existing?.reason !== nextMarketStop.reason;
+      if (existingActive && !reasonChanged) {
+        return { active: true, changed: false, position };
+      }
+
+      await paperPositionsDb.update(
+        { _id: position._id },
+        { $set: { marketStop: nextMarketStop } }
+      );
+
+      return {
+        active: true,
+        changed: true,
+        position: { ...position, marketStop: nextMarketStop },
+      };
+    }
+
+    if (existingActive) {
+      const nextMarketStop = {
+        ...existing,
+        active: false,
+        endedAt: nowDate,
+        resolvedAt: nowDate,
+        resolvedReason: marketState?.reason || 'MARKET_OPEN',
+      };
+
+      await paperPositionsDb.update(
+        { _id: position._id },
+        { $set: { marketStop: nextMarketStop } }
+      );
+
+      return {
+        active: false,
+        changed: true,
+        position: { ...position, marketStop: nextMarketStop },
+      };
+    }
+
+    return { active: false, changed: false, position };
+  }
+
   async _buildPositionContexts(positions, now, forcedSyncReason = null) {
     const contexts = [];
     const strategyInstanceCache = new Map();
@@ -254,6 +642,27 @@ class PaperTradingService {
       const key = this._getPositionKey(position);
       const instrument = getInstrument(position.symbol);
       const categoryContext = resolveCategoryContext(position.symbol, instrument?.category, { warnSource: 'paper_position_monitor' });
+
+      if (this._isMarketStoppedPosition(position)) {
+        const cadenceProfile = getPositionCadenceProfile(categoryContext.category, 'normal');
+        contexts.push({
+          key,
+          position,
+          category: categoryContext.category,
+          rawCategory: categoryContext.rawCategory,
+          categoryFallback: categoryContext.categoryFallback,
+          state: 'market_stopped',
+          blackoutEvent: null,
+          marketStop: position.marketStop,
+          lightCadenceMs: cadenceProfile.lightCadenceMs,
+          heavyCadenceMs: cadenceProfile.heavyCadenceMs,
+          dueLight: false,
+          dueHeavy: false,
+          scanReason: 'market_stopped',
+        });
+        continue;
+      }
+
       const strategyInstance = await getCachedStrategyInstance(position);
       const newsConfig = strategyInstance?.newsBlackout || null;
 
@@ -314,6 +723,7 @@ class PaperTradingService {
     const lightDuePositions = [];
     const heavyDuePositions = [];
     const fastModePositions = [];
+    const marketStoppedPositions = [];
     const lightCadenceMs = contexts.length > 0
       ? Math.min(...contexts.map((context) => context.lightCadenceMs))
       : 0;
@@ -364,6 +774,14 @@ class PaperTradingService {
           blackoutEvent: context.blackoutEvent || null,
         });
       }
+
+      if (context.state === 'market_stopped') {
+        marketStoppedPositions.push({
+          ...basePayload,
+          scanReason: 'market_stopped',
+          marketStop: context.marketStop || context.position.marketStop || null,
+        });
+      }
     }
 
     return {
@@ -375,6 +793,7 @@ class PaperTradingService {
       lightDuePositions,
       heavyDuePositions,
       fastModePositions,
+      marketStoppedPositions,
       lastScanAt: toIsoOrNull(now),
       lastForcedSyncAt: forcedSyncReason ? toIsoOrNull(now) : this.monitorStatus.lastForcedSyncAt || null,
     };
@@ -701,6 +1120,7 @@ class PaperTradingService {
       const entryPrice = result.entryDeal?.price || result.price || quotedEntryPrice;
       const openedAt = result.entryDeal?.time ? new Date(result.entryDeal.time) : new Date();
       const mt5PositionId = result.positionId || result.orderId || null;
+      const mt5OrderId = result.orderId || result.entryDeal?.orderId || null;
       const mt5DealId = result.entryDeal?.id || result.dealId || null;
       const mt5Comment = result.entryDeal?.comment || brokerComment;
       const entryCommission = Number(result.entryDeal?.commission) || 0;
@@ -726,6 +1146,7 @@ class PaperTradingService {
         plannedRiskAmount: riskCheck.plannedRiskAmount,
       });
       const openCapture = buildOpenTradeCapture(signal, managedPositionState);
+      const playbookTradeFields = buildSignalPlaybookTradeFields(signal);
       const spreadAtEntry = Number.isFinite(Number(priceData.ask)) && Number.isFinite(Number(priceData.bid))
         ? Math.abs(Number(priceData.ask) - Number(priceData.bid))
         : null;
@@ -742,6 +1163,7 @@ class PaperTradingService {
         currentTp: signal.tp,
         lotSize: riskCheck.lotSize,
         mt5PositionId,
+        mt5OrderId,
         mt5EntryDealId: mt5DealId,
         mt5Comment,
         strategy: signal.strategy,
@@ -752,6 +1174,7 @@ class PaperTradingService {
         atrAtEntry,
         ...managedPositionState,
         ...openCapture,
+        ...playbookTradeFields,
         requestedEntryPrice: quotedEntryPrice,
         spreadAtEntry,
         slippageEstimate,
@@ -781,6 +1204,7 @@ class PaperTradingService {
         swap: entrySwap,
         fee: entryFee,
         mt5PositionId,
+        mt5OrderId,
         mt5DealId,
         mt5Comment,
         comment: tradeComment,
@@ -796,6 +1220,7 @@ class PaperTradingService {
         entryTimeframe: managedPositionState.entryTimeframe,
         setupCandleTime: managedPositionState.setupCandleTime,
         entryCandleTime: managedPositionState.entryCandleTime,
+        ...playbookTradeFields,
         initialSl: openCapture.initialSl,
         initialTp: openCapture.initialTp,
         finalSl: openCapture.finalSl,
@@ -811,7 +1236,6 @@ class PaperTradingService {
         `[PaperTrading] Trade executed: ${signal.signal} ${riskCheck.lotSize} ${signal.symbol} `
         + `@ ${entryPrice} | SL: ${signal.sl} TP: ${signal.tp} | ${signal.reason}`
       );
-      await this.syncMonitorNow('forced_sync');
 
       auditService.orderOpened({
         symbol: signal.symbol,
@@ -837,11 +1261,33 @@ class PaperTradingService {
       });
 
       // Broadcast + notify
+      const openPaperPositions = await paperPositionsDb.find({ status: 'OPEN' });
+      websocketService.broadcast('positions', 'paper_positions_sync', openPaperPositions);
+      websocketService.broadcast('positions', 'paper_position_update', { action: 'opened', position });
       websocketService.broadcast('trades', 'paper_trade_opened', position);
       await tradeNotificationService.notifyTradeOpened({
         scope: 'paper',
         ...position,
-      });
+        symbol: position.symbol || signal.symbol,
+        type: position.type || signal.signal,
+        side: position.type || signal.signal,
+        entryPrice: position.entryPrice ?? entryPrice,
+        stopLoss: position.currentSl ?? signal.sl,
+        takeProfit: position.currentTp ?? signal.tp,
+        volume: position.lotSize ?? riskCheck.lotSize,
+        strategy: position.strategy || signal.strategy,
+        confidence: position.confidence ?? signal.confidence,
+        reason: position.reason || openCapture.signalReason || signal.reason,
+        openedAt: position.openedAt || openedAt,
+        mt5OrderId: position.mt5OrderId || mt5OrderId,
+        mt5PositionId: position.mt5PositionId || mt5PositionId,
+      }, { immediate: true });
+
+      try {
+        await this.syncMonitorNow('forced_sync');
+      } catch (syncError) {
+        console.warn(`[PaperTrading] Post-open monitor sync failed for ${signal.symbol}: ${syncError.message}`);
+      }
 
     } catch (err) {
       console.error(`[PaperTrading] Execute error for ${signal.symbol}:`, err.message);
@@ -951,36 +1397,68 @@ class PaperTradingService {
    * Sync MT5 demo positions with paper positions DB
    * Detect externally closed positions (SL/TP hit) and log them
    */
-  async _syncPaperPositions({ broadcast = true } = {}) {
+  async _syncPaperPositions({ broadcast = true, now = new Date() } = {}) {
     if (!mt5Service.isConnected()) {
       return [];
     }
 
     const mt5Positions = await mt5Service.getPositions();
     const localPositions = await paperPositionsDb.find({});
-    const mt5PositionIds = new Set(mt5Positions.map((p) => String(p.id)));
+    const matchedLocalIds = new Set();
+    const matchedPairs = [];
+
+    for (const mt5Pos of mt5Positions) {
+      const localPos = this._findMatchingPaperPosition(mt5Pos, localPositions, matchedLocalIds);
+      if (localPos) {
+        matchedLocalIds.add(localPos._id);
+        matchedPairs.push({ mt5Pos, localPos });
+      } else if (isAdoptablePaperMt5Position(mt5Pos)) {
+        const adoptedPosition = await this._adoptPaperPositionFromMt5(mt5Pos, now);
+        if (adoptedPosition) {
+          matchedLocalIds.add(adoptedPosition._id);
+          matchedPairs.push({ mt5Pos, localPos: adoptedPosition });
+        }
+      }
+    }
 
     // Detect positions closed externally (SL/TP hit or manual close on MT5)
     for (const localPos of localPositions) {
-      if (localPos.mt5PositionId && !mt5PositionIds.has(String(localPos.mt5PositionId))) {
+      if (localPos.mt5PositionId && !matchedLocalIds.has(localPos._id)) {
+        if (this._isWithinPaperOpenSyncGrace(localPos, now)) {
+          continue;
+        }
         await this._handlePaperClose(localPos);
       }
     }
 
     // Update local positions with current MT5 data
-    for (const mt5Pos of mt5Positions) {
-      const localPos = localPositions.find(
-        (lp) => String(lp.mt5PositionId) === String(mt5Pos.id)
-      );
+    for (const { mt5Pos, localPos } of matchedPairs) {
       if (localPos) {
-        await paperPositionsDb.update({ _id: localPos._id }, {
-          $set: {
-            currentSl: mt5Pos.stopLoss || localPos.currentSl,
-            currentTp: mt5Pos.takeProfit || localPos.currentTp,
-            currentPrice: mt5Pos.currentPrice,
-            unrealizedPl: mt5Pos.unrealizedProfit || mt5Pos.profit || 0,
-          },
-        });
+        const marketState = await this._resolvePaperMarketStopState(localPos, mt5Pos, now);
+        const marketStopResult = await this._applyPaperMarketStopState(localPos, marketState, now);
+        if (marketStopResult.active) {
+          continue;
+        }
+
+        const effectiveLocalPos = marketStopResult.position || localPos;
+        const snapshotPatch = {
+          currentSl: mt5Pos.stopLoss || effectiveLocalPos.currentSl,
+          currentTp: mt5Pos.takeProfit || effectiveLocalPos.currentTp,
+          currentPrice: mt5Pos.currentPrice ?? effectiveLocalPos.currentPrice ?? null,
+          unrealizedPl: mt5Pos.unrealizedProfit ?? mt5Pos.profit ?? 0,
+        };
+        if (mt5Pos.id && String(effectiveLocalPos.mt5PositionId) !== String(mt5Pos.id)) {
+          snapshotPatch.mt5PositionId = String(mt5Pos.id);
+          snapshotPatch.mt5PositionIdCorrectedAt = now;
+          snapshotPatch.mt5PositionIdCorrectionSource = 'mt5_position_match';
+        }
+
+        if (this._hasSnapshotChanges(effectiveLocalPos, snapshotPatch)) {
+          await paperPositionsDb.update(
+            { _id: effectiveLocalPos._id },
+            { $set: snapshotPatch }
+          );
+        }
       }
     }
 
@@ -999,10 +1477,12 @@ class PaperTradingService {
     cycleState = { id: `paper-monitor:${Date.now()}`, fingerprints: new Set() }
   ) {
     if (!mt5Service.isConnected()) return [];
-    const effectivePositions = Array.isArray(positions) ? positions : await paperPositionsDb.find({});
+    const sourcePositions = Array.isArray(positions) ? positions : await paperPositionsDb.find({});
+    const effectivePositions = sourcePositions.filter((position) => !this._isMarketStoppedPosition(position));
     if (effectivePositions.length === 0) return [];
+    const effectiveKeys = new Set(effectivePositions.map((position) => this._getPositionKey(position)));
     const effectiveContexts = Array.isArray(contexts) && contexts.length > 0
-      ? contexts
+      ? contexts.filter((context) => effectiveKeys.has(context.key) && !this._isMarketStoppedPosition(context.position))
       : (await this._buildPositionContexts(effectivePositions, now, null)).map((context) => ({
           ...context,
           dueLight: true,
@@ -1117,7 +1597,7 @@ class PaperTradingService {
     this.pendingMonitorSyncReason = null;
 
     try {
-      const syncedPositions = await this._syncPaperPositions({ broadcast: false });
+      const syncedPositions = await this._syncPaperPositions({ broadcast: false, now });
       const positions = Array.isArray(syncedPositions) ? syncedPositions : [];
       const positionsChanged = this._didPaperPositionsChange(positions);
       if (positionsChanged && !forcedSyncReason) {

@@ -1,4 +1,5 @@
 const Strategy = require('../models/Strategy');
+const StrategyInstance = require('../models/StrategyInstance');
 const { getInstrument, INSTRUMENT_CATEGORIES } = require('../config/instruments');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const { getStrategyInstance } = require('./strategyInstanceService');
@@ -202,13 +203,50 @@ function isInstanceEnabledForScope(strategyInstance = {}, scope = 'paper') {
   return strategyInstance.enabled !== false;
 }
 
+function isExplicitInstanceEnabledForScope(strategyInstance = {}, scope = 'paper') {
+  const normalizedScope = normalizeAssignmentScope(scope);
+  if (normalizedScope === 'live') {
+    return strategyInstance.liveEnabled === true;
+  }
+  return strategyInstance.paperEnabled === true;
+}
+
+function buildAssignmentKey(strategyName, symbol) {
+  return `${strategyName}:${symbol}`;
+}
+
+function upsertRuntimeCandidate(candidates, { strategy, symbol, source }) {
+  if (!strategy || !strategy.name || !symbol) {
+    return;
+  }
+
+  const taskKey = buildAssignmentKey(strategy.name, symbol);
+  const existing = candidates.get(taskKey);
+  if (existing) {
+    existing.sources.add(source);
+    return;
+  }
+
+  candidates.set(taskKey, {
+    strategy,
+    symbol,
+    sources: new Set([source]),
+  });
+}
+
+function buildRuntimeSource(sources = new Set()) {
+  const orderedSources = ['legacy', 'strategyInstance'].filter((source) => sources.has(source));
+  return orderedSources.join('+') || 'unknown';
+}
+
 async function listActiveAssignments({ activeProfile = null, symbolFilter = null, scope = 'paper' } = {}) {
   const normalizedScope = normalizeAssignmentScope(scope);
   const filterSet = Array.isArray(symbolFilter) && symbolFilter.length > 0
     ? new Set(symbolFilter)
     : null;
   const strategies = await Strategy.findAll();
-  const seen = new Set();
+  const strategyByName = new Map(strategies.map((strategy) => [strategy.name, strategy]));
+  const candidates = new Map();
   const assignments = [];
 
   for (const strategy of strategies) {
@@ -218,50 +256,75 @@ async function listActiveAssignments({ activeProfile = null, symbolFilter = null
         continue;
       }
 
-      const taskKey = `${strategy.name}:${symbol}`;
-      if (seen.has(taskKey)) {
-        continue;
-      }
-
-      const executionConfig = getStrategyExecutionConfig(symbol, strategy.name);
-      if (!executionConfig) {
-        continue;
-      }
-
-      let strategyInstance = null;
-      try {
-        strategyInstance = await getStrategyInstance(symbol, strategy.name, {
-          activeProfile,
-          scope: normalizedScope,
-        });
-      } catch (error) {
-        strategyInstance = buildFallbackInstance(strategy, symbol, normalizedScope);
-      }
-      if (!isInstanceEnabledForScope(strategyInstance, normalizedScope)) {
-        continue;
-      }
-
-      const categoryContext = resolveCategoryContext(symbol, executionConfig.category, { warnSource: 'signal' });
-      const cadenceTimeframe = getPrimaryExecutionTimeframe(executionConfig);
-      const cadenceMs = getSignalCadenceMs(executionConfig, categoryContext.category);
-
-      seen.add(taskKey);
-      assignments.push({
-        symbol,
-        strategyType: strategy.name,
-        strategyDisplayName: strategy.displayName || strategy.name,
-        strategyId: strategy._id,
-        strategyEnabled: strategy.enabled !== false,
-        strategyInstance,
-        assignmentScope: normalizedScope,
-        executionConfig,
-        cadenceTimeframe,
-        cadenceMs,
-        category: categoryContext.category,
-        rawCategory: categoryContext.rawCategory,
-        categoryFallback: categoryContext.categoryFallback,
-      });
+      upsertRuntimeCandidate(candidates, { strategy, symbol, source: 'legacy' });
     }
+  }
+
+  const strategyInstances = await StrategyInstance.findAll();
+  for (const instance of strategyInstances) {
+    if (!isExplicitInstanceEnabledForScope(instance, normalizedScope)) {
+      continue;
+    }
+
+    const strategy = strategyByName.get(instance.strategyName);
+    if (!strategy) {
+      continue;
+    }
+
+    if (filterSet && !filterSet.has(instance.symbol)) {
+      continue;
+    }
+
+    upsertRuntimeCandidate(candidates, {
+      strategy,
+      symbol: instance.symbol,
+      source: 'strategyInstance',
+    });
+  }
+
+  for (const candidate of candidates.values()) {
+    const { strategy, symbol } = candidate;
+    const executionConfig = getStrategyExecutionConfig(symbol, strategy.name);
+    if (!executionConfig) {
+      continue;
+    }
+
+    let strategyInstance = null;
+    try {
+      strategyInstance = await getStrategyInstance(symbol, strategy.name, {
+        activeProfile,
+        scope: normalizedScope,
+        skipRuntimeDefaultsMigration: true,
+      });
+    } catch (error) {
+      strategyInstance = buildFallbackInstance(strategy, symbol, normalizedScope);
+    }
+    if (!isInstanceEnabledForScope(strategyInstance, normalizedScope)) {
+      continue;
+    }
+
+    const categoryContext = resolveCategoryContext(symbol, executionConfig.category, { warnSource: 'signal' });
+    const cadenceTimeframe = getPrimaryExecutionTimeframe(executionConfig);
+    const cadenceMs = getSignalCadenceMs(executionConfig, categoryContext.category);
+    const runtimeSource = buildRuntimeSource(candidate.sources);
+
+    assignments.push({
+      symbol,
+      strategyType: strategy.name,
+      strategyDisplayName: strategy.displayName || strategy.name,
+      strategyId: strategy._id,
+      strategyEnabled: strategy.enabled !== false,
+      strategyInstance,
+      assignmentScope: normalizedScope,
+      assignmentSource: runtimeSource,
+      runtimeSource,
+      executionConfig,
+      cadenceTimeframe,
+      cadenceMs,
+      category: categoryContext.category,
+      rawCategory: categoryContext.rawCategory,
+      categoryFallback: categoryContext.categoryFallback,
+    });
   }
 
   return assignments;

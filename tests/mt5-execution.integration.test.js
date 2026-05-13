@@ -243,6 +243,84 @@ describe('MT5 mock integration flows', () => {
     }));
   });
 
+  test('stores setup and symbol playbook metadata on live position and trade open records', async () => {
+    const signal = {
+      symbol: 'XAUUSD',
+      signal: 'BUY',
+      setupType: 'event_breakout',
+      playbook: {
+        role: 'growth_engine',
+        category: 'metals',
+        allowedSetups: ['event_breakout', 'trend_pullback'],
+        preferredEntryStyle: 'pullback_after_breakout',
+        riskWeight: 1,
+        beStyle: 'medium_loose',
+        liveBias: 'allowed_observe',
+      },
+      confidence: 0.91,
+      sl: 2280.5,
+      tp: 2298.5,
+      reason: 'Breakout confirmed',
+      indicatorsSnapshot: { atr: 3.2 },
+      strategy: 'Breakout',
+    };
+
+    mt5Service.getPrice.mockResolvedValue({ ask: 2289.9, bid: 2289.6 });
+
+    const result = await tradeExecutor.executeTrade(signal);
+
+    const expectedMetadata = {
+      setupType: 'event_breakout',
+      playbookRole: 'growth_engine',
+      preferredEntryStyle: 'pullback_after_breakout',
+      beStyle: 'medium_loose',
+      riskWeight: 1,
+      liveBias: 'allowed_observe',
+      symbolPlaybookSnapshot: signal.playbook,
+    };
+
+    expect(result.success).toBe(true);
+    expect(mt5Service.placeOrder).toHaveBeenCalledWith(
+      'XAUUSD',
+      'BUY',
+      0.2,
+      2280.5,
+      2298.5,
+      expect.any(String)
+    );
+    expect(positionsDb.insert).toHaveBeenCalledWith(expect.objectContaining(expectedMetadata));
+    expect(tradesDb.insert).toHaveBeenCalledWith(expect.objectContaining(expectedMetadata));
+  });
+
+  test('opens a live trade without playbook metadata and stores null-compatible fields', async () => {
+    const signal = {
+      symbol: 'EURUSD',
+      signal: 'BUY',
+      confidence: 0.88,
+      sl: 1.095,
+      tp: 1.11,
+      reason: 'Trend breakout',
+      indicatorsSnapshot: { atr: 0.0021 },
+      strategy: 'TrendFollowing',
+    };
+
+    const result = await tradeExecutor.executeTrade(signal);
+
+    const expectedMetadata = {
+      setupType: null,
+      playbookRole: null,
+      preferredEntryStyle: null,
+      beStyle: null,
+      riskWeight: null,
+      liveBias: null,
+      symbolPlaybookSnapshot: null,
+    };
+
+    expect(result.success).toBe(true);
+    expect(positionsDb.insert).toHaveBeenCalledWith(expect.objectContaining(expectedMetadata));
+    expect(tradesDb.insert).toHaveBeenCalledWith(expect.objectContaining(expectedMetadata));
+  });
+
   test('persists structure and higher-timeframe snapshots when the signal carries them', async () => {
     const signal = {
       symbol: 'XAUUSD',

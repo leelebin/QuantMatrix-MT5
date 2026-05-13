@@ -10,10 +10,23 @@ class TradeNotificationService {
     this.pendingOpenEvents = new Map();
   }
 
-  async notifyTradeOpened(event = {}) {
+  async notifyTradeOpened(event = {}, options = {}) {
     const normalized = normalizeOpenEvent(event);
     if (!normalized) {
       return { queued: false, reason: 'invalid_open_event' };
+    }
+
+    if (shouldSendOpenImmediately(options)) {
+      const message = buildOpenMessage({ [normalized.scope]: normalized });
+      if (!message) return { queued: false, sent: false, reason: 'empty_open_message' };
+
+      await this.sendTelegram(message);
+      return {
+        queued: false,
+        sent: notificationService.enabled === true,
+        immediate: true,
+        message,
+      };
     }
 
     const key = findMergeKey(this.pendingOpenEvents, normalized) || buildDedupeKey(normalized);
@@ -98,11 +111,29 @@ class TradeNotificationService {
 }
 
 function getMergeWindowMs() {
-  const configured = Number(process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS);
-  if (Number.isFinite(configured) && configured > 0) {
-    return configured;
+  const raw = process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS;
+  if (raw !== undefined && raw !== '') {
+    const configured = Number(raw);
+    if (Number.isFinite(configured) && configured >= 0) {
+      return configured;
+    }
   }
   return DEFAULT_MERGE_WINDOW_MS;
+}
+
+function shouldSendOpenImmediately(options = {}) {
+  if (options.immediate === true) return true;
+  if (options.immediate === false) return false;
+
+  const raw = process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS;
+  if (raw !== undefined && raw !== '') {
+    const configured = Number(raw);
+    if (Number.isFinite(configured) && configured === 0) {
+      return true;
+    }
+  }
+
+  return getMergeWindowMs() === 0;
 }
 
 function normalizeOpenEvent(event) {

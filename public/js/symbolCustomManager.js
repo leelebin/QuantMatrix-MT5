@@ -1,0 +1,201 @@
+(function initSymbolCustomManagerUtils(root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.SymbolCustomManagerUtils = factory();
+  }
+}(typeof self !== 'undefined' ? self : this, function createSymbolCustomManagerUtils() {
+  const PLACEHOLDER_SYMBOL_CUSTOM = 'PLACEHOLDER_SYMBOL_CUSTOM';
+  const PHASE_1_LIVE_WARNING = 'SymbolCustom live execution is not supported in Phase 1. This field is saved for future use only.';
+
+  const JSON_FIELD_DEFAULTS = Object.freeze({
+    parameterSchema: [],
+    parameters: {},
+    riskConfig: {},
+    sessionFilter: {},
+    newsFilter: {},
+    beConfig: {},
+    entryConfig: {},
+    exitConfig: {},
+  });
+
+  const DEFAULT_PARAMETER_SCHEMA = Object.freeze([
+    { key: 'lookbackBars', label: 'Lookback Bars', type: 'number', defaultValue: 50, min: 1, step: 1 },
+    { key: 'slAtrMultiplier', label: 'SL ATR Multiplier', type: 'number', defaultValue: 1.5, min: 0.1, step: 0.1 },
+    { key: 'tpAtrMultiplier', label: 'TP ATR Multiplier', type: 'number', defaultValue: 2, min: 0.1, step: 0.1 },
+    { key: 'beTriggerR', label: 'BE Trigger R', type: 'number', defaultValue: 1, min: 0, step: 0.1 },
+    { key: 'maxConsecutiveLosses', label: 'Max Consecutive Losses', type: 'number', defaultValue: 3, min: 1, step: 1 },
+  ]);
+
+  const DEFAULT_SYMBOL_CUSTOM_DRAFTS = Object.freeze([
+    {
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      displayName: 'USDJPY JPY Macro Reversal V1',
+      status: 'draft',
+      paperEnabled: false,
+      liveEnabled: false,
+      isPrimaryLive: false,
+      allowLive: false,
+      logicName: PLACEHOLDER_SYMBOL_CUSTOM,
+      timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+      parameterSchema: DEFAULT_PARAMETER_SCHEMA,
+      parameters: {},
+      hypothesis: 'USDJPY may react strongly to JPY macro repricing, USD rate expectations, Tokyo/London session transitions.',
+    },
+    {
+      symbol: 'GBPJPY',
+      symbolCustomName: 'GBPJPY_VOLATILITY_BREAKOUT_V1',
+      displayName: 'GBPJPY Volatility Breakout V1',
+      status: 'draft',
+      paperEnabled: false,
+      liveEnabled: false,
+      isPrimaryLive: false,
+      allowLive: false,
+      logicName: PLACEHOLDER_SYMBOL_CUSTOM,
+      timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+      parameterSchema: DEFAULT_PARAMETER_SCHEMA,
+      parameters: {},
+      hypothesis: 'GBPJPY is high volatility JPY cross; potential edge may come from London session volatility expansion and risk-on/risk-off flows.',
+    },
+    {
+      symbol: 'AUDUSD',
+      symbolCustomName: 'AUDUSD_SESSION_PULLBACK_V1',
+      displayName: 'AUDUSD Session Pullback V1',
+      status: 'draft',
+      paperEnabled: false,
+      liveEnabled: false,
+      isPrimaryLive: false,
+      allowLive: false,
+      logicName: PLACEHOLDER_SYMBOL_CUSTOM,
+      timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+      parameterSchema: DEFAULT_PARAMETER_SCHEMA,
+      parameters: {},
+      hypothesis: 'AUDUSD may require commodity currency / Asia session / risk sentiment specific pullback logic instead of generic momentum.',
+    },
+  ]);
+
+  function cloneValue(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizeString(value) {
+    return String(value == null ? '' : value).trim();
+  }
+
+  function parseJsonField(rawValue, fieldName, fallbackValue) {
+    const raw = String(rawValue == null ? '' : rawValue).trim();
+    if (!raw) {
+      return { valid: true, value: cloneValue(fallbackValue), error: null };
+    }
+
+    try {
+      return { valid: true, value: JSON.parse(raw), error: null };
+    } catch (error) {
+      return {
+        valid: false,
+        value: undefined,
+        error: `${fieldName} must be valid JSON: ${error.message}`,
+      };
+    }
+  }
+
+  function serializeJsonForEditor(value, fallbackValue) {
+    const source = value === undefined ? fallbackValue : value;
+    return JSON.stringify(source, null, 2);
+  }
+
+  function shouldShowLiveWarning(value) {
+    if (typeof value === 'boolean') return value === true;
+    return Boolean(value && value.liveEnabled === true);
+  }
+
+  function buildSymbolCustomSymbolSummaries(records) {
+    const grouped = new Map();
+    (Array.isArray(records) ? records : []).forEach((record) => {
+      const symbol = normalizeString(record.symbol).toUpperCase() || 'UNKNOWN';
+      const summary = grouped.get(symbol) || {
+        symbol,
+        customCount: 0,
+        paperEnabledCount: 0,
+        liveEnabledCount: 0,
+        primaryLiveName: null,
+        statusSummary: {},
+      };
+
+      summary.customCount += 1;
+      if (record.paperEnabled === true) summary.paperEnabledCount += 1;
+      if (record.liveEnabled === true) summary.liveEnabledCount += 1;
+      if (record.isPrimaryLive === true) summary.primaryLiveName = record.symbolCustomName || record.displayName || null;
+
+      const status = normalizeString(record.status) || 'unknown';
+      summary.statusSummary[status] = (summary.statusSummary[status] || 0) + 1;
+      grouped.set(symbol, summary);
+    });
+
+    return Array.from(grouped.values()).sort((left, right) => left.symbol.localeCompare(right.symbol));
+  }
+
+  function serializeEditorPayload(values) {
+    const source = values || {};
+    const errors = [];
+    const payload = {
+      symbol: normalizeString(source.symbol).toUpperCase(),
+      symbolCustomName: normalizeString(source.symbolCustomName),
+      displayName: normalizeString(source.displayName),
+      description: normalizeString(source.description),
+      hypothesis: normalizeString(source.hypothesis),
+      status: normalizeString(source.status) || 'draft',
+      paperEnabled: source.paperEnabled === true,
+      liveEnabled: source.liveEnabled === true,
+      isPrimaryLive: source.isPrimaryLive === true,
+      timeframes: {
+        setupTimeframe: normalizeString(source.setupTimeframe),
+        entryTimeframe: normalizeString(source.entryTimeframe),
+        higherTimeframe: normalizeString(source.higherTimeframe),
+      },
+      designNotes: normalizeString(source.designNotes),
+      aiResearchSummary: normalizeString(source.aiResearchSummary),
+    };
+
+    if (source.logicName !== undefined) {
+      payload.logicName = normalizeString(source.logicName) || PLACEHOLDER_SYMBOL_CUSTOM;
+    }
+
+    Object.entries(JSON_FIELD_DEFAULTS).forEach(([fieldName, fallbackValue]) => {
+      const rawValue = source[`${fieldName}Json`] !== undefined ? source[`${fieldName}Json`] : source[fieldName];
+      const parsed = parseJsonField(rawValue, fieldName, fallbackValue);
+      if (!parsed.valid) {
+        errors.push(parsed.error);
+        return;
+      }
+      payload[fieldName] = parsed.value;
+    });
+
+    if (!payload.symbol) errors.push('symbol is required');
+    if (!payload.symbolCustomName) errors.push('symbolCustomName is required');
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      payload: errors.length === 0 ? payload : null,
+    };
+  }
+
+  function getDefaultSymbolCustomDrafts() {
+    return cloneValue(DEFAULT_SYMBOL_CUSTOM_DRAFTS);
+  }
+
+  return {
+    PLACEHOLDER_SYMBOL_CUSTOM,
+    PHASE_1_LIVE_WARNING,
+    JSON_FIELD_DEFAULTS,
+    DEFAULT_PARAMETER_SCHEMA,
+    parseJsonField,
+    serializeJsonForEditor,
+    serializeEditorPayload,
+    shouldShowLiveWarning,
+    buildSymbolCustomSymbolSummaries,
+    getDefaultSymbolCustomDrafts,
+  };
+}));

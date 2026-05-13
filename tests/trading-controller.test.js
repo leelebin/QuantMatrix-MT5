@@ -232,7 +232,7 @@ describe('tradingController.testOrder', () => {
       symbol: 'EURUSD',
       type: 'BUY',
       strategy: 'ManualDebug',
-    }));
+    }), { immediate: true });
     expect(websocketService.broadcast).toHaveBeenCalled();
     expect(ExecutionAudit.create).toHaveBeenCalled();
   });

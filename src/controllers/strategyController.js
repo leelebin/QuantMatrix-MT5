@@ -131,6 +131,9 @@ exports.updateStrategy = async (req, res) => {
       });
     }
 
+    const legacyAssignmentWriteUsed = symbols !== undefined;
+    if (legacyAssignmentWriteUsed && !guardLegacyAssignmentWrite(req, res)) return;
+
     const updateFields = {};
     if (symbols !== undefined) updateFields.symbols = symbols;
 
@@ -140,7 +143,14 @@ exports.updateStrategy = async (req, res) => {
       await ensureStrategyInstancesForSymbols(updatedStrategy.name, updatedStrategy.symbols);
     }
     const activeProfile = await RiskProfile.getActive();
-    res.json({ success: true, data: enrichStrategy(updatedStrategy, activeProfile) });
+    res.json({
+      success: true,
+      ...(legacyAssignmentWriteUsed ? {
+        deprecated: true,
+        warning: LEGACY_ASSIGNMENT_WRITE_WARNING,
+      } : {}),
+      data: enrichStrategy(updatedStrategy, activeProfile),
+    });
   } catch (err) {
     const statusCode = err.statusCode || 500;
     res.status(statusCode).json({

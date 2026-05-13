@@ -355,4 +355,352 @@ describe('paperTradingService trailing-stop runtime', () => {
       scanReason: 'protected',
     }));
   });
+
+  test('_syncPaperPositions records a non-crypto market stop once and skips stale snapshot writes', async () => {
+    const now = new Date('2026-04-27T10:00:00.000Z');
+    const staleTickTime = new Date(now.getTime() - (31 * 60 * 1000)).toISOString();
+    const position = {
+      _id: 'paper-stale',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      currentSl: 1.099,
+      currentTp: 1.11,
+      currentPrice: 1.1025,
+      unrealizedPl: 12,
+      mt5PositionId: '7003',
+    };
+
+    mt5Service.getPositions.mockResolvedValue([{
+      id: '7003',
+      stopLoss: 1.099,
+      takeProfit: 1.11,
+      currentPrice: 1.1025,
+      profit: 12,
+    }]);
+    mt5Service.getPrice.mockResolvedValue({ bid: 1.1025, ask: 1.1027, time: staleTickTime });
+    paperPositionsDb.find
+      .mockResolvedValueOnce([position])
+      .mockResolvedValueOnce([{ ...position, marketStop: { active: true, reason: 'STALE_TICK' } }]);
+    paperPositionsDb.update.mockResolvedValue(1);
+
+    await paperTradingService._syncPaperPositions({ broadcast: false, now });
+
+    expect(paperPositionsDb.update).toHaveBeenCalledTimes(1);
+    expect(paperPositionsDb.update).toHaveBeenCalledWith(
+      { _id: 'paper-stale' },
+      {
+        $set: {
+          marketStop: expect.objectContaining({
+            active: true,
+            startedAt: now,
+            endedAt: null,
+            reason: 'STALE_TICK',
+          }),
+        },
+      }
+    );
+    expect(paperPositionsDb.update.mock.calls[0][1].$set.currentPrice).toBeUndefined();
+  });
+
+  test('_syncPaperPositions keeps just-opened paper positions when MT5 positions have not caught up yet', async () => {
+    const now = new Date('2026-05-11T03:00:00.000Z');
+    const position = {
+      _id: 'paper-new',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      lotSize: 0.2,
+      mt5PositionId: 'temporary-order-id',
+      openedAt: new Date(now.getTime() - 30 * 1000),
+      currentSl: 1.099,
+      currentTp: 1.11,
+      currentPrice: 1.1025,
+    };
+
+    mt5Service.getPositions.mockResolvedValue([]);
+    paperPositionsDb.find
+      .mockResolvedValueOnce([position])
+      .mockResolvedValueOnce([position]);
+    paperPositionsDb.remove.mockResolvedValue(1);
+
+    await paperTradingService._syncPaperPositions({ broadcast: false, now });
+
+    expect(paperPositionsDb.remove).not.toHaveBeenCalled();
+    expect(paperPositionsDb.update).not.toHaveBeenCalled();
+  });
+
+  test('_syncPaperPositions can match a just-opened paper position by broker comment and correct mt5PositionId', async () => {
+    const now = new Date('2026-05-11T03:00:30.000Z');
+    const position = {
+      _id: 'paper-comment-match',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      lotSize: 0.2,
+      mt5PositionId: 'order-5001',
+      mt5Comment: 'PT|Breakout|BUY|0.91',
+      openedAt: new Date(now.getTime() - 45 * 1000),
+      currentSl: 1.099,
+      currentTp: 1.11,
+      currentPrice: 1.1025,
+      unrealizedPl: 0,
+    };
+
+    mt5Service.getPositions.mockResolvedValue([{
+      id: 'position-7001',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      volume: 0.2,
+      comment: 'PT|Breakout|BUY|0.91',
+      stopLoss: 1.099,
+      takeProfit: 1.11,
+      currentPrice: 1.103,
+      profit: 15,
+    }]);
+    mt5Service.getPrice.mockResolvedValue({ bid: 1.103, ask: 1.1032, time: now.toISOString() });
+    paperPositionsDb.find
+      .mockResolvedValueOnce([position])
+      .mockResolvedValueOnce([{ ...position, mt5PositionId: 'position-7001', currentPrice: 1.103 }]);
+    paperPositionsDb.update.mockResolvedValue(1);
+
+    await paperTradingService._syncPaperPositions({ broadcast: false, now });
+
+    expect(paperPositionsDb.remove).not.toHaveBeenCalled();
+    expect(paperPositionsDb.update).toHaveBeenCalledWith(
+      { _id: 'paper-comment-match' },
+      {
+        $set: expect.objectContaining({
+          mt5PositionId: 'position-7001',
+          mt5PositionIdCorrectionSource: 'mt5_position_match',
+          currentPrice: 1.103,
+          unrealizedPl: 15,
+        }),
+      }
+    );
+  });
+
+  test('_syncPaperPositions adopts orphan MT5 paper positions with PT broker comments', async () => {
+    const now = new Date('2026-05-11T03:01:00.000Z');
+    const adopted = {
+      _id: 'adopted-paper-pos',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      mt5PositionId: 'position-8001',
+      status: 'OPEN',
+    };
+
+    mt5Service.getPositions.mockResolvedValue([{
+      id: 'position-8001',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      volume: 0.2,
+      comment: 'PT|Breakout|BUY|0.91',
+      openPrice: 1.101,
+      stopLoss: 1.099,
+      takeProfit: 1.11,
+      currentPrice: 1.103,
+      profit: 15,
+      time: Math.floor(new Date('2026-05-11T03:00:00.000Z').getTime() / 1000),
+    }]);
+    mt5Service.getPrice.mockResolvedValue({ bid: 1.103, ask: 1.1032, time: now.toISOString() });
+    paperPositionsDb.find
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([adopted]);
+    paperPositionsDb.insert.mockResolvedValue(adopted);
+    paperPositionsDb.update.mockResolvedValue(1);
+
+    await paperTradingService._syncPaperPositions({ broadcast: false, now });
+
+    expect(paperPositionsDb.insert).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'EURUSD',
+      type: 'BUY',
+      mt5PositionId: 'position-8001',
+      mt5Comment: 'PT|Breakout|BUY|0.91',
+      strategy: 'Breakout',
+      status: 'OPEN',
+      syncSource: 'mt5_orphan_adoption',
+    }));
+  });
+
+  test('_syncPaperPositions does not rewrite an active market stop with the same reason', async () => {
+    const now = new Date('2026-04-27T10:15:00.000Z');
+    const startedAt = new Date('2026-04-27T10:00:00.000Z');
+    const position = {
+      _id: 'paper-stale-active',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      currentSl: 1.099,
+      currentTp: 1.11,
+      currentPrice: 1.1025,
+      unrealizedPl: 12,
+      mt5PositionId: '7004',
+      marketStop: {
+        active: true,
+        startedAt,
+        endedAt: null,
+        reason: 'STALE_TICK',
+      },
+    };
+
+    mt5Service.getPositions.mockResolvedValue([{
+      id: '7004',
+      stopLoss: 1.099,
+      takeProfit: 1.11,
+      currentPrice: 1.1025,
+      profit: 12,
+    }]);
+    mt5Service.getPrice.mockResolvedValue({
+      bid: 1.1025,
+      ask: 1.1027,
+      time: new Date(now.getTime() - (45 * 60 * 1000)).toISOString(),
+    });
+    paperPositionsDb.find
+      .mockResolvedValueOnce([position])
+      .mockResolvedValueOnce([position]);
+    paperPositionsDb.update.mockResolvedValue(1);
+
+    await paperTradingService._syncPaperPositions({ broadcast: false, now });
+
+    expect(paperPositionsDb.update).not.toHaveBeenCalled();
+  });
+
+  test('_syncPaperPositions closes marketStop on fresh quotes and resumes position snapshot updates', async () => {
+    const now = new Date('2026-04-29T07:00:00.000Z');
+    const position = {
+      _id: 'paper-reopen',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      currentSl: 1.099,
+      currentTp: 1.11,
+      currentPrice: 1.1025,
+      unrealizedPl: 12,
+      mt5PositionId: '7005',
+      marketStop: {
+        active: true,
+        startedAt: new Date('2026-04-27T10:00:00.000Z'),
+        endedAt: null,
+        reason: 'STALE_TICK',
+      },
+    };
+
+    mt5Service.getPositions.mockResolvedValue([{
+      id: '7005',
+      stopLoss: 1.099,
+      takeProfit: 1.11,
+      currentPrice: 1.104,
+      profit: 25,
+    }]);
+    mt5Service.getPrice.mockResolvedValue({ bid: 1.104, ask: 1.1042, time: now.toISOString() });
+    paperPositionsDb.find
+      .mockResolvedValueOnce([position])
+      .mockResolvedValueOnce([{ ...position, currentPrice: 1.104, unrealizedPl: 25 }]);
+    paperPositionsDb.update.mockResolvedValue(1);
+
+    await paperTradingService._syncPaperPositions({ broadcast: false, now });
+
+    expect(paperPositionsDb.update).toHaveBeenCalledTimes(2);
+    expect(paperPositionsDb.update).toHaveBeenNthCalledWith(
+      1,
+      { _id: 'paper-reopen' },
+      {
+        $set: {
+          marketStop: expect.objectContaining({
+            active: false,
+            endedAt: now,
+            resolvedAt: now,
+            resolvedReason: 'MARKET_OPEN',
+          }),
+        },
+      }
+    );
+    expect(paperPositionsDb.update).toHaveBeenNthCalledWith(
+      2,
+      { _id: 'paper-reopen' },
+      {
+        $set: expect.objectContaining({
+          currentPrice: 1.104,
+          unrealizedPl: 25,
+        }),
+      }
+    );
+  });
+
+  test('_syncPaperPositions does not apply generic stale-tick marketStop to crypto positions', async () => {
+    const now = new Date('2026-04-27T10:00:00.000Z');
+    const position = {
+      _id: 'paper-crypto',
+      symbol: 'BTCUSD',
+      type: 'BUY',
+      currentSl: 68000,
+      currentTp: 72000,
+      currentPrice: 69900,
+      unrealizedPl: 10,
+      mt5PositionId: '7006',
+    };
+
+    mt5Service.getPositions.mockResolvedValue([{
+      id: '7006',
+      stopLoss: 68000,
+      takeProfit: 72000,
+      currentPrice: 70000,
+      profit: 20,
+    }]);
+    mt5Service.getPrice.mockResolvedValue({
+      bid: 70000,
+      ask: 70005,
+      time: new Date(now.getTime() - (8 * 60 * 60 * 1000)).toISOString(),
+    });
+    paperPositionsDb.find
+      .mockResolvedValueOnce([position])
+      .mockResolvedValueOnce([{ ...position, currentPrice: 70000, unrealizedPl: 20 }]);
+    paperPositionsDb.update.mockResolvedValue(1);
+
+    await paperTradingService._syncPaperPositions({ broadcast: false, now });
+
+    expect(paperPositionsDb.update).toHaveBeenCalledTimes(1);
+    expect(paperPositionsDb.update).toHaveBeenCalledWith(
+      { _id: 'paper-crypto' },
+      {
+        $set: expect.objectContaining({
+          currentPrice: 70000,
+          unrealizedPl: 20,
+        }),
+      }
+    );
+    expect(paperPositionsDb.update.mock.calls[0][1].$set.marketStop).toBeUndefined();
+  });
+
+  test('_runTrailingStops skips positions while marketStop is active', async () => {
+    const position = {
+      _id: 'paper-stop',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      entryPrice: 1.1,
+      currentSl: 1.099,
+      currentTp: 1.11,
+      lotSize: 0.2,
+      originalLotSize: 0.2,
+      mt5PositionId: '7007',
+      marketStop: {
+        active: true,
+        startedAt: new Date('2026-04-27T10:00:00.000Z'),
+        reason: 'STALE_TICK',
+      },
+    };
+
+    const updates = await paperTradingService._runTrailingStops(
+      [position],
+      [{
+        key: 'paper-stop',
+        position,
+        dueLight: true,
+        dueHeavy: true,
+        scanReason: 'forced_sync',
+      }],
+      'light',
+      new Date('2026-04-27T10:15:00.000Z')
+    );
+
+    expect(updates).toEqual([]);
+    expect(mt5Service.getPrice).not.toHaveBeenCalled();
+    expect(paperPositionsDb.update).not.toHaveBeenCalled();
+  });
 });

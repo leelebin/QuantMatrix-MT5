@@ -61,6 +61,19 @@ describe('tradeNotificationService', () => {
     expect(message).toContain('Reason: momentum confirmed');
   });
 
+  test('immediate paper open sends PAPER OPEN without waiting for merge window', async () => {
+    await expect(
+      tradeNotificationService.notifyTradeOpened(openEvent(), { immediate: true })
+    ).resolves.toEqual(expect.objectContaining({
+      queued: false,
+      sent: true,
+      immediate: true,
+    }));
+
+    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
+    expect(notificationService.sendTelegram.mock.calls[0][0]).toContain('[PAPER OPEN]');
+  });
+
   test('paper and live open with same key merge into one LIVE/PAPER OPEN', async () => {
     await tradeNotificationService.notifyTradeOpened(openEvent({ scope: 'paper' }));
     await tradeNotificationService.notifyTradeOpened(openEvent({

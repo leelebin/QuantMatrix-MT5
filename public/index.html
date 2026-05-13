@@ -10,8 +10,9 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
 a{color:var(--blue);text-decoration:none}
 button{cursor:pointer;border:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;transition:all .2s}
-input,select{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;width:100%}
-input:focus,select:focus{outline:none;border-color:var(--blue)}
+input,select,textarea{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;width:100%}
+textarea{min-height:92px;resize:vertical;font-family:'Courier New',monospace;line-height:1.5}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
 .btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:#2563eb}
 .btn-success{background:var(--green);color:#fff}.btn-success:hover{background:#059669}
 .btn-danger{background:var(--red);color:#fff}.btn-danger:hover{background:#dc2626}
@@ -60,12 +61,16 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 .strategy-assignments-actions{display:flex;gap:8px;flex-wrap:wrap}
 .strategy-assignments-columns-sticky{position:sticky;top:calc(var(--strategy-assignments-sticky-top) + var(--strategy-assignments-header-height));z-index:50;overflow:hidden;margin:0 -4px 8px;padding:0 4px;background:rgba(17,24,39,.98);border:1px solid rgba(59,130,246,.14);border-top:none;backdrop-filter:blur(10px);box-shadow:0 12px 24px rgba(0,0,0,.18)}
 .strategy-assignments-columns-track{width:max-content;min-width:100%;will-change:transform}
-.strategy-assignments-scroll{overflow-x:auto;overflow-y:visible}
-.strategy-assignments-table{width:max-content;min-width:100%;table-layout:fixed}
+.strategy-assignments-scroll{max-height:clamp(360px,70vh,760px);overflow:auto;border:1px solid rgba(59,130,246,.14);border-radius:0 0 10px 10px;background:var(--bg2)}
+.strategy-assignments-table{width:max-content;min-width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}
 .strategy-assignments-table col.strategy-assignments-col-symbol{width:var(--strategy-assignments-symbol-width)}
 .strategy-assignments-table col.strategy-assignments-col-strategy{width:var(--strategy-assignments-col-width)}
-.strategy-assignments-columns-table th{background:transparent;box-shadow:inset 0 -1px 0 var(--border)}
+.strategy-assignments-table thead th{position:sticky;top:0;z-index:5;background:rgba(17,24,39,.98);box-shadow:inset 0 -1px 0 var(--border),0 8px 18px rgba(0,0,0,.16)}
+.strategy-assignments-table th:first-child,.strategy-assignments-table td:first-child{position:sticky;left:0;background:rgba(17,24,39,.98);box-shadow:inset -1px 0 0 var(--border);z-index:4}
+.strategy-assignments-table thead th:first-child{z-index:7;box-shadow:inset -1px 0 0 var(--border),inset 0 -1px 0 var(--border),0 8px 18px rgba(0,0,0,.16)}
 .strategy-assignments-body td:first-child{font-weight:700}
+.strategy-assignments-body tbody tr:hover td{background:var(--bg3)}
+.strategy-assignments-body tbody tr:hover td:first-child{background:var(--bg3)}
 .strategy-card-meta{font-size:12px;color:var(--text2);margin-bottom:8px}
 .strategy-card-meta:last-of-type{margin-bottom:0}
 .stat-card{text-align:center}
@@ -94,6 +99,37 @@ tr:hover{background:var(--bg3)}
 .paper-banner strong{color:var(--purple)}
 .section-subtitle{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;font-weight:600}
 .section-subtitle:first-child{margin-top:0}
+.analytics-toolbar{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.analytics-filters{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.analytics-filters .form-group{margin-bottom:0;min-width:150px}
+.analytics-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.analytics-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;border-bottom:1px solid var(--border)}
+.analytics-tab{background:transparent;color:var(--text2);border:1px solid transparent;border-radius:6px 6px 0 0;padding:8px 12px}
+.analytics-tab.active{background:var(--bg3);border-color:var(--border);border-bottom-color:var(--bg3);color:var(--text)}
+.analytics-panel{display:none}
+.analytics-panel.active{display:block}
+.analytics-source{font-size:11px;color:var(--text2);line-height:1.5;white-space:nowrap}
+.analytics-error{display:none;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(245,158,11,.35);border-radius:8px;background:rgba(245,158,11,.1);color:var(--yellow);font-size:12px}
+.analytics-table-wrap{overflow-x:auto}
+
+.symbol-custom-layout{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;align-items:start}
+.symbol-custom-editor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.symbol-custom-json-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.symbol-custom-table-wrap{overflow-x:auto}
+.symbol-custom-table tbody tr{cursor:pointer}
+.symbol-custom-table tbody tr.selected{background:rgba(59,130,246,.14)}
+.symbol-custom-status{display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;line-height:1.5}
+.symbol-custom-status.show{display:block}
+.symbol-custom-status.error{border-color:rgba(239,68,68,.45);background:rgba(239,68,68,.1);color:var(--red)}
+.symbol-custom-status.success{border-color:rgba(16,185,129,.45);background:rgba(16,185,129,.1);color:var(--green)}
+.symbol-custom-status.warn{border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.1);color:var(--yellow)}
+.symbol-custom-checks{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.symbol-custom-checks label{display:flex;align-items:center;gap:6px;color:var(--text2);font-size:12px}
+.symbol-custom-checks input{width:auto}
+.symbol-custom-warning{display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.1);color:var(--yellow);font-size:12px;line-height:1.5}
+.symbol-custom-warning.show{display:block}
+@media(max-width:1200px){.symbol-custom-layout,.symbol-custom-json-grid{grid-template-columns:1fr}.symbol-custom-editor-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){.symbol-custom-editor-grid{grid-template-columns:1fr}}
 
 /* Forms */
 .form-group{margin-bottom:12px}
@@ -241,6 +277,7 @@ tr:hover{background:var(--bg3)}
     <button data-page="trades">Trades</button>
     <button data-page="paper-trading">Paper Trading</button>
     <button data-page="strategies">Strategies</button>
+    <button data-page="symbol-custom-manager">SymbolCustom Manager</button>
     <button data-page="backtest">Backtest</button>
     <button data-page="optimizer">Optimizer</button>
     <button data-page="diagnostics">Diagnostics</button>
@@ -325,6 +362,46 @@ tr:hover{background:var(--bg3)}
         <button class="btn-outline btn-sm" onclick="goToPaperTradingPage()">Open Paper Trading Workspace</button>
       </div>
     </div>
+  </div>
+
+  <div class="card" style="margin-top:16px" id="symbolPlaybookAnalyticsCard">
+    <div class="card-header">
+      <span class="card-title"><span class="tag tag-paper" style="margin-right:6px">READ ONLY</span>Symbol Playbook Analytics</span>
+    </div>
+    <div class="analytics-toolbar">
+      <div class="analytics-filters">
+        <div class="form-group">
+          <label>Since</label>
+          <input type="date" id="symbolPlaybookAnalyticsSince" value="2026-04-27">
+        </div>
+        <div class="form-group">
+          <label>Scope</label>
+          <select id="symbolPlaybookAnalyticsScope">
+            <option value="paper" selected>paper</option>
+            <option value="live">live</option>
+          </select>
+        </div>
+        <button class="btn-primary btn-sm" onclick="loadSymbolPlaybookAnalytics(true)">Refresh</button>
+      </div>
+      <div class="analytics-actions">
+        <button class="btn-outline btn-sm" onclick="downloadSymbolPlaybookAnalyticsCsv('overview')">Overview CSV</button>
+        <button class="btn-outline btn-sm" onclick="downloadSymbolPlaybookAnalyticsCsv('setup')">Setup CSV</button>
+        <button class="btn-outline btn-sm" onclick="downloadSymbolPlaybookAnalyticsCsv('be')">BE CSV</button>
+        <button class="btn-outline btn-sm" onclick="downloadSymbolPlaybookAnalyticsCsv('recommendations')">Recommendations CSV</button>
+      </div>
+    </div>
+    <div id="symbolPlaybookAnalyticsMeta" style="font-size:12px;color:var(--text2);margin-bottom:12px">Loading analytics...</div>
+    <div id="symbolPlaybookAnalyticsError" class="analytics-error"></div>
+    <div class="analytics-tabs" role="tablist">
+      <button class="analytics-tab active" id="symbolPlaybookAnalyticsTabOverview" onclick="setSymbolPlaybookAnalyticsTab('overview')">Overview</button>
+      <button class="analytics-tab" id="symbolPlaybookAnalyticsTabSetup" onclick="setSymbolPlaybookAnalyticsTab('setup')">Setup Performance</button>
+      <button class="analytics-tab" id="symbolPlaybookAnalyticsTabBe" onclick="setSymbolPlaybookAnalyticsTab('be')">BE Analysis</button>
+      <button class="analytics-tab" id="symbolPlaybookAnalyticsTabRecommendations" onclick="setSymbolPlaybookAnalyticsTab('recommendations')">Recommendations</button>
+    </div>
+    <div id="symbolPlaybookAnalyticsPanelOverview" class="analytics-panel active"><div class="empty">Loading analytics...</div></div>
+    <div id="symbolPlaybookAnalyticsPanelSetup" class="analytics-panel"><div class="empty">Loading analytics...</div></div>
+    <div id="symbolPlaybookAnalyticsPanelBe" class="analytics-panel"><div class="empty">Loading analytics...</div></div>
+    <div id="symbolPlaybookAnalyticsPanelRecommendations" class="analytics-panel"><div class="empty">Loading analytics...</div></div>
   </div>
 
   <div class="card" style="margin-top:16px">
@@ -586,6 +663,153 @@ tr:hover{background:var(--bg3)}
     <div id="strategyStickyTracker" class="strategy-sticky-tracker"></div>
     <div id="strategiesList">
       <div class="empty">Loading strategies...</div>
+    </div>
+  </div>
+</div>
+
+<!-- SymbolCustom Manager Page -->
+<div class="page" id="page-symbol-custom-manager">
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <span class="card-title">SymbolCustom Manager</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-outline btn-sm" onclick="loadSymbolCustomManager({ preserveSelection: true })">Refresh</button>
+        <button class="btn-primary btn-sm" onclick="newSymbolCustomDraft()">Create</button>
+        <button class="btn-outline btn-sm" onclick="loadDefaultSymbolCustomDrafts()">Load Defaults</button>
+      </div>
+    </div>
+    <div id="symbolCustomStatus" class="symbol-custom-status"></div>
+  </div>
+
+  <div class="symbol-custom-layout">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Symbols</span>
+      </div>
+      <div id="symbolCustomSymbolSummary" class="symbol-custom-table-wrap">
+        <div class="empty">No SymbolCustoms</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title" id="symbolCustomListTitle">SymbolCustoms</span>
+      </div>
+      <div id="symbolCustomList" class="symbol-custom-table-wrap">
+        <div class="empty">No SymbolCustoms</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title" id="symbolCustomEditorTitle">Editor</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" onclick="saveSymbolCustomEditor()">Save</button>
+        <button class="btn-outline btn-sm" onclick="duplicateSelectedSymbolCustom()">Duplicate</button>
+        <button class="btn-danger btn-sm" onclick="deleteSelectedSymbolCustom()">Delete</button>
+      </div>
+    </div>
+
+    <div id="symbolCustomLiveWarning" class="symbol-custom-warning">
+      SymbolCustom live execution is not supported in Phase 1. This field is saved for future use only.
+    </div>
+
+    <div class="symbol-custom-editor-grid">
+      <div class="form-group">
+        <label>Symbol</label>
+        <input id="scSymbol" placeholder="USDJPY">
+      </div>
+      <div class="form-group">
+        <label>symbolCustomName</label>
+        <input id="scSymbolCustomName" placeholder="USDJPY_CUSTOM_V1">
+      </div>
+      <div class="form-group">
+        <label>displayName</label>
+        <input id="scDisplayName" placeholder="USDJPY Custom V1">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="scStatus">
+          <option value="draft">draft</option>
+          <option value="paper_testing">paper_testing</option>
+          <option value="validated">validated</option>
+          <option value="live_ready">live_ready</option>
+          <option value="disabled">disabled</option>
+          <option value="archived">archived</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>setupTimeframe</label>
+        <input id="scSetupTimeframe" placeholder="15m">
+      </div>
+      <div class="form-group">
+        <label>entryTimeframe</label>
+        <input id="scEntryTimeframe" placeholder="5m">
+      </div>
+      <div class="form-group">
+        <label>higherTimeframe</label>
+        <input id="scHigherTimeframe" placeholder="1h">
+      </div>
+    </div>
+
+    <div class="symbol-custom-checks">
+      <label><input type="checkbox" id="scPaperEnabled"> paperEnabled</label>
+      <label><input type="checkbox" id="scLiveEnabled" onchange="updateSymbolCustomLiveWarning()"> liveEnabled</label>
+      <label><input type="checkbox" id="scIsPrimaryLive"> isPrimaryLive</label>
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="scDescription"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Hypothesis</label>
+      <textarea id="scHypothesis"></textarea>
+    </div>
+
+    <div class="symbol-custom-json-grid">
+      <div class="form-group">
+        <label>parameterSchema JSON</label>
+        <textarea id="scParameterSchemaJson"></textarea>
+      </div>
+      <div class="form-group">
+        <label>parameters JSON</label>
+        <textarea id="scParametersJson"></textarea>
+      </div>
+      <div class="form-group">
+        <label>riskConfig JSON</label>
+        <textarea id="scRiskConfigJson"></textarea>
+      </div>
+      <div class="form-group">
+        <label>sessionFilter JSON</label>
+        <textarea id="scSessionFilterJson"></textarea>
+      </div>
+      <div class="form-group">
+        <label>newsFilter JSON</label>
+        <textarea id="scNewsFilterJson"></textarea>
+      </div>
+      <div class="form-group">
+        <label>beConfig JSON</label>
+        <textarea id="scBeConfigJson"></textarea>
+      </div>
+      <div class="form-group">
+        <label>entryConfig JSON</label>
+        <textarea id="scEntryConfigJson"></textarea>
+      </div>
+      <div class="form-group">
+        <label>exitConfig JSON</label>
+        <textarea id="scExitConfigJson"></textarea>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>designNotes</label>
+      <textarea id="scDesignNotes"></textarea>
+    </div>
+    <div class="form-group">
+      <label>aiResearchSummary</label>
+      <textarea id="scAiResearchSummary"></textarea>
     </div>
   </div>
 </div>
@@ -1535,6 +1759,8 @@ tr:hover{background:var(--bg3)}
   </div>
 </div>
 <script src="/vendor/plotly-2.35.2.min.js"></script>
+<script src="/js/symbolPlaybookAnalyticsCsv.js"></script>
+<script src="/js/symbolCustomManager.js"></script>
 <script>
 // --- State ---
 const API = '';
@@ -1576,6 +1802,7 @@ let testOrderSymbolMeta = {};
 let riskSettingsState = { profiles: [], activeProfile: null, activeProfileId: null };
 let maintenanceCacheState = null;
 let maintenanceCacheBusy = false;
+let symbolCustomManagerState = { all: [], selectedSymbol: null, selectedRecords: [], selectedId: null, selectedRecord: null };
 let parametersLibraryState = { rows: [], visibleRows: [], activeRiskProfile: null, count: 0 };
 let parametersLibraryDetailState = null;
 let editingRiskProfileId = null;
@@ -1721,6 +1948,7 @@ function onPageSwitch(page) {
     loadStrategies();
     requestAnimationFrame(syncStrategyAssignmentsStickyOffsets);
   }
+  else if (page === 'symbol-custom-manager') loadSymbolCustomManager();
   else if (page === 'backtest') {
     switchBacktestMode(backtestMode);
     loadBacktestHistory();
@@ -2219,6 +2447,7 @@ function handleWsMessage(msg) {
       break;
     case 'paper_trade_opened':
       wsLog('success', 'Paper trade opened: ' + msg.data.type + ' ' + msg.data.symbol);
+      loadDashboard();
       refreshPaperTradingRealtime(async () => {
         await Promise.all([
           loadPaperPositions(),
@@ -2230,6 +2459,7 @@ function handleWsMessage(msg) {
     case 'paper_trade_closed':
       const paperPl = Number(msg.data.profitLoss) || 0;
       wsLog(paperPl >= 0 ? 'success' : 'error', 'Paper trade closed: ' + msg.data.symbol + ' P/L: ' + (paperPl >= 0 ? '+' : '') + paperPl.toFixed(2));
+      loadDashboard();
       refreshPaperTradingRealtime(async () => {
         await Promise.all([
           loadPaperPositions(),
@@ -2239,6 +2469,11 @@ function handleWsMessage(msg) {
       });
       break;
     case 'paper_positions_sync':
+      loadDashboard();
+      refreshPaperTradingRealtime(loadPaperPositions);
+      break;
+    case 'paper_position_update':
+      loadDashboard();
       refreshPaperTradingRealtime(loadPaperPositions);
       break;
     case 'execution_audit':
@@ -2346,6 +2581,22 @@ function wsLog(level, message) {
 // --- Dashboard ---
 let lastLiveRuntimeStatus = null;
 let lastPaperRuntimeStatus = null;
+let symbolPlaybookAnalyticsInFlight = false;
+let symbolPlaybookAnalyticsLastLoadedAt = 0;
+const SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SINCE = '2026-04-27';
+const SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SCOPE = 'paper';
+const SYMBOL_PLAYBOOK_ANALYTICS_REFRESH_MS = 5 * 60 * 1000;
+let symbolPlaybookAnalyticsState = {
+  activeTab: 'overview',
+  key: '',
+  since: SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SINCE,
+  scope: SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SCOPE,
+  playbooks: [],
+  report: null,
+  beReport: null,
+  recommendationsReport: null,
+  errors: [],
+};
 
 async function loadDashboard() {
   try {
@@ -2431,6 +2682,446 @@ async function loadDashboard() {
   } catch (e) {}
   // Paper trading status is served by its own endpoint
   loadPaperTradingStatus();
+  loadSymbolPlaybookAnalytics();
+}
+
+function formatSymbolPlaybookDate(value) {
+  return toInputDateValue(value) || SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SINCE;
+}
+
+function formatSymbolPlaybookPercent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? (number * 100).toFixed(1) + '%' : '--';
+}
+
+function formatSymbolPlaybookNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? num(number) : '--';
+}
+
+function formatSymbolPlaybookProfitFactor(row = {}) {
+  if (row.profitFactorLabel === 'INF') return badge('INF', 'var(--green)');
+  return formatSymbolPlaybookNumber(row.profitFactor);
+}
+
+function formatSymbolPlaybookMoney(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '--';
+  const color = number > 0 ? 'var(--green)' : number < 0 ? 'var(--red)' : 'var(--text2)';
+  return '<span style="color:' + color + '">' + escapeHtml(fmtSignedMoney(number)) + '</span>';
+}
+
+function formatSymbolPlaybookR(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '--';
+  const color = number > 0 ? 'var(--green)' : number < 0 ? 'var(--red)' : 'var(--text2)';
+  const label = (number > 0 ? '+' : '') + number.toFixed(2) + 'R';
+  return '<span style="color:' + color + '">' + escapeHtml(label) + '</span>';
+}
+
+function symbolPlaybookRecommendationBadge(recommendation) {
+  const normalized = String(recommendation || 'NEED_MORE_DATA').trim().toUpperCase();
+  const colors = {
+    KEEP_AS_GROWTH_ENGINE: 'var(--green)',
+    KEEP_SMALL: 'var(--blue)',
+    PAPER_ONLY: 'var(--yellow)',
+    DISABLE_SUGGESTED: 'var(--red)',
+    NEED_MORE_DATA: 'var(--text2)',
+    KEEP_CURRENT: 'var(--green)',
+    OBSERVE_MORE: 'var(--text2)',
+    REDUCE_RISK: 'var(--yellow)',
+    PAPER_ONLY_RECOMMENDED: 'var(--yellow)',
+    DISABLE_RECOMMENDED: 'var(--red)',
+    CONSIDER_ENTRY_REFINEMENT: 'var(--purple)',
+    CONSIDER_BE_LOOSENING: 'var(--purple)',
+    CONSIDER_LOOSEN_BE: 'var(--purple)',
+    KEEP_TIGHT_BE: 'var(--green)',
+    NEUTRAL: 'var(--text2)',
+  };
+  return badge(escapeHtml(normalized), colors[normalized] || 'var(--text2)');
+}
+
+function symbolPlaybookBiasBadge(liveBias) {
+  const normalized = String(liveBias || '--').trim();
+  const lower = normalized.toLowerCase();
+  let color = 'var(--text2)';
+  if (lower.includes('allowed')) color = 'var(--green)';
+  else if (lower.includes('paper') || lower.includes('signal')) color = 'var(--purple)';
+  else if (lower.includes('caution')) color = 'var(--yellow)';
+  else if (lower.includes('disabled')) color = 'var(--red)';
+  return badge(escapeHtml(normalized || '--'), color);
+}
+
+function symbolPlaybookRoleBadge(role) {
+  const normalized = String(role || '--').trim();
+  const lower = normalized.toLowerCase();
+  let color = 'var(--cyan)';
+  if (lower.includes('disabled')) color = 'var(--red)';
+  else if (lower.includes('stabilizer') || lower.includes('safe')) color = 'var(--blue)';
+  else if (lower === '--') color = 'var(--text2)';
+  return badge(escapeHtml(normalized || '--'), color);
+}
+
+function symbolPlaybookSourceBreakdownLabel(row = {}) {
+  return '<div class="analytics-source">recorded '
+    + escapeHtml(String(row.recordedCount || 0))
+    + ' | inferred ' + escapeHtml(String(row.legacyInferredCount || 0))
+    + ' | unknown ' + escapeHtml(String(row.unknownLegacyCount || 0))
+    + '</div>';
+}
+
+function getSymbolPlaybookAnalyticsCsvTools() {
+  if (!window.SymbolPlaybookAnalyticsCsv) {
+    throw new Error('Symbol playbook CSV helper is unavailable');
+  }
+  return window.SymbolPlaybookAnalyticsCsv;
+}
+
+function getSymbolPlaybookAnalyticsFilters() {
+  const sinceEl = document.getElementById('symbolPlaybookAnalyticsSince');
+  const scopeEl = document.getElementById('symbolPlaybookAnalyticsScope');
+  const since = sinceEl && sinceEl.value ? sinceEl.value : SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SINCE;
+  const scope = scopeEl && scopeEl.value ? scopeEl.value : SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SCOPE;
+  return { since, scope };
+}
+
+function setSymbolPlaybookAnalyticsTab(tab) {
+  const normalized = ['overview', 'setup', 'be', 'recommendations'].includes(tab) ? tab : 'overview';
+  symbolPlaybookAnalyticsState.activeTab = normalized;
+  const ids = {
+    overview: 'Overview',
+    setup: 'Setup',
+    be: 'Be',
+    recommendations: 'Recommendations',
+  };
+  Object.entries(ids).forEach(([key, suffix]) => {
+    const tabEl = document.getElementById('symbolPlaybookAnalyticsTab' + suffix);
+    const panelEl = document.getElementById('symbolPlaybookAnalyticsPanel' + suffix);
+    if (tabEl) tabEl.classList.toggle('active', key === normalized);
+    if (panelEl) panelEl.classList.toggle('active', key === normalized);
+  });
+}
+
+function extractSymbolPlaybookAnalyticsResult(result, name, errors) {
+  if (result.status === 'fulfilled' && result.value && result.value.success) {
+    return result.value;
+  }
+  const message = result.status === 'fulfilled'
+    ? (result.value && result.value.message)
+    : (result.reason && result.reason.message);
+  errors.push(name + ': ' + (message || 'request failed'));
+  return null;
+}
+
+function renderSymbolPlaybookAnalyticsMeta() {
+  const metaEl = document.getElementById('symbolPlaybookAnalyticsMeta');
+  if (!metaEl) return;
+  const state = symbolPlaybookAnalyticsState;
+  const reportTrades = state.report ? (state.report.totalTrades || 0) : 0;
+  const beGroups = state.beReport ? (state.beReport.count || 0) : 0;
+  const recommendations = state.recommendationsReport ? (state.recommendationsReport.count || 0) : 0;
+  metaEl.innerHTML = 'Scope: ' + escapeHtml(String(state.scope || 'paper').toUpperCase())
+    + ' | Since: ' + escapeHtml(state.since || SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SINCE)
+    + ' | Playbooks: ' + escapeHtml(String(state.playbooks.length || 0))
+    + ' | Report Trades: ' + escapeHtml(String(reportTrades))
+    + ' | BE Groups: ' + escapeHtml(String(beGroups))
+    + ' | Recommendations: ' + escapeHtml(String(recommendations));
+}
+
+function renderSymbolPlaybookAnalyticsError() {
+  const errorEl = document.getElementById('symbolPlaybookAnalyticsError');
+  if (!errorEl) return;
+  const errors = symbolPlaybookAnalyticsState.errors || [];
+  if (errors.length === 0) {
+    errorEl.style.display = 'none';
+    errorEl.textContent = '';
+    return;
+  }
+  errorEl.style.display = 'block';
+  errorEl.textContent = 'Some analytics data could not be loaded: ' + errors.join(' | ');
+}
+
+function renderSymbolPlaybookOverview() {
+  const panelEl = document.getElementById('symbolPlaybookAnalyticsPanelOverview');
+  if (!panelEl) return;
+  const tools = getSymbolPlaybookAnalyticsCsvTools();
+  const rows = tools.flattenOverviewRows({
+    playbooks: symbolPlaybookAnalyticsState.playbooks,
+    report: symbolPlaybookAnalyticsState.report || {
+      scope: symbolPlaybookAnalyticsState.scope,
+      since: symbolPlaybookAnalyticsState.since,
+      symbols: [],
+    },
+  });
+
+  if (rows.length === 0) {
+    panelEl.innerHTML = '<div class="empty">No data</div>';
+    return;
+  }
+
+  let html = '<div class="analytics-table-wrap"><table><tr>'
+    + '<th>Symbol</th><th>Role</th><th>Category</th><th>Live Bias</th><th>Trades</th>'
+    + '<th>Net P/L</th><th>Profit Factor</th><th>Win Rate</th><th>Avg R</th><th>Max Single Loss</th>'
+    + '<th>Best Setup</th><th>Recommendation</th><th>Source Breakdown</th></tr>';
+
+  rows.forEach((row) => {
+    html += '<tr>';
+    html += '<td><strong>' + escapeHtml(row.symbol || '--') + '</strong></td>';
+    html += '<td>' + symbolPlaybookRoleBadge(row.role) + '</td>';
+    html += '<td>' + escapeHtml(row.category || '--') + '</td>';
+    html += '<td>' + symbolPlaybookBiasBadge(row.liveBias) + '</td>';
+    html += '<td>' + escapeHtml(String(row.trades || 0)) + '</td>';
+    html += '<td>' + formatSymbolPlaybookMoney(row.netPnl || 0) + '</td>';
+    html += '<td>' + formatSymbolPlaybookProfitFactor(row) + '</td>';
+    html += '<td>' + escapeHtml(formatSymbolPlaybookPercent(row.winRate)) + '</td>';
+    html += '<td>' + formatSymbolPlaybookR(row.avgR) + '</td>';
+    html += '<td>' + formatSymbolPlaybookMoney(row.maxSingleLoss || 0) + '</td>';
+    html += '<td>' + escapeHtml(row.bestSetupType || '--') + '</td>';
+    html += '<td>' + symbolPlaybookRecommendationBadge(row.recommendation) + '</td>';
+    html += '<td>' + symbolPlaybookSourceBreakdownLabel(row) + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</table></div>';
+  panelEl.innerHTML = html;
+}
+
+function renderSymbolPlaybookSetupPerformance() {
+  const panelEl = document.getElementById('symbolPlaybookAnalyticsPanelSetup');
+  if (!panelEl) return;
+  const tools = getSymbolPlaybookAnalyticsCsvTools();
+  const rows = tools.flattenSetupRows({ report: symbolPlaybookAnalyticsState.report || {} });
+
+  if (rows.length === 0) {
+    panelEl.innerHTML = '<div class="empty">No data</div>';
+    return;
+  }
+
+  let html = '<div class="analytics-table-wrap"><table><tr>'
+    + '<th>Symbol</th><th>Setup Type</th><th>Trades</th><th>Net P/L</th><th>Profit Factor</th>'
+    + '<th>Win Rate</th><th>Avg R</th><th>Max Single Loss</th><th>Source Breakdown</th></tr>';
+
+  rows.forEach((row) => {
+    html += '<tr>';
+    html += '<td><strong>' + escapeHtml(row.symbol || '--') + '</strong></td>';
+    html += '<td>' + escapeHtml(row.setupType || '--') + '</td>';
+    html += '<td>' + escapeHtml(String(row.trades || 0)) + '</td>';
+    html += '<td>' + formatSymbolPlaybookMoney(row.netPnl || 0) + '</td>';
+    html += '<td>' + formatSymbolPlaybookProfitFactor(row) + '</td>';
+    html += '<td>' + escapeHtml(formatSymbolPlaybookPercent(row.winRate)) + '</td>';
+    html += '<td>' + formatSymbolPlaybookR(row.avgR) + '</td>';
+    html += '<td>' + formatSymbolPlaybookMoney(row.maxSingleLoss || 0) + '</td>';
+    html += '<td>' + symbolPlaybookSourceBreakdownLabel(row) + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</table></div>';
+  panelEl.innerHTML = html;
+}
+
+function renderSymbolPlaybookBeAnalysis() {
+  const panelEl = document.getElementById('symbolPlaybookAnalyticsPanelBe');
+  if (!panelEl) return;
+  const tools = getSymbolPlaybookAnalyticsCsvTools();
+  const rows = tools.flattenBeRows({ beReport: symbolPlaybookAnalyticsState.beReport || {} });
+
+  if (rows.length === 0) {
+    panelEl.innerHTML = '<div class="empty">No data</div>';
+    return;
+  }
+
+  let html = '<div class="analytics-table-wrap"><table><tr>'
+    + '<th>Symbol</th><th>Strategy</th><th>Setup Type</th><th>BE Style</th><th>Total Trades</th>'
+    + '<th>BE Exit Count</th><th>BE Exit Rate</th><th>Protected Loss Estimate</th>'
+    + '<th>Missed Profit After BE Estimate</th><th>Avg Realized R</th><th>Recommendation</th></tr>';
+
+  rows.forEach((row) => {
+    html += '<tr>';
+    html += '<td><strong>' + escapeHtml(row.symbol || '--') + '</strong></td>';
+    html += '<td>' + escapeHtml(row.strategy || '--') + '</td>';
+    html += '<td>' + escapeHtml(row.setupType || '--') + '</td>';
+    html += '<td>' + escapeHtml(row.beStyle || '--') + '</td>';
+    html += '<td>' + escapeHtml(String(row.totalTrades || 0)) + '</td>';
+    html += '<td>' + escapeHtml(String(row.beExitCount || 0)) + '</td>';
+    html += '<td>' + escapeHtml(formatSymbolPlaybookPercent(row.beExitRate)) + '</td>';
+    html += '<td>' + formatSymbolPlaybookMoney(row.protectedLossEstimate) + '</td>';
+    html += '<td>' + formatSymbolPlaybookMoney(row.missedProfitAfterBEEstimate) + '</td>';
+    html += '<td>' + formatSymbolPlaybookR(row.avgRealizedR) + '</td>';
+    html += '<td>' + symbolPlaybookRecommendationBadge(row.recommendation) + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</table></div>';
+  panelEl.innerHTML = html;
+}
+
+function renderSymbolPlaybookRecommendations() {
+  const panelEl = document.getElementById('symbolPlaybookAnalyticsPanelRecommendations');
+  if (!panelEl) return;
+  const tools = getSymbolPlaybookAnalyticsCsvTools();
+  const rows = tools.flattenRecommendationRows({
+    recommendationsReport: symbolPlaybookAnalyticsState.recommendationsReport || {},
+  });
+
+  if (rows.length === 0) {
+    panelEl.innerHTML = '<div class="empty">No data</div>';
+    return;
+  }
+
+  let html = '<div class="analytics-table-wrap"><table><tr>'
+    + '<th>Symbol</th><th>Current Role</th><th>Current Live Bias</th><th>Suggested Action</th>'
+    + '<th>Suggested Risk Weight</th><th>Suggested BE Style</th><th>Suggested Entry Style</th><th>Reason</th></tr>';
+
+  rows.forEach((row) => {
+    html += '<tr>';
+    html += '<td><strong>' + escapeHtml(row.symbol || '--') + '</strong></td>';
+    html += '<td>' + symbolPlaybookRoleBadge(row.currentRole) + '</td>';
+    html += '<td>' + symbolPlaybookBiasBadge(row.currentLiveBias) + '</td>';
+    html += '<td>' + symbolPlaybookRecommendationBadge(row.suggestedAction) + '</td>';
+    html += '<td>' + formatSymbolPlaybookNumber(row.suggestedRiskWeight) + '</td>';
+    html += '<td>' + escapeHtml(row.suggestedBeStyle || '--') + '</td>';
+    html += '<td>' + escapeHtml(row.suggestedEntryStyle || '--') + '</td>';
+    html += '<td style="max-width:420px;white-space:normal;line-height:1.5">' + escapeHtml(row.reason || '--') + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</table></div>';
+  panelEl.innerHTML = html;
+}
+
+function renderSymbolPlaybookAnalytics() {
+  renderSymbolPlaybookAnalyticsMeta();
+  renderSymbolPlaybookAnalyticsError();
+  renderSymbolPlaybookOverview();
+  renderSymbolPlaybookSetupPerformance();
+  renderSymbolPlaybookBeAnalysis();
+  renderSymbolPlaybookRecommendations();
+  setSymbolPlaybookAnalyticsTab(symbolPlaybookAnalyticsState.activeTab);
+}
+
+async function loadSymbolPlaybookAnalytics(force = false) {
+  const overviewEl = document.getElementById('symbolPlaybookAnalyticsPanelOverview');
+  const metaEl = document.getElementById('symbolPlaybookAnalyticsMeta');
+  if (!overviewEl || symbolPlaybookAnalyticsInFlight) return;
+
+  const filters = getSymbolPlaybookAnalyticsFilters();
+  const key = filters.scope + ':' + filters.since;
+  const hasLoaded = overviewEl.dataset.loaded === '1';
+  if (
+    !force
+    && hasLoaded
+    && symbolPlaybookAnalyticsState.key === key
+    && Date.now() - symbolPlaybookAnalyticsLastLoadedAt < SYMBOL_PLAYBOOK_ANALYTICS_REFRESH_MS
+  ) {
+    return;
+  }
+
+  symbolPlaybookAnalyticsInFlight = true;
+  symbolPlaybookAnalyticsState = {
+    ...symbolPlaybookAnalyticsState,
+    ...filters,
+    key,
+    errors: [],
+  };
+
+  if (!hasLoaded || force) {
+    if (metaEl) metaEl.textContent = 'Loading analytics...';
+    ['Overview', 'Setup', 'Be', 'Recommendations'].forEach((suffix) => {
+      const panelEl = document.getElementById('symbolPlaybookAnalyticsPanel' + suffix);
+      if (panelEl) panelEl.innerHTML = '<div class="empty">Loading analytics...</div>';
+    });
+  }
+
+  try {
+    const query = '?since=' + encodeURIComponent(filters.since)
+      + '&scope=' + encodeURIComponent(filters.scope);
+    const [playbooksResult, reportResult, beResult, recommendationsResult] = await Promise.allSettled([
+      api('/api/symbol-playbooks'),
+      api('/api/symbol-playbooks/report' + query),
+      api('/api/symbol-playbooks/be-report' + query),
+      api('/api/symbol-playbooks/recommendations' + query),
+    ]);
+
+    const errors = [];
+    const playbooksPayload = extractSymbolPlaybookAnalyticsResult(playbooksResult, 'playbooks', errors);
+    const reportPayload = extractSymbolPlaybookAnalyticsResult(reportResult, 'report', errors);
+    const bePayload = extractSymbolPlaybookAnalyticsResult(beResult, 'BE report', errors);
+    const recommendationsPayload = extractSymbolPlaybookAnalyticsResult(recommendationsResult, 'recommendations', errors);
+
+    symbolPlaybookAnalyticsState = {
+      ...symbolPlaybookAnalyticsState,
+      playbooks: playbooksPayload && Array.isArray(playbooksPayload.playbooks) ? playbooksPayload.playbooks : [],
+      report: reportPayload,
+      beReport: bePayload,
+      recommendationsReport: recommendationsPayload,
+      errors,
+    };
+
+    renderSymbolPlaybookAnalytics();
+    overviewEl.dataset.loaded = '1';
+    symbolPlaybookAnalyticsLastLoadedAt = Date.now();
+  } catch (e) {
+    symbolPlaybookAnalyticsState = {
+      ...symbolPlaybookAnalyticsState,
+      errors: [e.message || 'Load error'],
+    };
+    renderSymbolPlaybookAnalytics();
+  } finally {
+    symbolPlaybookAnalyticsInFlight = false;
+  }
+}
+
+function loadSymbolPlaybookReport(force = false) {
+  return loadSymbolPlaybookAnalytics(force);
+}
+
+function getSymbolPlaybookCsvFilename(type) {
+  const since = symbolPlaybookAnalyticsState.since || SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SINCE;
+  const scope = symbolPlaybookAnalyticsState.scope || SYMBOL_PLAYBOOK_ANALYTICS_DEFAULT_SCOPE;
+  const names = {
+    overview: 'symbol-playbook-overview',
+    setup: 'symbol-setup-performance',
+    be: 'symbol-be-report',
+    recommendations: 'symbol-recommendations',
+  };
+  return (names[type] || 'symbol-playbook-analytics') + '-' + scope + '-' + since + '.csv';
+}
+
+function triggerSymbolPlaybookCsvDownload(csv, filename) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadSymbolPlaybookAnalyticsCsv(type) {
+  try {
+    const filters = getSymbolPlaybookAnalyticsFilters();
+    const requestedKey = filters.scope + ':' + filters.since;
+    if (
+      symbolPlaybookAnalyticsState.key !== requestedKey
+      || (!symbolPlaybookAnalyticsState.report && !symbolPlaybookAnalyticsState.beReport && !symbolPlaybookAnalyticsState.recommendationsReport)
+    ) {
+      await loadSymbolPlaybookAnalytics(true);
+    }
+    const tools = getSymbolPlaybookAnalyticsCsvTools();
+    const csv = tools.buildCsv(type, {
+      playbooks: symbolPlaybookAnalyticsState.playbooks,
+      report: symbolPlaybookAnalyticsState.report,
+      beReport: symbolPlaybookAnalyticsState.beReport,
+      recommendationsReport: symbolPlaybookAnalyticsState.recommendationsReport,
+    });
+    triggerSymbolPlaybookCsvDownload(csv, getSymbolPlaybookCsvFilename(type));
+    wsLog('success', 'Symbol playbook CSV exported: ' + type);
+  } catch (e) {
+    wsLog('error', 'Symbol playbook CSV export failed: ' + e.message);
+    alert(e.message);
+  }
 }
 
 async function loadPaperTradingStatus() {
@@ -4009,11 +4700,8 @@ function renderStrategyRuntimeMatrix(matrix) {
       + escapeHtml(matrix.warning)
       + '</div>';
   }
-  html += '<div class="strategy-assignments-columns-sticky"><div class="strategy-assignments-columns-track">';
-  html += '<table class="strategy-assignments-table strategy-assignments-columns-table">' + colGroup + '<thead><tr>' + headerCells + '</tr></thead></table>';
-  html += '</div></div>';
   html += '<div class="strategy-assignments-scroll">';
-  html += '<table class="strategy-assignments-table strategy-assignments-body">' + colGroup + '<tbody>';
+  html += '<table class="strategy-assignments-table strategy-assignments-body">' + colGroup + '<thead><tr>' + headerCells + '</tr></thead><tbody>';
 
   matrix.symbols.forEach((symbol) => {
     html += '<tr><td><strong>' + escapeHtml(symbol) + '</strong></td>';
@@ -4027,11 +4715,7 @@ function renderStrategyRuntimeMatrix(matrix) {
 
   html += '</tbody></table></div>';
   el.innerHTML = html;
-  const scroll = el.querySelector('.strategy-assignments-scroll');
-  if (scroll) {
-    scroll.addEventListener('scroll', () => syncStrategyAssignmentsStickyLayout(scroll), { passive: true });
-  }
-  requestAnimationFrame(() => syncStrategyAssignmentsStickyLayout(scroll));
+  requestAnimationFrame(syncStrategyAssignmentsStickyOffsets);
 }
 
 function toggleStrategyRuntimeMatrix(symbol, strategyName, checked) {
@@ -8504,6 +9188,379 @@ document.addEventListener('keydown', (event) => {
     closeOptimizerApplyModal();
   }
 });
+
+// --- SymbolCustom Manager ---
+function getSymbolCustomUtils() {
+  return window.SymbolCustomManagerUtils || {};
+}
+
+function symbolCustomEl(id) {
+  return document.getElementById(id);
+}
+
+function showSymbolCustomStatus(message, type = 'success') {
+  const el = symbolCustomEl('symbolCustomStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = 'symbol-custom-status' + (message ? ' show ' + type : '');
+}
+
+function getSymbolCustomStatusTag(status) {
+  const normalized = String(status || 'draft');
+  let cls = 'tag-neutral';
+  if (normalized === 'paper_testing') cls = 'tag-paper';
+  else if (normalized === 'validated') cls = 'tag-green';
+  else if (normalized === 'live_ready') cls = 'tag-live';
+  else if (normalized === 'disabled' || normalized === 'archived') cls = 'tag-red';
+  return '<span class="tag ' + cls + '">' + escapeHtml(normalized) + '</span>';
+}
+
+function formatSymbolCustomStatusSummary(summary) {
+  const entries = Object.entries(summary || {});
+  if (!entries.length) return '--';
+  return entries
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => escapeHtml(status) + ': ' + count)
+    .join(', ');
+}
+
+function setSymbolCustomEditorRecord(record) {
+  const utils = getSymbolCustomUtils();
+  const isNew = !record || !record._id;
+  const source = record || {};
+  const timeframes = source.timeframes || {};
+  const jsonDefaults = utils.JSON_FIELD_DEFAULTS || {};
+  const defaultParameterSchema = utils.DEFAULT_PARAMETER_SCHEMA || [];
+
+  symbolCustomManagerState.selectedId = source._id || null;
+  symbolCustomManagerState.selectedRecord = source._id ? source : null;
+
+  symbolCustomEl('symbolCustomEditorTitle').textContent = isNew ? 'Editor - New Draft' : 'Editor - ' + (source.symbolCustomName || source._id);
+  symbolCustomEl('scSymbol').value = source.symbol || symbolCustomManagerState.selectedSymbol || '';
+  symbolCustomEl('scSymbolCustomName').value = source.symbolCustomName || '';
+  symbolCustomEl('scDisplayName').value = source.displayName || '';
+  symbolCustomEl('scDescription').value = source.description || '';
+  symbolCustomEl('scHypothesis').value = source.hypothesis || '';
+  symbolCustomEl('scStatus').value = source.status || 'draft';
+  symbolCustomEl('scPaperEnabled').checked = source.paperEnabled === true;
+  symbolCustomEl('scLiveEnabled').checked = source.liveEnabled === true;
+  symbolCustomEl('scIsPrimaryLive').checked = source.isPrimaryLive === true;
+  symbolCustomEl('scSetupTimeframe').value = timeframes.setupTimeframe || '15m';
+  symbolCustomEl('scEntryTimeframe').value = timeframes.entryTimeframe || '5m';
+  symbolCustomEl('scHigherTimeframe').value = timeframes.higherTimeframe || '1h';
+  symbolCustomEl('scParameterSchemaJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.parameterSchema, defaultParameterSchema)
+    : JSON.stringify(source.parameterSchema || defaultParameterSchema, null, 2);
+  symbolCustomEl('scParametersJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.parameters, jsonDefaults.parameters || {})
+    : JSON.stringify(source.parameters || {}, null, 2);
+  symbolCustomEl('scRiskConfigJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.riskConfig, jsonDefaults.riskConfig || {})
+    : JSON.stringify(source.riskConfig || {}, null, 2);
+  symbolCustomEl('scSessionFilterJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.sessionFilter, jsonDefaults.sessionFilter || {})
+    : JSON.stringify(source.sessionFilter || {}, null, 2);
+  symbolCustomEl('scNewsFilterJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.newsFilter, jsonDefaults.newsFilter || {})
+    : JSON.stringify(source.newsFilter || {}, null, 2);
+  symbolCustomEl('scBeConfigJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.beConfig, jsonDefaults.beConfig || {})
+    : JSON.stringify(source.beConfig || {}, null, 2);
+  symbolCustomEl('scEntryConfigJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.entryConfig, jsonDefaults.entryConfig || {})
+    : JSON.stringify(source.entryConfig || {}, null, 2);
+  symbolCustomEl('scExitConfigJson').value = utils.serializeJsonForEditor
+    ? utils.serializeJsonForEditor(source.exitConfig, jsonDefaults.exitConfig || {})
+    : JSON.stringify(source.exitConfig || {}, null, 2);
+  symbolCustomEl('scDesignNotes').value = source.designNotes || '';
+  symbolCustomEl('scAiResearchSummary').value = source.aiResearchSummary || '';
+
+  updateSymbolCustomLiveWarning();
+  renderSymbolCustomList();
+}
+
+function getSymbolCustomEditorValues() {
+  const utils = getSymbolCustomUtils();
+  return {
+    symbol: symbolCustomEl('scSymbol').value,
+    symbolCustomName: symbolCustomEl('scSymbolCustomName').value,
+    displayName: symbolCustomEl('scDisplayName').value,
+    description: symbolCustomEl('scDescription').value,
+    hypothesis: symbolCustomEl('scHypothesis').value,
+    status: symbolCustomEl('scStatus').value,
+    paperEnabled: symbolCustomEl('scPaperEnabled').checked,
+    liveEnabled: symbolCustomEl('scLiveEnabled').checked,
+    isPrimaryLive: symbolCustomEl('scIsPrimaryLive').checked,
+    setupTimeframe: symbolCustomEl('scSetupTimeframe').value,
+    entryTimeframe: symbolCustomEl('scEntryTimeframe').value,
+    higherTimeframe: symbolCustomEl('scHigherTimeframe').value,
+    logicName: (symbolCustomManagerState.selectedRecord && symbolCustomManagerState.selectedRecord.logicName) || utils.PLACEHOLDER_SYMBOL_CUSTOM || 'PLACEHOLDER_SYMBOL_CUSTOM',
+    parameterSchemaJson: symbolCustomEl('scParameterSchemaJson').value,
+    parametersJson: symbolCustomEl('scParametersJson').value,
+    riskConfigJson: symbolCustomEl('scRiskConfigJson').value,
+    sessionFilterJson: symbolCustomEl('scSessionFilterJson').value,
+    newsFilterJson: symbolCustomEl('scNewsFilterJson').value,
+    beConfigJson: symbolCustomEl('scBeConfigJson').value,
+    entryConfigJson: symbolCustomEl('scEntryConfigJson').value,
+    exitConfigJson: symbolCustomEl('scExitConfigJson').value,
+    designNotes: symbolCustomEl('scDesignNotes').value,
+    aiResearchSummary: symbolCustomEl('scAiResearchSummary').value,
+  };
+}
+
+function updateSymbolCustomLiveWarning() {
+  const warningEl = symbolCustomEl('symbolCustomLiveWarning');
+  if (!warningEl) return;
+  const utils = getSymbolCustomUtils();
+  const checked = symbolCustomEl('scLiveEnabled') && symbolCustomEl('scLiveEnabled').checked === true;
+  warningEl.textContent = utils.PHASE_1_LIVE_WARNING || 'SymbolCustom live execution is not supported in Phase 1. This field is saved for future use only.';
+  warningEl.classList.toggle('show', utils.shouldShowLiveWarning ? utils.shouldShowLiveWarning(checked) : checked);
+}
+
+function renderSymbolCustomSymbolSummary() {
+  const target = symbolCustomEl('symbolCustomSymbolSummary');
+  const utils = getSymbolCustomUtils();
+  const summaries = utils.buildSymbolCustomSymbolSummaries
+    ? utils.buildSymbolCustomSymbolSummaries(symbolCustomManagerState.all)
+    : [];
+
+  if (!target) return;
+  if (!summaries.length) {
+    target.innerHTML = '<div class="empty">No SymbolCustoms</div>';
+    return;
+  }
+
+  let html = '<table class="symbol-custom-table"><tr><th>Symbol</th><th>Customs</th><th>Paper</th><th>Live</th><th>Primary Live</th><th>Status Summary</th></tr>';
+  summaries.forEach((summary) => {
+    const selected = summary.symbol === symbolCustomManagerState.selectedSymbol ? ' class="selected"' : '';
+    html += '<tr' + selected + ' onclick="selectSymbolCustomSymbol(\'' + escapeJsString(summary.symbol) + '\')">';
+    html += '<td><strong>' + escapeHtml(summary.symbol) + '</strong></td>';
+    html += '<td>' + summary.customCount + '</td>';
+    html += '<td>' + summary.paperEnabledCount + '</td>';
+    html += '<td>' + summary.liveEnabledCount + '</td>';
+    html += '<td>' + escapeHtml(summary.primaryLiveName || '--') + '</td>';
+    html += '<td>' + formatSymbolCustomStatusSummary(summary.statusSummary) + '</td></tr>';
+  });
+  html += '</table>';
+  target.innerHTML = html;
+}
+
+function renderSymbolCustomList() {
+  const target = symbolCustomEl('symbolCustomList');
+  const title = symbolCustomEl('symbolCustomListTitle');
+  const rows = symbolCustomManagerState.selectedRecords || [];
+  if (title) title.textContent = symbolCustomManagerState.selectedSymbol ? 'SymbolCustoms - ' + symbolCustomManagerState.selectedSymbol : 'SymbolCustoms';
+  if (!target) return;
+
+  if (!rows.length) {
+    target.innerHTML = '<div class="empty">No SymbolCustoms</div>';
+    return;
+  }
+
+  let html = '<table class="symbol-custom-table"><tr><th>Name</th><th>Display</th><th>Status</th><th>Paper</th><th>Live</th><th>Primary</th><th>Version</th><th>Updated</th></tr>';
+  rows.forEach((record) => {
+    const selected = record._id === symbolCustomManagerState.selectedId ? ' class="selected"' : '';
+    html += '<tr' + selected + ' onclick="selectSymbolCustomRecord(\'' + escapeJsString(record._id) + '\')">';
+    html += '<td><strong>' + escapeHtml(record.symbolCustomName || '--') + '</strong></td>';
+    html += '<td>' + escapeHtml(record.displayName || '--') + '</td>';
+    html += '<td>' + getSymbolCustomStatusTag(record.status) + '</td>';
+    html += '<td>' + (record.paperEnabled ? '<span class="tag tag-paper">true</span>' : '<span class="tag tag-neutral">false</span>') + '</td>';
+    html += '<td>' + (record.liveEnabled ? '<span class="tag tag-live">true</span>' : '<span class="tag tag-neutral">false</span>') + '</td>';
+    html += '<td>' + (record.isPrimaryLive ? '<span class="tag tag-live">true</span>' : '<span class="tag tag-neutral">false</span>') + '</td>';
+    html += '<td>' + escapeHtml(record.version || 1) + '</td>';
+    html += '<td>' + fmtTime(record.updatedAt || record.createdAt) + '</td></tr>';
+  });
+  html += '</table>';
+  target.innerHTML = html;
+}
+
+async function loadSymbolCustomManager(options = {}) {
+  try {
+    showSymbolCustomStatus('Loading SymbolCustoms...', 'warn');
+    const response = await api('/api/symbol-customs');
+    if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustoms');
+    symbolCustomManagerState.all = Array.isArray(response.symbolCustoms) ? response.symbolCustoms : [];
+    renderSymbolCustomSymbolSummary();
+
+    const utils = getSymbolCustomUtils();
+    const summaries = utils.buildSymbolCustomSymbolSummaries
+      ? utils.buildSymbolCustomSymbolSummaries(symbolCustomManagerState.all)
+      : [];
+    const keepSymbol = options.preserveSelection && summaries.some((summary) => summary.symbol === symbolCustomManagerState.selectedSymbol);
+    const nextSymbol = keepSymbol ? symbolCustomManagerState.selectedSymbol : (summaries[0] && summaries[0].symbol);
+
+    if (nextSymbol) {
+      await selectSymbolCustomSymbol(nextSymbol, { preserveSelection: options.preserveSelection });
+    } else {
+      symbolCustomManagerState.selectedSymbol = null;
+      symbolCustomManagerState.selectedRecords = [];
+      setSymbolCustomEditorRecord(null);
+      renderSymbolCustomList();
+    }
+
+    showSymbolCustomStatus('SymbolCustoms loaded.', 'success');
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to load SymbolCustoms', 'error');
+  }
+}
+
+async function selectSymbolCustomSymbol(symbol, options = {}) {
+  try {
+    symbolCustomManagerState.selectedSymbol = symbol;
+    const response = await api('/api/symbol-customs/by-symbol/' + encodeURIComponent(symbol));
+    if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustoms for symbol');
+    symbolCustomManagerState.selectedRecords = Array.isArray(response.symbolCustoms) ? response.symbolCustoms : [];
+    renderSymbolCustomSymbolSummary();
+
+    const keepId = options.preserveSelection
+      && symbolCustomManagerState.selectedRecords.some((record) => record._id === symbolCustomManagerState.selectedId);
+    const nextId = keepId ? symbolCustomManagerState.selectedId : (symbolCustomManagerState.selectedRecords[0] && symbolCustomManagerState.selectedRecords[0]._id);
+    if (nextId) await selectSymbolCustomRecord(nextId);
+    else setSymbolCustomEditorRecord({ symbol });
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to load SymbolCustoms for symbol', 'error');
+  }
+}
+
+async function selectSymbolCustomRecord(id) {
+  try {
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(id));
+    if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustom');
+    setSymbolCustomEditorRecord(response.data || null);
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to load SymbolCustom', 'error');
+  }
+}
+
+function newSymbolCustomDraft() {
+  const utils = getSymbolCustomUtils();
+  const blank = {
+    symbol: symbolCustomManagerState.selectedSymbol || '',
+    status: 'draft',
+    paperEnabled: false,
+    liveEnabled: false,
+    isPrimaryLive: false,
+    logicName: utils.PLACEHOLDER_SYMBOL_CUSTOM || 'PLACEHOLDER_SYMBOL_CUSTOM',
+    timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+    parameterSchema: utils.DEFAULT_PARAMETER_SCHEMA || [],
+    parameters: {},
+    riskConfig: {},
+    sessionFilter: { enabled: false, sessions: [] },
+    newsFilter: { enabled: false, beforeMinutes: null, afterMinutes: null, impactLevels: [] },
+    beConfig: { enabled: false },
+    entryConfig: {},
+    exitConfig: {},
+  };
+  setSymbolCustomEditorRecord(blank);
+  showSymbolCustomStatus('New draft editor ready.', 'success');
+}
+
+async function saveSymbolCustomEditor() {
+  const utils = getSymbolCustomUtils();
+  const serialized = utils.serializeEditorPayload
+    ? utils.serializeEditorPayload(getSymbolCustomEditorValues())
+    : { valid: false, errors: ['SymbolCustom editor helper is unavailable'], payload: null };
+  if (!serialized.valid) {
+    showSymbolCustomStatus(serialized.errors.join(' | '), 'error');
+    return;
+  }
+
+  try {
+    const id = symbolCustomManagerState.selectedId;
+    const response = id
+      ? await api('/api/symbol-customs/' + encodeURIComponent(id), 'PUT', serialized.payload)
+      : await api('/api/symbol-customs', 'POST', serialized.payload);
+    if (!response.success) throw new Error(response.message || 'Failed to save SymbolCustom');
+    const statusMessage = response.warning || 'SymbolCustom saved.';
+    const statusType = response.warning ? 'warn' : 'success';
+
+    symbolCustomManagerState.selectedSymbol = response.data && response.data.symbol ? response.data.symbol : serialized.payload.symbol;
+    symbolCustomManagerState.selectedId = response.data && response.data._id ? response.data._id : id;
+    await loadSymbolCustomManager({ preserveSelection: true });
+    showSymbolCustomStatus(statusMessage, statusType);
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to save SymbolCustom', 'error');
+  }
+}
+
+async function duplicateSelectedSymbolCustom() {
+  if (!symbolCustomManagerState.selectedId) {
+    showSymbolCustomStatus('Select a SymbolCustom before duplicating.', 'error');
+    return;
+  }
+
+  const source = symbolCustomManagerState.selectedRecord || {};
+  const copyName = (source.symbolCustomName || 'SYMBOL_CUSTOM') + '_COPY_' + Date.now();
+  try {
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(symbolCustomManagerState.selectedId) + '/duplicate', 'POST', {
+      symbolCustomName: copyName,
+    });
+    if (!response.success) throw new Error(response.message || 'Failed to duplicate SymbolCustom');
+    showSymbolCustomStatus('SymbolCustom duplicated.', 'success');
+    symbolCustomManagerState.selectedSymbol = response.data.symbol;
+    symbolCustomManagerState.selectedId = response.data._id;
+    await loadSymbolCustomManager({ preserveSelection: true });
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to duplicate SymbolCustom', 'error');
+  }
+}
+
+async function deleteSelectedSymbolCustom() {
+  if (!symbolCustomManagerState.selectedId) {
+    showSymbolCustomStatus('Select a SymbolCustom before deleting.', 'error');
+    return;
+  }
+  if (!confirm('Delete this SymbolCustom draft/config?')) return;
+
+  try {
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(symbolCustomManagerState.selectedId), 'DELETE');
+    if (!response.success) throw new Error(response.message || 'Failed to delete SymbolCustom');
+    showSymbolCustomStatus('SymbolCustom deleted.', 'success');
+    symbolCustomManagerState.selectedId = null;
+    await loadSymbolCustomManager({ preserveSelection: true });
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to delete SymbolCustom', 'error');
+  }
+}
+
+async function loadDefaultSymbolCustomDrafts() {
+  const utils = getSymbolCustomUtils();
+  if (!utils.getDefaultSymbolCustomDrafts) {
+    showSymbolCustomStatus('Default draft helper is unavailable.', 'error');
+    return;
+  }
+
+  try {
+    const latest = await api('/api/symbol-customs');
+    if (!latest.success) throw new Error(latest.message || 'Failed to load existing SymbolCustoms');
+    const existing = Array.isArray(latest.symbolCustoms) ? latest.symbolCustoms : [];
+    const existingKeys = new Set(existing.map((record) => String(record.symbol || '').toUpperCase() + '::' + String(record.symbolCustomName || '').trim()));
+    const drafts = utils.getDefaultSymbolCustomDrafts();
+    let created = 0;
+    let skipped = 0;
+
+    for (const draft of drafts) {
+      const key = String(draft.symbol || '').toUpperCase() + '::' + String(draft.symbolCustomName || '').trim();
+      if (existingKeys.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      const response = await api('/api/symbol-customs', 'POST', draft);
+      if (!response.success) throw new Error(response.message || 'Failed to create default draft ' + draft.symbolCustomName);
+      created += 1;
+      existingKeys.add(key);
+      symbolCustomManagerState.selectedSymbol = draft.symbol;
+      symbolCustomManagerState.selectedId = response.data && response.data._id ? response.data._id : symbolCustomManagerState.selectedId;
+    }
+
+    const statusMessage = 'Default drafts loaded. Created ' + created + ', skipped ' + skipped + '.';
+    const statusType = created ? 'success' : 'warn';
+    await loadSymbolCustomManager({ preserveSelection: true });
+    showSymbolCustomStatus(statusMessage, statusType);
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to load default drafts', 'error');
+  }
+}
 
 // Auto-refresh dashboard every 30s
 setInterval(() => {

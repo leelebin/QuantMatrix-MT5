@@ -70,6 +70,9 @@ const decisionAuditDb = createDatastore('decision_audit.db', 'history');
 const optimizerRunsDb = createDatastore('optimizer_runs.db', 'history');
 const strategyInstancesDb = createDatastore('strategyInstances.db', 'config');
 const strategyDailyStopsDb = createDatastore('strategy_daily_stops.db', 'trading');
+const symbolCustomsDb = createDatastore('symbol_customs.db', 'trading');
+const symbolCustomBacktestsDb = createDatastore('symbol_custom_backtests.db', 'trading');
+const symbolCustomOptimizerRunsDb = createDatastore('symbol_custom_optimizer_runs.db', 'trading');
 
 function dbEntry(group, filename, db) {
   return {
@@ -96,6 +99,9 @@ const DATABASES = Object.freeze({
   optimizerRuns: dbEntry('history', 'optimizer_runs.db', optimizerRunsDb),
   strategyInstances: dbEntry('config', 'strategyInstances.db', strategyInstancesDb),
   strategyDailyStops: dbEntry('trading', 'strategy_daily_stops.db', strategyDailyStopsDb),
+  symbolCustoms: dbEntry('trading', 'symbol_customs.db', symbolCustomsDb),
+  symbolCustomBacktests: dbEntry('trading', 'symbol_custom_backtests.db', symbolCustomBacktestsDb),
+  symbolCustomOptimizerRuns: dbEntry('trading', 'symbol_custom_optimizer_runs.db', symbolCustomOptimizerRunsDb),
 });
 
 // Ensure indexes
@@ -133,6 +139,16 @@ strategyInstancesDb.ensureIndex({ fieldName: '_id', unique: true });
 strategyDailyStopsDb.ensureIndex({ fieldName: 'key' });
 strategyDailyStopsDb.ensureIndex({ fieldName: 'tradingDay' });
 strategyDailyStopsDb.ensureIndex({ fieldName: 'stopped' });
+symbolCustomsDb.ensureIndex({ fieldName: 'symbol' });
+symbolCustomsDb.ensureIndex({ fieldName: 'symbolCustomName' });
+symbolCustomsDb.ensureIndex({ fieldName: 'status' });
+symbolCustomsDb.ensureIndex({ fieldName: 'updatedAt' });
+symbolCustomBacktestsDb.ensureIndex({ fieldName: 'symbol' });
+symbolCustomBacktestsDb.ensureIndex({ fieldName: 'symbolCustomId' });
+symbolCustomBacktestsDb.ensureIndex({ fieldName: 'createdAt' });
+symbolCustomOptimizerRunsDb.ensureIndex({ fieldName: 'symbol' });
+symbolCustomOptimizerRunsDb.ensureIndex({ fieldName: 'symbolCustomId' });
+symbolCustomOptimizerRunsDb.ensureIndex({ fieldName: 'completedAt' });
 decisionAuditDb.ensureIndex({ fieldName: 'symbol' });
 decisionAuditDb.ensureIndex({ fieldName: 'strategy' });
 decisionAuditDb.ensureIndex({ fieldName: 'stage' });
@@ -158,6 +174,9 @@ const connectDB = async () => {
     await optimizerRunsDb.count({});
     await strategyInstancesDb.count({});
     await strategyDailyStopsDb.count({});
+    await symbolCustomsDb.count({});
+    await symbolCustomBacktestsDb.count({});
+    await symbolCustomOptimizerRunsDb.count({});
     await decisionAuditDb.count({});
     if (IS_TEST_ENV) {
       console.log('Database Connected: NeDB (in-memory test storage)');
@@ -189,6 +208,9 @@ module.exports.batchBacktestJobsDb = batchBacktestJobsDb;
 module.exports.optimizerRunsDb = optimizerRunsDb;
 module.exports.strategyInstancesDb = strategyInstancesDb;
 module.exports.strategyDailyStopsDb = strategyDailyStopsDb;
+module.exports.symbolCustomsDb = symbolCustomsDb;
+module.exports.symbolCustomBacktestsDb = symbolCustomBacktestsDb;
+module.exports.symbolCustomOptimizerRunsDb = symbolCustomOptimizerRunsDb;
 module.exports.decisionAuditDb = decisionAuditDb;
 module.exports.DATA_DIR = DATA_DIR;
 module.exports.DATA_GROUP_DIRS = DATA_GROUP_DIRS;

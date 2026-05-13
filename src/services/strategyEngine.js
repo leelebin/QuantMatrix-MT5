@@ -8,6 +8,7 @@ const volumeFeatureService = require('./volumeFeatureService');
 const Strategy = require('../models/Strategy');
 const { instruments, getInstrumentsByStrategy, STRATEGY_TYPES } = require('../config/instruments');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
+const { getSymbolPlaybook } = require('../config/symbolPlaybooks');
 const {
   getStrategyParameterDefinitions,
   resolveStrategyParameters,
@@ -23,6 +24,7 @@ const { getStrategyInstance } = require('./strategyInstanceService');
 const { isInstanceEnabledForScope } = require('./assignmentRuntimeService');
 const economicCalendarService = require('./economicCalendarService');
 const { calculateExecutionScore } = require('./executionPolicyService');
+const { analyzeEntryRefinement } = require('./entryRefinementAnalyzer');
 
 function strategyNeedsEntryIndicators(strategyType) {
   return strategyType === STRATEGY_TYPES.TREND_FOLLOWING
@@ -47,6 +49,99 @@ function buildSignalDedupKey({ scope, symbol, strategyType, timeframe } = {}) {
   const normalizedStrategyType = String(strategyType || 'unknown').trim() || 'unknown';
   const normalizedTimeframe = String(timeframe || 'default').trim() || 'default';
   return `${runtimeScope}:${normalizedSymbol}:${normalizedStrategyType}:${normalizedTimeframe}`;
+}
+
+function inferSetupType({ symbol, strategyType, result } = {}) {
+  const normalizedSymbol = String(symbol || '').trim().toUpperCase();
+  const normalizedStrategyType = String(strategyType || '').trim();
+
+  if (normalizedSymbol === 'XAUUSD' && normalizedStrategyType === STRATEGY_TYPES.BREAKOUT) {
+    return 'event_breakout';
+  }
+  if (normalizedSymbol === 'XAUUSD' && normalizedStrategyType === STRATEGY_TYPES.MOMENTUM) {
+    return 'momentum_continuation';
+  }
+  if (normalizedSymbol === 'XAGUSD' && normalizedStrategyType === STRATEGY_TYPES.MOMENTUM) {
+    return 'momentum_continuation';
+  }
+  if (normalizedSymbol === 'XAGUSD' && normalizedStrategyType === STRATEGY_TYPES.VOLUME_FLOW_HYBRID) {
+    return 'volatility_expansion';
+  }
+  if (
+    ['XTIUSD', 'XBRUSD'].includes(normalizedSymbol)
+    && [STRATEGY_TYPES.BREAKOUT, STRATEGY_TYPES.MOMENTUM].includes(normalizedStrategyType)
+  ) {
+    return 'oil_news_continuation';
+  }
+  if (
+    ['EURUSD', 'GBPUSD', 'USDCHF', 'USDCAD'].includes(normalizedSymbol)
+    && normalizedStrategyType === STRATEGY_TYPES.MOMENTUM
+  ) {
+    return 'm15_intraday_pullback';
+  }
+  if (
+    ['EURUSD', 'GBPUSD', 'USDCHF', 'USDCAD'].includes(normalizedSymbol)
+    && normalizedStrategyType === STRATEGY_TYPES.MEAN_REVERSION
+  ) {
+    return 'session_range_reversal';
+  }
+  if (
+    ['NAS100', 'SPX500'].includes(normalizedSymbol)
+    && [STRATEGY_TYPES.MOMENTUM, STRATEGY_TYPES.BREAKOUT].includes(normalizedStrategyType)
+  ) {
+    return 'us_session_momentum';
+  }
+  if (
+    ['BTCUSD', 'ETHUSD'].includes(normalizedSymbol)
+    && [STRATEGY_TYPES.MOMENTUM, STRATEGY_TYPES.BREAKOUT].includes(normalizedStrategyType)
+  ) {
+    return 'risk_on_momentum';
+  }
+
+  return 'generic_signal';
+}
+
+function buildSignalPlaybookMetadata(symbol) {
+  const playbook = getSymbolPlaybook(symbol);
+  return {
+    role: playbook.role,
+    category: playbook.category,
+    allowedSetups: Array.isArray(playbook.allowedSetups) ? [...playbook.allowedSetups] : [],
+    preferredEntryStyle: playbook.preferredEntryStyle,
+    riskWeight: playbook.riskWeight,
+    beStyle: playbook.beStyle,
+    liveBias: playbook.liveBias,
+  };
+}
+
+function getLatestIndicatorValue(values) {
+  if (Array.isArray(values)) {
+    for (let index = values.length - 1; index >= 0; index -= 1) {
+      const number = Number(values[index]);
+      if (Number.isFinite(number)) return number;
+    }
+    return null;
+  }
+
+  const number = Number(values);
+  return Number.isFinite(number) ? number : null;
+}
+
+function resolveShadowEntryPrice(result = {}, analyzedCandle = {}) {
+  const candidates = [
+    result.entryPrice,
+    result.actualEntry,
+    result.indicatorsSnapshot?.entryPrice,
+    result.indicatorsSnapshot?.price,
+    analyzedCandle?.close,
+  ];
+
+  for (const candidate of candidates) {
+    const number = Number(candidate);
+    if (Number.isFinite(number)) return number;
+  }
+
+  return null;
 }
 
 class StrategyEngine {
@@ -220,11 +315,15 @@ class StrategyEngine {
 
     const analyzedCandle = closedCandles[closedCandles.length - 1];
     const latestEntryCandle = closedEntryCandles[closedEntryCandles.length - 1] || null;
+    const setupType = inferSetupType({ symbol, strategyType, result });
+    const playbook = buildSignalPlaybookMetadata(symbol);
     const signalRecord = {
       scope: runtimeScope,
       symbol,
       strategy: strategyType,
       signal: result.signal,
+      setupType,
+      playbook,
       confidence: result.confidence,
       rawConfidence: result.confidence,
       sl: result.sl,
@@ -252,6 +351,13 @@ class StrategyEngine {
       category: strategyContext?.category || runtimeInstrument.category || null,
       categoryFallback: strategyContext?.categoryFallback === true,
     };
+
+    signalRecord.entryRefinementShadow = analyzeEntryRefinement({
+      signal: signalRecord,
+      candles: closedEntryCandles.length > 0 ? closedEntryCandles : closedCandles,
+      atr: result.atrAtSignal ?? result.indicatorsSnapshot?.atr ?? getLatestIndicatorValue(ind.atr),
+      entryPrice: resolveShadowEntryPrice(result, analyzedCandle),
+    });
 
     if (signalRecord.signal !== 'NONE' || signalRecord.setupActive || signalRecord.filterReason) {
       const execution = calculateExecutionScore(signalRecord, strategyContext?.executionPolicy || undefined, {

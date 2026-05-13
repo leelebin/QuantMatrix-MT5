@@ -8,8 +8,13 @@ jest.mock('../src/services/symbolCustomService', () => ({
   duplicateSymbolCustom: jest.fn(),
 }));
 
+jest.mock('../src/services/symbolCustomSeedService', () => ({
+  ensureDefaultSymbolCustomDrafts: jest.fn(),
+}));
+
 const controller = require('../src/controllers/symbolCustomController');
 const symbolCustomService = require('../src/services/symbolCustomService');
+const symbolCustomSeedService = require('../src/services/symbolCustomSeedService');
 
 function createRes() {
   return {
@@ -126,6 +131,31 @@ describe('symbolCustomController', () => {
     expect(removeRes.payload).toEqual({
       success: true,
       data: { _id: 'sc-1' },
+    });
+  });
+
+  test('ensureDefaults returns backend default draft seed result', async () => {
+    symbolCustomSeedService.ensureDefaultSymbolCustomDrafts.mockResolvedValue({
+      createdCount: 2,
+      existingCount: 1,
+      totalCount: 3,
+      created: [{ _id: 'sc-new' }],
+      existing: [{ _id: 'sc-existing' }],
+      symbolCustoms: [{ _id: 'sc-existing' }, { _id: 'sc-new' }],
+    });
+
+    const res = createRes();
+    await controller.ensureDefaults({}, res);
+
+    expect(symbolCustomSeedService.ensureDefaultSymbolCustomDrafts).toHaveBeenCalledTimes(1);
+    expect(res.payload).toEqual({
+      success: true,
+      createdCount: 2,
+      existingCount: 1,
+      totalCount: 3,
+      created: [{ _id: 'sc-new' }],
+      existing: [{ _id: 'sc-existing' }],
+      symbolCustoms: [{ _id: 'sc-existing' }, { _id: 'sc-new' }],
     });
   });
 });

@@ -16,14 +16,18 @@ const { getStrategyInstance } = require('../src/services/strategyInstanceService
 const {
   buildSignalScanBucketStatus,
   getSignalCadenceMs,
+  isExplicitStrategyInstanceRuntimeCandidatesEnabled,
   listActiveAssignments,
   resolveCategoryContext,
 } = require('../src/services/assignmentRuntimeService');
 const { getStrategyExecutionConfig } = require('../src/config/strategyExecution');
 
+const EXPLICIT_RUNTIME_CANDIDATES_ENV = 'ENABLE_EXPLICIT_STRATEGY_INSTANCE_RUNTIME_CANDIDATES';
+
 describe('assignmentRuntimeService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env[EXPLICIT_RUNTIME_CANDIDATES_ENV];
     StrategyInstance.findAll.mockResolvedValue([]);
     getStrategyInstance.mockResolvedValue({
       enabled: true,
@@ -35,6 +39,10 @@ describe('assignmentRuntimeService', () => {
       executionPolicy: null,
       newsBlackout: null,
     });
+  });
+
+  afterEach(() => {
+    delete process.env[EXPLICIT_RUNTIME_CANDIDATES_ENV];
   });
 
   test('uses category-aware signal cadence for lower-timeframe strategies', async () => {
@@ -96,7 +104,43 @@ describe('assignmentRuntimeService', () => {
     expect(getStrategyInstance).toHaveBeenCalledWith('XAUUSD', 'TrendFollowing', expect.objectContaining({ scope: 'live' }));
   });
 
-  test('includes explicit paper StrategyInstance entries outside legacy Strategy.symbols', async () => {
+  test('does not inject explicit StrategyInstance entries by default', async () => {
+    Strategy.findAll.mockResolvedValue([
+      { _id: 's1', name: 'MultiTimeframe', symbols: ['NAS100'] },
+    ]);
+    StrategyInstance.findAll.mockResolvedValue([
+      {
+        _id: 'MultiTimeframe:US30',
+        strategyName: 'MultiTimeframe',
+        symbol: 'US30',
+        paperEnabled: true,
+        liveEnabled: false,
+        parameters: { stoch_period: 16 },
+      },
+    ]);
+    getStrategyInstance.mockImplementation(async (symbol, strategyName, options = {}) => ({
+      strategyName,
+      symbol,
+      paperEnabled: true,
+      liveEnabled: false,
+      enabledForScope: options.scope === 'paper',
+      source: 'instance',
+      parameters: symbol === 'US30' ? { stoch_period: 16 } : {},
+      executionPolicy: null,
+      newsBlackout: null,
+    }));
+
+    const paperAssignments = await listActiveAssignments({ scope: 'paper' });
+
+    expect(isExplicitStrategyInstanceRuntimeCandidatesEnabled()).toBe(false);
+    expect(StrategyInstance.findAll).not.toHaveBeenCalled();
+    expect(paperAssignments).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ strategyType: 'MultiTimeframe', symbol: 'US30' }),
+    ]));
+  });
+
+  test('includes explicit paper StrategyInstance entries outside legacy Strategy.symbols only when env is true', async () => {
+    process.env[EXPLICIT_RUNTIME_CANDIDATES_ENV] = 'true';
     Strategy.findAll.mockResolvedValue([
       { _id: 's1', name: 'MultiTimeframe', symbols: ['NAS100'] },
     ]);
@@ -125,6 +169,8 @@ describe('assignmentRuntimeService', () => {
     const paperAssignments = await listActiveAssignments({ scope: 'paper' });
     const liveAssignments = await listActiveAssignments({ scope: 'live' });
 
+    expect(isExplicitStrategyInstanceRuntimeCandidatesEnabled()).toBe(true);
+    expect(StrategyInstance.findAll).toHaveBeenCalled();
     expect(paperAssignments).toEqual(expect.arrayContaining([
       expect.objectContaining({
         strategyType: 'MultiTimeframe',
@@ -142,6 +188,7 @@ describe('assignmentRuntimeService', () => {
   });
 
   test('deduplicates legacy and StrategyInstance runtime sources for the same pair', async () => {
+    process.env[EXPLICIT_RUNTIME_CANDIDATES_ENV] = 'true';
     Strategy.findAll.mockResolvedValue([
       { _id: 's1', name: 'Breakout', symbols: ['XAUUSD'] },
     ]);
@@ -180,7 +227,43 @@ describe('assignmentRuntimeService', () => {
     }));
   });
 
-  test('includes explicit live StrategyInstance entries outside legacy Strategy.symbols only in live scope', async () => {
+  test('does not expand live scope from explicit StrategyInstance entries by default', async () => {
+    Strategy.findAll.mockResolvedValue([
+      { _id: 's1', name: 'Momentum', symbols: [] },
+    ]);
+    StrategyInstance.findAll.mockResolvedValue([
+      {
+        _id: 'Momentum:AUDNZD',
+        strategyName: 'Momentum',
+        symbol: 'AUDNZD',
+        paperEnabled: false,
+        liveEnabled: true,
+        parameters: { ema_period: 70 },
+      },
+    ]);
+    getStrategyInstance.mockImplementation(async (symbol, strategyName, options = {}) => ({
+      strategyName,
+      symbol,
+      paperEnabled: false,
+      liveEnabled: true,
+      enabledForScope: options.scope === 'live',
+      source: 'instance',
+      parameters: { ema_period: 70 },
+      executionPolicy: null,
+      newsBlackout: null,
+    }));
+
+    const liveAssignments = await listActiveAssignments({ scope: 'live' });
+
+    expect(StrategyInstance.findAll).not.toHaveBeenCalled();
+    expect(liveAssignments).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ strategyType: 'Momentum', symbol: 'AUDNZD' }),
+    ]));
+    expect(liveAssignments).toEqual([]);
+  });
+
+  test('includes explicit live StrategyInstance entries outside legacy Strategy.symbols only in live scope when env is true', async () => {
+    process.env[EXPLICIT_RUNTIME_CANDIDATES_ENV] = 'true';
     Strategy.findAll.mockResolvedValue([
       { _id: 's1', name: 'Momentum', symbols: [] },
     ]);

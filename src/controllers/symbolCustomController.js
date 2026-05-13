@@ -1,4 +1,5 @@
 const symbolCustomService = require('../services/symbolCustomService');
+const symbolCustomSeedService = require('../services/symbolCustomSeedService');
 
 function sendMutationResponse(res, result) {
   const payload = {
@@ -67,6 +68,23 @@ exports.create = async (req, res) => {
     return sendMutationResponse(res, result);
   } catch (error) {
     return handleError(res, error, 'Failed to create SymbolCustom');
+  }
+};
+
+exports.ensureDefaults = async (req, res) => {
+  try {
+    const result = await symbolCustomSeedService.ensureDefaultSymbolCustomDrafts();
+    return res.json({
+      success: true,
+      createdCount: result.createdCount,
+      existingCount: result.existingCount,
+      totalCount: result.totalCount,
+      created: result.created,
+      existing: result.existing,
+      symbolCustoms: result.symbolCustoms,
+    });
+  } catch (error) {
+    return handleError(res, error, 'Failed to ensure default SymbolCustom drafts');
   }
 };
 

@@ -6,6 +6,7 @@ const {
   getById,
   getBySymbol,
   create,
+  ensureDefaults,
   update,
   remove,
   duplicate,
@@ -17,6 +18,7 @@ router.get('/', list);
 router.get('/by-symbol/:symbol', getBySymbol);
 router.get('/:id', getById);
 router.post('/', create);
+router.post('/defaults/ensure', ensureDefaults);
 router.put('/:id', update);
 router.delete('/:id', remove);
 router.post('/:id/duplicate', duplicate);

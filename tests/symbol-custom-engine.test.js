@@ -140,6 +140,25 @@ describe('symbolCustomEngine', () => {
     }));
   });
 
+  test('backtest scope is valid and remains SymbolCustom-only', async () => {
+    const { engine } = loadEngine();
+
+    const signal = await engine.analyzeSymbolCustom({
+      _id: 'sc-backtest',
+      symbol: 'USDJPY',
+      symbolCustomName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      timeframes: {},
+      parameters: {},
+    }, null, { scope: 'backtest' });
+
+    expect(signal).toEqual(expect.objectContaining({
+      scope: 'backtest',
+      source: 'symbolCustom',
+      logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      signal: 'NONE',
+    }));
+  });
+
   test('analyzeAllPaperSymbolCustoms only includes paperEnabled=true records', async () => {
     const { engine, SymbolCustom } = loadEngine({
       symbolCustoms: [

@@ -11,6 +11,8 @@ function loadRuntime({
   };
 
   const paperTradingService = {
+    submitSymbolCustomSignal: jest.fn(async () => ({ success: true })),
+    submitExternalPaperSignal: jest.fn(async () => ({ success: true })),
     _executePaperTrade: jest.fn(async () => ({ success: true })),
   };
 
@@ -85,6 +87,34 @@ describe('symbolCustomPaperRuntimeService', () => {
     expect(runtime.isRunning()).toBe(false);
   });
 
+  test('SYMBOL_CUSTOM_PAPER_ENABLED=false makes runPaperScan return disabled without scanning', async () => {
+    process.env.SYMBOL_CUSTOM_PAPER_ENABLED = 'false';
+    const { runtime, SymbolCustom } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-paper',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_PAPER',
+          logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+          paperEnabled: true,
+        },
+      ],
+    });
+
+    const result = await runtime.runPaperScan({});
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false,
+      enabled: false,
+      forced: false,
+      scanned: 0,
+      submitted: 0,
+      ignored: 0,
+      reasonCode: runtime.SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED,
+    }));
+    expect(SymbolCustom.findAll).not.toHaveBeenCalled();
+  });
+
   test('env SYMBOL_CUSTOM_PAPER_ENABLED=true allows runtime start and stop', () => {
     process.env.SYMBOL_CUSTOM_PAPER_ENABLED = 'true';
     const { runtime } = loadRuntime();
@@ -116,10 +146,12 @@ describe('symbolCustomPaperRuntimeService', () => {
       ],
     });
 
-    const result = await runtime.runPaperScan({});
+    const result = await runtime.runPaperScan({ force: true });
 
     expect(SymbolCustom.findAll).toHaveBeenCalledWith({ paperEnabled: true });
     expect(result.scanned).toBe(0);
+    expect(result.activePaperCustoms).toBe(0);
+    expect(result.signalCount).toBe(0);
     expect(result.signals).toEqual([]);
   });
 
@@ -137,9 +169,11 @@ describe('symbolCustomPaperRuntimeService', () => {
       ],
     });
 
-    const result = await runtime.runPaperScan({});
+    const result = await runtime.runPaperScan({ force: true });
 
     expect(result.scanned).toBe(1);
+    expect(result.activePaperCustoms).toBe(1);
+    expect(result.signalCount).toBe(1);
     expect(result.submitted).toBe(0);
     expect(result.ignored).toBe(1);
     expect(result.signals[0]).toEqual(expect.objectContaining({
@@ -149,6 +183,7 @@ describe('symbolCustomPaperRuntimeService', () => {
       symbolCustomId: 'sc-placeholder',
       symbolCustomName: 'USDJPY_PLACEHOLDER',
     }));
+    expect(paperTradingService.submitSymbolCustomSignal).not.toHaveBeenCalled();
     expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
   });
 
@@ -174,11 +209,14 @@ describe('symbolCustomPaperRuntimeService', () => {
       },
     });
 
-    const result = await runtime.runPaperScan({});
+    const result = await runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 190.5 }] })),
+    });
 
     expect(result.submitted).toBe(1);
-    expect(paperTradingService._executePaperTrade).toHaveBeenCalledTimes(1);
-    expect(paperTradingService._executePaperTrade).toHaveBeenCalledWith(expect.objectContaining({
+    expect(paperTradingService.submitSymbolCustomSignal).toHaveBeenCalledTimes(1);
+    expect(paperTradingService.submitSymbolCustomSignal).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'paper',
       source: 'symbolCustom',
       symbol: 'GBPJPY',
@@ -199,7 +237,76 @@ describe('symbolCustomPaperRuntimeService', () => {
         strategyType: 'SymbolCustom',
       }),
     }));
+    expect(paperTradingService.submitExternalPaperSignal).not.toHaveBeenCalled();
+    expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
     expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+  });
+
+  test('runtime can call submitExternalPaperSignal public wrapper when submitSymbolCustomSignal is unavailable', async () => {
+    const { runtime, paperTradingService } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-sell',
+          symbol: 'AUDUSD',
+          symbolCustomName: 'AUDUSD_SELL_MOCK',
+          logicName: 'SELL_MOCK_SYMBOL_CUSTOM',
+          paperEnabled: true,
+        },
+      ],
+      logicResults: {
+        SELL_MOCK_SYMBOL_CUSTOM: {
+          signal: 'SELL',
+          reason: 'mock sell signal',
+        },
+      },
+    });
+    delete paperTradingService.submitSymbolCustomSignal;
+
+    await runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 0.66 }] })),
+    });
+
+    expect(paperTradingService.submitExternalPaperSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'symbolCustom',
+        signal: 'SELL',
+        strategyType: 'SymbolCustom',
+      }),
+      { source: 'symbolCustom' }
+    );
+    expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
+  });
+
+  test('runtime returns clear error when no public paper signal wrapper exists', async () => {
+    const { runtime, paperTradingService } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-no-wrapper',
+          symbol: 'GBPJPY',
+          symbolCustomName: 'GBPJPY_NO_WRAPPER',
+          logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
+          paperEnabled: true,
+        },
+      ],
+      logicResults: {
+        BUY_MOCK_SYMBOL_CUSTOM: {
+          signal: 'BUY',
+          reason: 'mock buy signal',
+        },
+      },
+    });
+    delete paperTradingService.submitSymbolCustomSignal;
+    delete paperTradingService.submitExternalPaperSignal;
+
+    await expect(runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 190.5 }] })),
+    })).rejects.toMatchObject({
+      statusCode: 500,
+      message: runtime.SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE,
+    });
+    expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
   });
 
   test('live scope is blocked by symbolCustomEngine', async () => {
@@ -234,9 +341,41 @@ describe('symbolCustomPaperRuntimeService', () => {
       ],
     });
 
-    await expect(runtime.runPaperScan({})).rejects.toMatchObject({
+    await expect(runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [] })),
+    })).rejects.toMatchObject({
       statusCode: 400,
       message: 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED',
+    });
+  });
+
+  test('missing candle provider for non-placeholder logic returns a clear error', async () => {
+    const { runtime } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-buy-no-candles',
+          symbol: 'GBPJPY',
+          symbolCustomName: 'GBPJPY_BUY_MOCK',
+          logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
+          paperEnabled: true,
+        },
+      ],
+      logicResults: {
+        BUY_MOCK_SYMBOL_CUSTOM: {
+          signal: 'BUY',
+          reason: 'mock buy signal',
+        },
+      },
+    });
+
+    await expect(runtime.runPaperScan({ force: true })).rejects.toMatchObject({
+      statusCode: 400,
+      message: runtime.SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED,
+      details: [expect.objectContaining({
+        symbolCustomId: 'sc-buy-no-candles',
+        logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
+      })],
     });
   });
 
@@ -253,7 +392,7 @@ describe('symbolCustomPaperRuntimeService', () => {
       ],
     });
 
-    await runtime.runPaperScan({});
+    await runtime.runPaperScan({ force: true });
     const status = runtime.getStatus();
 
     expect(status).toEqual(expect.objectContaining({
@@ -262,6 +401,7 @@ describe('symbolCustomPaperRuntimeService', () => {
       lastScanAt: expect.any(Date),
       lastError: null,
       activePaperCustoms: 1,
+      lastSignalCount: 1,
       lastSignals: expect.any(Array),
     }));
     expect(status.lastSignals[0]).toEqual(expect.objectContaining({
@@ -284,7 +424,7 @@ describe('symbolCustomPaperRuntimeService', () => {
       ],
     });
 
-    const result = await runtime.runPaperScan({});
+    const result = await runtime.runPaperScan({ force: true });
 
     expect(result.success).toBe(true);
     expect(result.signals[0].signal).toBe('NONE');

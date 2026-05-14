@@ -1011,6 +1011,23 @@ class PaperTradingService {
   }
 
   /**
+   * Public entry point for SymbolCustom paper-only signals.
+   * Keeps SymbolCustom integration on the existing paper execution path.
+   */
+  async submitSymbolCustomSignal(signal) {
+    const payload = {
+      ...(signal || {}),
+      scope: 'paper',
+      source: 'symbolCustom',
+      setupType: signal?.setupType || 'symbol_custom',
+      strategy: signal?.strategy || signal?.symbolCustomName,
+      strategyType: signal?.strategyType || 'SymbolCustom',
+    };
+
+    return this._executePaperTrade(payload);
+  }
+
+  /**
    * Execute a paper trade on MT5 demo account with full logging
    * @param {object} signal - Strategy signal
    */

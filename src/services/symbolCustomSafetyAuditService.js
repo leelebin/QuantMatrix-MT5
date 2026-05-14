@@ -199,6 +199,80 @@ function auditPaperRuntimeRequiresEnvForSchedulerStart() {
   }
 }
 
+function auditScanOnceRespectsEnvGateUnlessForced() {
+  try {
+    const controllerSource = readProjectFile('src/controllers/symbolCustomController.js');
+    const runtimeSource = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const controllerPassesForce = /force:\s*req\.body\?\.force\s*===\s*true/.test(controllerSource);
+    const runtimeHasDisabledResult = runtimeSource.includes('SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED')
+      && /if\s*\(!enabled\s*&&\s*!forced\)/.test(runtimeSource);
+
+    return controllerPassesForce && runtimeHasDisabledResult
+      ? buildCheck('scan-once respects env gate unless forced', 'PASS', 'scan-once defaults to the runtime env gate and only forces when body.force=true.')
+      : buildCheck('scan-once respects env gate unless forced', 'FAIL', 'scan-once may bypass the SymbolCustom paper runtime env gate.');
+  } catch (error) {
+    return buildCheck('scan-once respects env gate unless forced', 'FAIL', `Unable to inspect scan-once env gate: ${error.message}`);
+  }
+}
+
+function auditPaperRuntimeDoesNotCallPrivatePaperExecution() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const safe = !source.includes('_executePaperTrade');
+
+    return safe
+      ? buildCheck('runtime does not call private paper execution', 'PASS', 'SymbolCustom runtime uses public paper signal wrappers only.')
+      : buildCheck('runtime does not call private paper execution', 'FAIL', 'SymbolCustom runtime still references private paper execution.');
+  } catch (error) {
+    return buildCheck('runtime does not call private paper execution', 'FAIL', `Unable to inspect paper runtime wrapper usage: ${error.message}`);
+  }
+}
+
+function auditPublicPaperSignalWrapperExists() {
+  try {
+    const source = readProjectFile('src/services/paperTradingService.js');
+    const exists = /async\s+submitSymbolCustomSignal\s*\(/.test(source)
+      && /this\._executePaperTrade\s*\(/.test(source);
+
+    return exists
+      ? buildCheck('public paper signal wrapper exists', 'PASS', 'paperTradingService exposes submitSymbolCustomSignal for SymbolCustom paper signals.')
+      : buildCheck('public paper signal wrapper exists', 'FAIL', 'paperTradingService public SymbolCustom paper wrapper is missing.');
+  } catch (error) {
+    return buildCheck('public paper signal wrapper exists', 'FAIL', `Unable to inspect paperTradingService wrapper: ${error.message}`);
+  }
+}
+
+function auditMissingCandleProviderDetected() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const detectsProvider = source.includes('SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED')
+      && source.includes('PLACEHOLDER_SYMBOL_CUSTOM')
+      && /assertCandleProviderAvailable/.test(source);
+
+    return detectsProvider
+      ? buildCheck('missing candle provider detected', 'PASS', 'Non-placeholder SymbolCustom paper scans require an injected candle provider.')
+      : buildCheck('missing candle provider detected', 'FAIL', 'Non-placeholder SymbolCustom paper scans may run without candle provider detection.');
+  } catch (error) {
+    return buildCheck('missing candle provider detected', 'FAIL', `Unable to inspect candle provider detection: ${error.message}`);
+  }
+}
+
+function auditBacktestScopeAllowedLiveBlocked() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomEngine.js');
+    const backtestAllowed = /VALID_SCOPES\s*=\s*Object\.freeze\(\['paper',\s*'backtest',\s*'live'\]\)/.test(source);
+    const liveBlocked = /scope\s*===\s*'live'/.test(source)
+      && /BLOCKED/.test(source)
+      && /SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2/.test(source);
+
+    return backtestAllowed && liveBlocked
+      ? buildCheck('backtest scope allowed live blocked', 'PASS', 'SymbolCustom engine allows backtest scope while live scope remains blocked.')
+      : buildCheck('backtest scope allowed live blocked', 'FAIL', 'SymbolCustom scope safety is not configured as expected.');
+  } catch (error) {
+    return buildCheck('backtest scope allowed live blocked', 'FAIL', `Unable to inspect SymbolCustom scopes: ${error.message}`);
+  }
+}
+
 function auditPrimaryLiveUniqueness(symbolCustoms) {
   const grouped = new Map();
   symbolCustoms
@@ -254,6 +328,11 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditPaperRuntimeNeverCallsTradeExecutor());
   checks.push(auditPaperRuntimeMarksSymbolCustomSource());
   checks.push(auditPaperRuntimeRequiresEnvForSchedulerStart());
+  checks.push(auditScanOnceRespectsEnvGateUnlessForced());
+  checks.push(auditPaperRuntimeDoesNotCallPrivatePaperExecution());
+  checks.push(auditPublicPaperSignalWrapperExists());
+  checks.push(auditMissingCandleProviderDetected());
+  checks.push(auditBacktestScopeAllowedLiveBlocked());
 
   let symbolCustoms = [];
   try {

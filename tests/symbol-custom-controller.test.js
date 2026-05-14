@@ -242,6 +242,7 @@ describe('symbolCustomController', () => {
       lastScanAt: null,
       lastError: null,
       activePaperCustoms: 0,
+      lastSignalCount: 0,
       lastSignals: [],
     });
 
@@ -256,6 +257,7 @@ describe('symbolCustomController', () => {
       lastScanAt: null,
       lastError: null,
       activePaperCustoms: 0,
+      lastSignalCount: 0,
       lastSignals: [],
     });
   });
@@ -264,6 +266,42 @@ describe('symbolCustomController', () => {
     symbolCustomPaperRuntimeService.runPaperScan.mockResolvedValue({
       success: true,
       scanned: 1,
+      activePaperCustoms: 1,
+      signalCount: 1,
+      submitted: 0,
+      ignored: 1,
+      enabled: false,
+      forced: false,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
+    });
+
+    const res = createRes();
+    await controller.scanPaperRuntimeOnce({ body: {} }, res);
+
+    expect(symbolCustomPaperRuntimeService.runPaperScan).toHaveBeenCalledWith({ force: false });
+    expect(res.payload).toEqual({
+      success: true,
+      scanned: 1,
+      activePaperCustoms: 1,
+      signalCount: 1,
+      submitted: 0,
+      ignored: 1,
+      enabled: false,
+      forced: false,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
+    });
+  });
+
+  test('scanPaperRuntimeOnce forwards force only when body.force is true', async () => {
+    symbolCustomPaperRuntimeService.runPaperScan.mockResolvedValue({
+      success: true,
+      enabled: false,
+      forced: true,
+      scanned: 1,
+      activePaperCustoms: 1,
+      signalCount: 1,
       submitted: 0,
       ignored: 1,
       signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
@@ -271,17 +309,17 @@ describe('symbolCustomController', () => {
     });
 
     const res = createRes();
-    await controller.scanPaperRuntimeOnce({}, res);
+    await controller.scanPaperRuntimeOnce({ body: { force: true } }, res);
 
-    expect(symbolCustomPaperRuntimeService.runPaperScan).toHaveBeenCalledWith({});
-    expect(res.payload).toEqual({
+    expect(symbolCustomPaperRuntimeService.runPaperScan).toHaveBeenCalledWith({ force: true });
+    expect(res.payload).toEqual(expect.objectContaining({
       success: true,
+      enabled: false,
+      forced: true,
       scanned: 1,
       submitted: 0,
       ignored: 1,
-      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
-      results: [],
-    });
+    }));
   });
 
   test('backtest handlers use SymbolCustom backtest service response shape', async () => {

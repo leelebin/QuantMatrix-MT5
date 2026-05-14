@@ -73,7 +73,8 @@ function auditOldOptimizerUntouched() {
 function auditOldBacktestUntouched() {
   try {
     const source = readProjectFile('src/services/symbolCustomBacktestService.js');
-    const safe = sourceExcludes(source, [
+    const runnerSource = readProjectFile('src/services/symbolCustomBacktestRunnerService.js');
+    const safe = sourceExcludes(`${source}\n${runnerSource}`, [
       /backtestEngine/,
       /TrendFollowing/,
       /MeanReversion/,
@@ -88,6 +89,76 @@ function auditOldBacktestUntouched() {
       : buildCheck('old backtest untouched', 'FAIL', 'SymbolCustom backtest service appears to reference old backtest or strategy classes.');
   } catch (error) {
     return buildCheck('old backtest untouched', 'FAIL', `Unable to inspect SymbolCustom backtest service: ${error.message}`);
+  }
+}
+
+function auditSymbolCustomBacktestDoesNotCallOldBacktestEngine() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomBacktestService.js');
+    const runnerSource = readProjectFile('src/services/symbolCustomBacktestRunnerService.js');
+    const safe = sourceExcludes(`${source}\n${runnerSource}`, [
+      /backtestEngine/,
+      /runBacktest\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('symbolCustom backtest does not call old backtestEngine', 'PASS', 'SymbolCustom backtest service and runner do not call old backtestEngine.')
+      : buildCheck('symbolCustom backtest does not call old backtestEngine', 'FAIL', 'SymbolCustom backtest appears to call old backtestEngine.');
+  } catch (error) {
+    return buildCheck('symbolCustom backtest does not call old backtestEngine', 'FAIL', `Unable to inspect SymbolCustom backtest isolation: ${error.message}`);
+  }
+}
+
+function auditSymbolCustomBacktestDoesNotCallSixStrategies() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomBacktestService.js');
+    const runnerSource = readProjectFile('src/services/symbolCustomBacktestRunnerService.js');
+    const safe = sourceExcludes(`${source}\n${runnerSource}`, [
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /Momentum/,
+      /MultiTimeframe/,
+      /VolumeFlowHybrid/,
+      /src\/strategies/,
+      /\.\.\/strategies/,
+    ]);
+
+    return safe
+      ? buildCheck('symbolCustom backtest does not call six strategies', 'PASS', 'SymbolCustom backtest only calls SymbolCustom logic.')
+      : buildCheck('symbolCustom backtest does not call six strategies', 'FAIL', 'SymbolCustom backtest appears to reference six strategy classes.');
+  } catch (error) {
+    return buildCheck('symbolCustom backtest does not call six strategies', 'FAIL', `Unable to inspect strategy isolation: ${error.message}`);
+  }
+}
+
+function auditPlaceholderBacktestReturnsStub() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomBacktestService.js');
+    const ok = source.includes('PLACEHOLDER_SYMBOL_CUSTOM')
+      && /status:\s*'stub'/.test(source)
+      && source.includes('Placeholder SymbolCustom has no active backtest logic');
+
+    return ok
+      ? buildCheck('placeholder backtest returns stub', 'PASS', 'Placeholder SymbolCustom backtest returns stub with zero-trade message.')
+      : buildCheck('placeholder backtest returns stub', 'FAIL', 'Placeholder SymbolCustom backtest stub behavior is not clear.');
+  } catch (error) {
+    return buildCheck('placeholder backtest returns stub', 'FAIL', `Unable to inspect placeholder backtest behavior: ${error.message}`);
+  }
+}
+
+function auditNonPlaceholderBacktestRequiresCandles() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomBacktestService.js');
+    const ok = source.includes('SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED')
+      && /resolveBacktestCandles/.test(source)
+      && /candleProvider/.test(source);
+
+    return ok
+      ? buildCheck('non-placeholder backtest requires candles', 'PASS', 'Non-placeholder SymbolCustom backtests require candles or candleProvider.')
+      : buildCheck('non-placeholder backtest requires candles', 'FAIL', 'Non-placeholder SymbolCustom backtests may run without candles.');
+  } catch (error) {
+    return buildCheck('non-placeholder backtest requires candles', 'FAIL', `Unable to inspect candle requirements: ${error.message}`);
   }
 }
 
@@ -323,6 +394,10 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditLiveExecutionNotConnected());
   checks.push(auditOldOptimizerUntouched());
   checks.push(auditOldBacktestUntouched());
+  checks.push(auditSymbolCustomBacktestDoesNotCallOldBacktestEngine());
+  checks.push(auditSymbolCustomBacktestDoesNotCallSixStrategies());
+  checks.push(auditPlaceholderBacktestReturnsStub());
+  checks.push(auditNonPlaceholderBacktestRequiresCandles());
   checks.push(auditPaperRuntimeDefaultDisabled());
   checks.push(auditSymbolCustomLiveRuntimeNotConnected());
   checks.push(auditPaperRuntimeNeverCallsTradeExecutor());

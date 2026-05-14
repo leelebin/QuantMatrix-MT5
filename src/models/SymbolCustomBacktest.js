@@ -10,6 +10,8 @@ const VALID_STATUSES = Object.freeze([
 
 const DEFAULT_SUMMARY = Object.freeze({
   trades: 0,
+  wins: 0,
+  losses: 0,
   netPnl: 0,
   grossWin: 0,
   grossLoss: 0,
@@ -18,6 +20,8 @@ const DEFAULT_SUMMARY = Object.freeze({
   avgR: null,
   maxDrawdown: 0,
   maxSingleLoss: 0,
+  maxWin: 0,
+  rejectedSignals: 0,
 });
 
 function cloneValue(value) {
@@ -126,9 +130,11 @@ const SymbolCustomBacktest = {
       startDate: normalizeOptionalString(source.startDate, 'startDate', errors),
       endDate: normalizeOptionalString(source.endDate, 'endDate', errors),
       initialBalance: normalizeNumber(source.initialBalance, 'initialBalance', errors, null),
+      finalBalance: normalizeNumber(source.finalBalance, 'finalBalance', errors, null),
       timeframes: normalizePlainObject(source.timeframes, 'timeframes', errors, {}),
       parameters: normalizePlainObject(source.parameters, 'parameters', errors, {}),
       costModel: normalizePlainObject(source.costModel, 'costModel', errors, {}),
+      costModelUsed: normalizePlainObject(source.costModelUsed, 'costModelUsed', errors, source.costModel || {}),
       summary: buildSummary(normalizePlainObject(source.summary, 'summary', errors, DEFAULT_SUMMARY)),
       trades: normalizeArray(source.trades, 'trades', errors),
       equityCurve: normalizeArray(source.equityCurve, 'equityCurve', errors),

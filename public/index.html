@@ -716,6 +716,17 @@ tr:hover{background:var(--bg3)}
 
   <div class="card" style="margin-top:16px">
     <div class="card-header">
+      <span class="card-title">Backtest</span>
+      <button class="btn-outline btn-sm" onclick="runSelectedSymbolCustomBacktest()">Run Backtest</button>
+    </div>
+    <div class="readonly-note">SymbolCustom backtests use SymbolCustom logic only. Live execution is not supported.</div>
+    <div id="symbolCustomBacktestResult" class="symbol-custom-table-wrap">
+      <div class="empty">Select a SymbolCustom</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
       <span class="card-title">Optimizer Stub</span>
       <button class="btn-outline btn-sm" onclick="runSelectedSymbolCustomOptimizerStub()">Run Optimizer Stub</button>
     </div>
@@ -1836,7 +1847,7 @@ let testOrderSymbolMeta = {};
 let riskSettingsState = { profiles: [], activeProfile: null, activeProfileId: null };
 let maintenanceCacheState = null;
 let maintenanceCacheBusy = false;
-let symbolCustomManagerState = { all: [], selectedSymbol: null, selectedRecords: [], selectedId: null, selectedRecord: null, reportRows: [], optimizerRun: null };
+let symbolCustomManagerState = { all: [], selectedSymbol: null, selectedRecords: [], selectedId: null, selectedRecord: null, reportRows: [], optimizerRun: null, backtestResult: null };
 let parametersLibraryState = { rows: [], visibleRows: [], activeRiskProfile: null, count: 0 };
 let parametersLibraryDetailState = null;
 let editingRiskProfileId = null;
@@ -9312,7 +9323,9 @@ function setSymbolCustomEditorRecord(record) {
   updateSymbolCustomLiveWarning();
   renderSymbolCustomList();
   symbolCustomManagerState.optimizerRun = null;
+  symbolCustomManagerState.backtestResult = null;
   renderSymbolCustomOptimizerStub(source._id ? source : null);
+  renderSymbolCustomBacktestResult(source._id ? source : null, null);
 }
 
 function getSymbolCustomEditorValues() {
@@ -9471,6 +9484,51 @@ function renderSymbolCustomOptimizerStub(record, optimizerRun) {
   target.innerHTML = html;
 }
 
+function renderSymbolCustomBacktestResult(record, backtest) {
+  const target = symbolCustomEl('symbolCustomBacktestResult');
+  if (!target) return;
+
+  if (!record || !record._id) {
+    target.innerHTML = '<div class="empty">Select a SymbolCustom</div>';
+    return;
+  }
+
+  if (!backtest) {
+    target.innerHTML = '<div class="empty">Run a SymbolCustom backtest to see results</div>';
+    return;
+  }
+
+  const summary = backtest.summary || {};
+  let html = '<table class="symbol-custom-table"><tr><th>Metric</th><th>Value</th></tr>';
+  html += '<tr><td>status</td><td><span class="tag tag-blue">' + escapeHtml(backtest.status || '--') + '</span></td></tr>';
+  html += '<tr><td>trades</td><td>' + escapeHtml(summary.trades == null ? '--' : summary.trades) + '</td></tr>';
+  html += '<tr><td>netPnl</td><td>' + escapeHtml(summary.netPnl == null ? '--' : Number(summary.netPnl).toFixed(2)) + '</td></tr>';
+  html += '<tr><td>profitFactor</td><td>' + escapeHtml(summary.profitFactor == null ? '--' : Number(summary.profitFactor).toFixed(2)) + '</td></tr>';
+  html += '<tr><td>winRate</td><td>' + escapeHtml(summary.winRate == null ? '--' : (Number(summary.winRate) * 100).toFixed(1) + '%') + '</td></tr>';
+  html += '<tr><td>avgR</td><td>' + escapeHtml(summary.avgR == null ? '--' : Number(summary.avgR).toFixed(2)) + '</td></tr>';
+  html += '<tr><td>maxDrawdown</td><td>' + escapeHtml(summary.maxDrawdown == null ? '--' : Number(summary.maxDrawdown).toFixed(2)) + '</td></tr>';
+  html += '<tr><td>message</td><td>' + escapeHtml(backtest.message || '--') + '</td></tr>';
+  html += '</table>';
+
+  const trades = Array.isArray(backtest.trades) ? backtest.trades.slice(0, 10) : [];
+  if (trades.length) {
+    html += '<div style="margin-top:12px"><table class="symbol-custom-table"><tr><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>R</th><th>Reason</th></tr>';
+    trades.forEach((trade) => {
+      html += '<tr>';
+      html += '<td>' + escapeHtml(trade.side || '--') + '</td>';
+      html += '<td>' + escapeHtml(trade.entryPrice == null ? '--' : Number(trade.entryPrice).toFixed(5)) + '</td>';
+      html += '<td>' + escapeHtml(trade.exitPrice == null ? '--' : Number(trade.exitPrice).toFixed(5)) + '</td>';
+      html += '<td>' + escapeHtml(trade.pnl == null ? '--' : Number(trade.pnl).toFixed(2)) + '</td>';
+      html += '<td>' + escapeHtml(trade.rMultiple == null ? '--' : Number(trade.rMultiple).toFixed(2)) + '</td>';
+      html += '<td>' + escapeHtml(trade.exitReason || '--') + '</td>';
+      html += '</tr>';
+    });
+    html += '</table></div>';
+  }
+
+  target.innerHTML = html;
+}
+
 function renderSymbolCustomSafetyAudit(audit) {
   const target = symbolCustomEl('symbolCustomSafetyAudit');
   if (!target) return;
@@ -9520,6 +9578,37 @@ async function runSymbolCustomSafetyAudit() {
     );
   } catch (error) {
     showSymbolCustomStatus(error.message || 'Failed to run safety audit', 'error');
+  }
+}
+
+async function runSelectedSymbolCustomBacktest() {
+  const record = symbolCustomManagerState.selectedRecord;
+  if (!record || !record._id) {
+    showSymbolCustomStatus('Select a SymbolCustom before running backtest.', 'error');
+    return;
+  }
+
+  try {
+    showSymbolCustomStatus('Running SymbolCustom backtest...', 'warn');
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(record._id) + '/backtest', 'POST', {
+      initialBalance: 500,
+      parameters: record.parameters || {},
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      options: {},
+    });
+    if (!response.success) throw new Error(response.message || 'Failed to run SymbolCustom backtest');
+
+    symbolCustomManagerState.backtestResult = response.backtest || null;
+    renderSymbolCustomBacktestResult(record, symbolCustomManagerState.backtestResult);
+    const summary = symbolCustomManagerState.backtestResult && symbolCustomManagerState.backtestResult.summary
+      ? symbolCustomManagerState.backtestResult.summary
+      : {};
+    showSymbolCustomStatus(
+      'SymbolCustom backtest complete. Status ' + (symbolCustomManagerState.backtestResult?.status || '--') + ', trades ' + (summary.trades || 0) + '.',
+      'success'
+    );
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to run SymbolCustom backtest', 'error');
   }
 }
 

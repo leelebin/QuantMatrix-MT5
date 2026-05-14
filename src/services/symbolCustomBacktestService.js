@@ -2,9 +2,11 @@ const SymbolCustom = require('../models/SymbolCustom');
 const SymbolCustomBacktest = require('../models/SymbolCustomBacktest');
 const { getSymbolCustomLogic } = require('../symbolCustom/registry');
 const { PLACEHOLDER_SYMBOL_CUSTOM } = require('../symbolCustom/logics/PlaceholderSymbolCustom');
+const symbolCustomBacktestRunnerService = require('./symbolCustomBacktestRunnerService');
 
 const SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED = 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED';
-const PHASE_1_PLACEHOLDER_BACKTEST_MESSAGE = 'Placeholder SymbolCustom has no active backtest logic in Phase 1';
+const SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED = 'SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED';
+const PHASE_1_PLACEHOLDER_BACKTEST_MESSAGE = 'Placeholder SymbolCustom has no active backtest logic';
 
 function buildHttpError(message, statusCode, details = undefined) {
   const error = new Error(message);
@@ -51,6 +53,8 @@ function buildListFilter(filter = {}) {
 function buildZeroSummary() {
   return {
     trades: 0,
+    wins: 0,
+    losses: 0,
     netPnl: 0,
     grossWin: 0,
     grossLoss: 0,
@@ -59,11 +63,82 @@ function buildZeroSummary() {
     avgR: null,
     maxDrawdown: 0,
     maxSingleLoss: 0,
+    maxWin: 0,
+    rejectedSignals: 0,
   };
 }
 
 function resolveLogicName(symbolCustom = {}) {
-  return String(symbolCustom.logicName || symbolCustom.registryLogicName || '').trim();
+  return String(symbolCustom.logicName || symbolCustom.registryLogicName || symbolCustom.symbolCustomName || '').trim();
+}
+
+function hasUsableCandles(candles = {}) {
+  return Boolean(candles)
+    && typeof candles === 'object'
+    && !Array.isArray(candles)
+    && Array.isArray(candles.entry)
+    && candles.entry.length > 0;
+}
+
+async function resolveBacktestCandles({ symbolCustom, startDate, endDate, candles, candleProvider }) {
+  if (hasUsableCandles(candles)) {
+    return candles;
+  }
+
+  if (typeof candleProvider === 'function') {
+    const provided = await candleProvider({
+      symbol: symbolCustom.symbol,
+      timeframes: symbolCustom.timeframes || {},
+      startDate,
+      endDate,
+    });
+    if (hasUsableCandles(provided)) {
+      return provided;
+    }
+  }
+
+  return null;
+}
+
+function buildBacktestPayload({
+  symbolCustom,
+  logicName,
+  status,
+  startDate,
+  endDate,
+  initialBalance,
+  finalBalance,
+  parameters,
+  costModel,
+  costModelUsed,
+  summary,
+  trades,
+  equityCurve,
+  message,
+  error = null,
+}) {
+  return {
+    symbol: symbolCustom.symbol,
+    symbolCustomId: symbolCustom._id,
+    symbolCustomName: symbolCustom.symbolCustomName,
+    logicName,
+    mode: 'symbolCustom',
+    status,
+    startDate,
+    endDate,
+    initialBalance,
+    finalBalance,
+    timeframes: symbolCustom.timeframes || {},
+    parameters,
+    costModel,
+    costModelUsed: costModelUsed || costModel || {},
+    summary,
+    trades,
+    equityCurve,
+    message,
+    error,
+    completedAt: new Date(),
+  };
 }
 
 async function runSymbolCustomBacktest({
@@ -73,6 +148,9 @@ async function runSymbolCustomBacktest({
   initialBalance,
   parameters,
   costModel,
+  candles,
+  candleProvider,
+  options,
 } = {}) {
   if (!symbolCustomId) {
     throw buildHttpError('symbolCustomId is required', 400, [
@@ -95,30 +173,89 @@ async function runSymbolCustomBacktest({
 
   if (logic.name === PLACEHOLDER_SYMBOL_CUSTOM) {
     return SymbolCustomBacktest.create({
-      symbol: symbolCustom.symbol,
-      symbolCustomId: symbolCustom._id,
-      symbolCustomName: symbolCustom.symbolCustomName,
-      logicName,
-      mode: 'symbolCustom',
-      status: 'stub',
-      startDate,
-      endDate,
-      initialBalance,
-      timeframes: symbolCustom.timeframes || {},
-      parameters: parameters || symbolCustom.parameters || {},
-      costModel: costModel || {},
-      summary: buildZeroSummary(),
-      trades: [],
-      equityCurve: [],
-      message: PHASE_1_PLACEHOLDER_BACKTEST_MESSAGE,
-      error: null,
-      completedAt: new Date(),
+      ...buildBacktestPayload({
+        symbolCustom,
+        logicName,
+        status: 'stub',
+        startDate,
+        endDate,
+        initialBalance,
+        finalBalance: initialBalance ?? null,
+        parameters: parameters || symbolCustom.parameters || {},
+        costModel: costModel || {},
+        costModelUsed: costModel || {},
+        summary: buildZeroSummary(),
+        trades: [],
+        equityCurve: [],
+        message: PHASE_1_PLACEHOLDER_BACKTEST_MESSAGE,
+      }),
     });
   }
 
-  throw buildHttpError('SYMBOL_CUSTOM_BACKTEST_NOT_SUPPORTED_IN_PHASE_1', 400, [
-    { field: 'logicName', message: 'Only PLACEHOLDER_SYMBOL_CUSTOM stub backtests are supported in Phase 1' },
-  ]);
+  const resolvedCandles = await resolveBacktestCandles({
+    symbolCustom,
+    startDate,
+    endDate,
+    candles,
+    candleProvider,
+  });
+  if (!resolvedCandles) {
+    throw buildHttpError(SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED, 400, [
+      { field: 'candles', message: 'candles.entry or candleProvider is required for non-placeholder SymbolCustom backtests' },
+    ]);
+  }
+
+  try {
+    const mergedParameters = {
+      ...(symbolCustom.parameters || {}),
+      ...(parameters || {}),
+    };
+    const simulation = await symbolCustomBacktestRunnerService.runSymbolCustomBacktestSimulation({
+      symbolCustom,
+      logic,
+      logicName,
+      candles: resolvedCandles,
+      parameters: mergedParameters,
+      costModel: costModel || {},
+      initialBalance,
+      options: options || {},
+    });
+
+    return SymbolCustomBacktest.create(buildBacktestPayload({
+      symbolCustom,
+      logicName,
+      status: simulation.status,
+      startDate,
+      endDate,
+      initialBalance: simulation.initialBalance,
+      finalBalance: simulation.finalBalance,
+      parameters: mergedParameters,
+      costModel: simulation.costModelUsed,
+      costModelUsed: simulation.costModelUsed,
+      summary: simulation.summary,
+      trades: simulation.trades,
+      equityCurve: simulation.equityCurve,
+      message: simulation.message,
+    }));
+  } catch (error) {
+    return SymbolCustomBacktest.create(buildBacktestPayload({
+      symbolCustom,
+      logicName,
+      status: 'failed',
+      startDate,
+      endDate,
+      initialBalance,
+      finalBalance: initialBalance ?? null,
+      parameters: parameters || symbolCustom.parameters || {},
+      costModel: costModel || {},
+      costModelUsed: costModel || {},
+      summary: buildZeroSummary(),
+      trades: [],
+      equityCurve: [],
+      message: 'SymbolCustom backtest failed',
+      error: error.message,
+    }));
+  }
 }
 
 async function getSymbolCustomBacktest(id) {
@@ -136,6 +273,7 @@ async function deleteSymbolCustomBacktest(id) {
 module.exports = {
   PHASE_1_PLACEHOLDER_BACKTEST_MESSAGE,
   SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED,
+  SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED,
   runSymbolCustomBacktest,
   getSymbolCustomBacktest,
   listSymbolCustomBacktests,

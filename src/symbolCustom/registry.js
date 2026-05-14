@@ -1,9 +1,12 @@
 const PlaceholderSymbolCustom = require('./logics/PlaceholderSymbolCustom');
+const UsdjpyJpyMacroReversalV1 = require('./logics/UsdjpyJpyMacroReversalV1');
 
 const { PLACEHOLDER_SYMBOL_CUSTOM } = PlaceholderSymbolCustom;
+const { USDJPY_JPY_MACRO_REVERSAL_V1 } = UsdjpyJpyMacroReversalV1;
 
 const SYMBOL_CUSTOM_REGISTRY = Object.freeze({
   [PLACEHOLDER_SYMBOL_CUSTOM]: PlaceholderSymbolCustom,
+  [USDJPY_JPY_MACRO_REVERSAL_V1]: UsdjpyJpyMacroReversalV1,
 });
 
 function normalizeSymbolCustomName(symbolCustomName) {

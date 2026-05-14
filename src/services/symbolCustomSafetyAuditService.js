@@ -9,6 +9,7 @@ const symbolCustomBacktestService = require('./symbolCustomBacktestService');
 
 const PHASE_1_LIVE_WARNING = 'Phase 1 does not support live execution';
 const SYMBOL_CUSTOM_PAPER_ENABLED_ENV = 'SYMBOL_CUSTOM_PAPER_ENABLED';
+const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
 
 function buildCheck(name, status, message) {
   return { name, status, message };
@@ -435,6 +436,98 @@ function auditBacktestScopeAllowedLiveBlocked() {
   }
 }
 
+function auditUsdjpyMacroReversalRegistered() {
+  try {
+    const { getSymbolCustomLogic, isSymbolCustomRegistered } = require('../symbolCustom/registry');
+    const logic = getSymbolCustomLogic(USDJPY_JPY_MACRO_REVERSAL_V1);
+    const registered = isSymbolCustomRegistered(USDJPY_JPY_MACRO_REVERSAL_V1)
+      && logic
+      && logic.name === USDJPY_JPY_MACRO_REVERSAL_V1;
+
+    return registered
+      ? buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is registered', 'PASS', 'USDJPY macro reversal SymbolCustom logic is available in the registry.')
+      : buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is registered', 'FAIL', 'USDJPY macro reversal SymbolCustom logic is not registered.');
+  } catch (error) {
+    return buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is registered', 'FAIL', `Unable to inspect USDJPY macro reversal registry entry: ${error.message}`);
+  }
+}
+
+function auditUsdjpyMacroReversalBacktestOnly() {
+  try {
+    const { getSymbolCustomLogic } = require('../symbolCustom/registry');
+    const logic = getSymbolCustomLogic(USDJPY_JPY_MACRO_REVERSAL_V1);
+    const paper = logic ? logic.analyze({ scope: 'paper', symbol: 'USDJPY' }) : null;
+    const live = logic ? logic.analyze({ scope: 'live', symbol: 'USDJPY' }) : null;
+    const source = readProjectFile('src/symbolCustom/logics/UsdjpyJpyMacroReversalV1.js');
+    const backtestOnly = paper?.signal === 'NONE'
+      && live?.signal === 'NONE'
+      && source.includes("scope !== 'backtest'")
+      && source.includes('backtest-only in Phase 2D');
+
+    return backtestOnly
+      ? buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only', 'PASS', 'USDJPY macro reversal returns NONE outside backtest scope.')
+      : buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only', 'FAIL', 'USDJPY macro reversal may emit tradable signals outside backtest scope.');
+  } catch (error) {
+    return buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only', 'FAIL', `Unable to inspect USDJPY macro reversal scope gating: ${error.message}`);
+  }
+}
+
+function auditUsdjpyMacroReversalDoesNotReferenceSixStrategies() {
+  try {
+    const source = readProjectFile('src/symbolCustom/logics/UsdjpyJpyMacroReversalV1.js');
+    const safe = sourceExcludes(source, [
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /Momentum/,
+      /MultiTimeframe/,
+      /VolumeFlowHybrid/,
+      /src\/strategies/,
+      /\.\.\/strategies/,
+    ]);
+
+    return safe
+      ? buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference six strategies', 'PASS', 'USDJPY macro reversal is independent of the six strategy classes.')
+      : buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference six strategies', 'FAIL', 'USDJPY macro reversal appears to reference six strategy classes.');
+  } catch (error) {
+    return buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference six strategies', 'FAIL', `Unable to inspect USDJPY macro reversal strategy isolation: ${error.message}`);
+  }
+}
+
+function auditUsdjpyMacroReversalDoesNotReferenceTradeExecutor() {
+  try {
+    const source = readProjectFile('src/symbolCustom/logics/UsdjpyJpyMacroReversalV1.js');
+    const safe = sourceExcludes(source, [
+      /tradeExecutor/i,
+      /\bexecuteTrade\s*\(/,
+      /placeOrder\s*\(/,
+      /preflightOrder\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference tradeExecutor', 'PASS', 'USDJPY macro reversal has no live order execution references.')
+      : buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference tradeExecutor', 'FAIL', 'USDJPY macro reversal appears to reference live order execution.');
+  } catch (error) {
+    return buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference tradeExecutor', 'FAIL', `Unable to inspect USDJPY macro reversal live isolation: ${error.message}`);
+  }
+}
+
+function auditUsdjpyMacroReversalDoesNotReferenceRiskManager() {
+  try {
+    const source = readProjectFile('src/symbolCustom/logics/UsdjpyJpyMacroReversalV1.js');
+    const safe = sourceExcludes(source, [
+      /riskManager/i,
+      /calculateLotSize\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference riskManager', 'PASS', 'USDJPY macro reversal does not use live lot sizing.')
+      : buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference riskManager', 'FAIL', 'USDJPY macro reversal appears to reference riskManager lot sizing.');
+  } catch (error) {
+    return buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference riskManager', 'FAIL', `Unable to inspect USDJPY macro reversal risk isolation: ${error.message}`);
+  }
+}
+
 function auditPrimaryLiveUniqueness(symbolCustoms) {
   const grouped = new Map();
   symbolCustoms
@@ -504,6 +597,11 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditPublicPaperSignalWrapperExists());
   checks.push(auditMissingCandleProviderDetected());
   checks.push(auditBacktestScopeAllowedLiveBlocked());
+  checks.push(auditUsdjpyMacroReversalRegistered());
+  checks.push(auditUsdjpyMacroReversalBacktestOnly());
+  checks.push(auditUsdjpyMacroReversalDoesNotReferenceSixStrategies());
+  checks.push(auditUsdjpyMacroReversalDoesNotReferenceTradeExecutor());
+  checks.push(auditUsdjpyMacroReversalDoesNotReferenceRiskManager());
 
   let symbolCustoms = [];
   try {

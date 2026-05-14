@@ -141,6 +141,21 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'placeholder still does not require candles')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 is registered')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference six strategies')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference tradeExecutor')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference riskManager')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {

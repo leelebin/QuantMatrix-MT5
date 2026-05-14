@@ -176,6 +176,12 @@ const SymbolCustom = {
         : normalizeOptionalString(source.logicName, 'logicName', errors);
     }
 
+    if (!partial || source.registryLogicName !== undefined) {
+      cleaned.registryLogicName = source.registryLogicName === undefined && partial
+        ? undefined
+        : normalizeOptionalString(source.registryLogicName, 'registryLogicName', errors);
+    }
+
     if (!partial || source.version !== undefined) {
       const version = source.version === undefined ? 1 : Number(source.version);
       if (!Number.isInteger(version) || version < 1) {

@@ -524,6 +524,76 @@ describe('symbolCustomBacktestService', () => {
     expect(backtest.trades[0].exitReason).toBe('TP');
   });
 
+  test('real USDJPY_JPY_MACRO_REVERSAL_V1 can run through SymbolCustom backtest service with mock historical candles', async () => {
+    const UsdjpyJpyMacroReversalV1 = require('../src/symbolCustom/logics/UsdjpyJpyMacroReversalV1');
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const entry = [];
+    let previousClose = 150;
+    for (let index = 0; index < 48; index += 1) {
+      const close = previousClose - 0.16;
+      entry.push({
+        time: new Date(Date.UTC(2026, 0, 1, 0, index * 5)).toISOString(),
+        open: previousClose,
+        high: Math.max(previousClose, close) + 0.08,
+        low: Math.min(previousClose, close) - 0.08,
+        close,
+        volume: 100 + index,
+      });
+      previousClose = close;
+    }
+    const last = entry[entry.length - 1];
+    entry[entry.length - 1] = {
+      ...last,
+      open: last.close - 0.08,
+      low: last.close - 0.2,
+      high: last.close + 0.08,
+      close: last.close,
+    };
+
+    const {
+      service,
+      backtestEngine,
+      strategyMocks,
+      tradeExecutor,
+      paperTradingService,
+      riskManager,
+    } = loadService({
+      historicalCandles: { setup: entry, entry, higher: entry },
+      symbolCustoms: [
+        {
+          _id: 'sc-usdjpy-real',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+          riskConfig: { maxRiskPerTradePct: 1 },
+        },
+      ],
+      registryLogics: {
+        USDJPY_JPY_MACRO_REVERSAL_V1: logic,
+      },
+    });
+
+    const backtest = await service.runSymbolCustomBacktest({
+      symbolCustomId: 'sc-usdjpy-real',
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+      initialBalance: 1000,
+      parameters: { impulseAtrMultiplier: 1.2 },
+    });
+
+    expect(backtest.status).toBe('completed');
+    expect(backtest.summary.trades).toBeGreaterThanOrEqual(0);
+    expect(backtestEngine.runBacktest).not.toHaveBeenCalled();
+    expect(backtestEngine.run).not.toHaveBeenCalled();
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(paperTradingService.submitSymbolCustomSignal).not.toHaveBeenCalled();
+    expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
+    Object.values(strategyMocks).forEach((StrategyClass) => {
+      expect(StrategyClass).not.toHaveBeenCalled();
+    });
+  });
+
   test('list, get, and delete backtests work', async () => {
     const { service } = loadService({
       backtests: [

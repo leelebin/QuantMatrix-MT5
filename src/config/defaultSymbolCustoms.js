@@ -1,4 +1,8 @@
 const { PLACEHOLDER_SYMBOL_CUSTOM } = require('../symbolCustom/logics/PlaceholderSymbolCustom');
+const UsdjpyJpyMacroReversalV1 = require('../symbolCustom/logics/UsdjpyJpyMacroReversalV1');
+
+const { USDJPY_JPY_MACRO_REVERSAL_V1 } = UsdjpyJpyMacroReversalV1;
+const usdjpyMacroReversal = new UsdjpyJpyMacroReversalV1();
 
 const GENERIC_SYMBOL_CUSTOM_PARAMETER_SCHEMA = Object.freeze([
   {
@@ -59,10 +63,11 @@ const DEFAULT_SYMBOL_CUSTOM_DRAFTS = Object.freeze([
     liveEnabled: false,
     isPrimaryLive: false,
     allowLive: false,
-    logicName: PLACEHOLDER_SYMBOL_CUSTOM,
+    logicName: USDJPY_JPY_MACRO_REVERSAL_V1,
+    registryLogicName: USDJPY_JPY_MACRO_REVERSAL_V1,
     timeframes: DEFAULT_TIMEFRAMES,
-    parameterSchema: GENERIC_SYMBOL_CUSTOM_PARAMETER_SCHEMA,
-    parameters: {},
+    parameterSchema: usdjpyMacroReversal.getDefaultParameterSchema(),
+    parameters: usdjpyMacroReversal.getDefaultParameters(),
     hypothesis: 'USDJPY may react strongly to JPY macro repricing, USD rate expectations, Tokyo/London session transitions.',
   },
   {

@@ -62,12 +62,14 @@ function loadSeedService({ records = [] } = {}) {
 
   const seedService = require('../src/services/symbolCustomSeedService');
   const { PLACEHOLDER_SYMBOL_CUSTOM } = require('../src/symbolCustom/logics/PlaceholderSymbolCustom');
+  const { USDJPY_JPY_MACRO_REVERSAL_V1 } = require('../src/symbolCustom/logics/UsdjpyJpyMacroReversalV1');
 
   return {
     seedService,
     records: symbolCustomRecords,
     symbolCustomsDb,
     PLACEHOLDER_SYMBOL_CUSTOM,
+    USDJPY_JPY_MACRO_REVERSAL_V1,
   };
 }
 
@@ -102,8 +104,13 @@ describe('symbolCustomSeedService', () => {
     expect(records).toHaveLength(3);
   });
 
-  test('all default drafts are disabled draft placeholders', async () => {
-    const { seedService, records, PLACEHOLDER_SYMBOL_CUSTOM } = loadSeedService();
+  test('all default drafts are disabled drafts with expected logic bindings', async () => {
+    const {
+      seedService,
+      records,
+      PLACEHOLDER_SYMBOL_CUSTOM,
+      USDJPY_JPY_MACRO_REVERSAL_V1,
+    } = loadSeedService();
 
     await seedService.ensureDefaultSymbolCustomDrafts();
 
@@ -114,20 +121,43 @@ describe('symbolCustomSeedService', () => {
       expect(record.liveEnabled).toBe(false);
       expect(record.isPrimaryLive).toBe(false);
       expect(record.allowLive).toBe(false);
-      expect(record.logicName).toBe(PLACEHOLDER_SYMBOL_CUSTOM);
       expect(record.timeframes).toEqual({
         setupTimeframe: '15m',
         entryTimeframe: '5m',
         higherTimeframe: '1h',
       });
-      expect(record.parameterSchema.map((field) => field.key)).toEqual([
-        'lookbackBars',
-        'slAtrMultiplier',
-        'tpAtrMultiplier',
-        'beTriggerR',
-        'maxConsecutiveLosses',
-      ]);
     });
+
+    const usdjpy = records.find((record) => record.symbolCustomName === 'USDJPY_JPY_MACRO_REVERSAL_V1');
+    expect(usdjpy.logicName).toBe(USDJPY_JPY_MACRO_REVERSAL_V1);
+    expect(usdjpy.registryLogicName).toBe(USDJPY_JPY_MACRO_REVERSAL_V1);
+    expect(usdjpy.parameterSchema.map((field) => field.key)).toEqual([
+      'lookbackBars',
+      'impulseAtrMultiplier',
+      'reversalConfirmBars',
+      'rsiPeriod',
+      'rsiOverbought',
+      'rsiOversold',
+      'atrPeriod',
+      'slAtrMultiplier',
+      'tpAtrMultiplier',
+      'maxBarsInTrade',
+      'minAtr',
+      'cooldownBars',
+    ]);
+
+    records
+      .filter((record) => record.symbolCustomName !== 'USDJPY_JPY_MACRO_REVERSAL_V1')
+      .forEach((record) => {
+        expect(record.logicName).toBe(PLACEHOLDER_SYMBOL_CUSTOM);
+        expect(record.parameterSchema.map((field) => field.key)).toEqual([
+          'lookbackBars',
+          'slAtrMultiplier',
+          'tpAtrMultiplier',
+          'beTriggerR',
+          'maxConsecutiveLosses',
+        ]);
+      });
   });
 
   test('existing defaults are not overwritten', async () => {

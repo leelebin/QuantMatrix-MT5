@@ -1,5 +1,6 @@
 const BaseSymbolCustom = require('../src/symbolCustom/BaseSymbolCustom');
 const PlaceholderSymbolCustom = require('../src/symbolCustom/logics/PlaceholderSymbolCustom');
+const UsdjpyJpyMacroReversalV1 = require('../src/symbolCustom/logics/UsdjpyJpyMacroReversalV1');
 const {
   SYMBOL_CUSTOM_REGISTRY,
   getSymbolCustomLogic,
@@ -45,6 +46,15 @@ describe('SymbolCustom registry framework', () => {
     expect(SYMBOL_CUSTOM_REGISTRY.PLACEHOLDER_SYMBOL_CUSTOM).toBe(PlaceholderSymbolCustom);
   });
 
+  test('registry can find USDJPY_JPY_MACRO_REVERSAL_V1', () => {
+    const logic = getSymbolCustomLogic('USDJPY_JPY_MACRO_REVERSAL_V1');
+
+    expect(logic).toBeInstanceOf(UsdjpyJpyMacroReversalV1);
+    expect(logic.name).toBe('USDJPY_JPY_MACRO_REVERSAL_V1');
+    expect(isSymbolCustomRegistered('USDJPY_JPY_MACRO_REVERSAL_V1')).toBe(true);
+    expect(SYMBOL_CUSTOM_REGISTRY.USDJPY_JPY_MACRO_REVERSAL_V1).toBe(UsdjpyJpyMacroReversalV1);
+  });
+
   test('registry returns null for an unknown name', () => {
     expect(getSymbolCustomLogic('UNKNOWN_SYMBOL_CUSTOM')).toBeNull();
     expect(isSymbolCustomRegistered('UNKNOWN_SYMBOL_CUSTOM')).toBe(false);
@@ -54,8 +64,9 @@ describe('SymbolCustom registry framework', () => {
     const registered = listRegisteredSymbolCustomLogics();
 
     expect(Array.isArray(registered)).toBe(true);
-    expect(registered).toEqual([
+    expect(registered).toEqual(expect.arrayContaining([
       { name: 'PLACEHOLDER_SYMBOL_CUSTOM' },
-    ]);
+      { name: 'USDJPY_JPY_MACRO_REVERSAL_V1' },
+    ]));
   });
 });

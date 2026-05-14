@@ -162,6 +162,97 @@ function auditNonPlaceholderBacktestRequiresCandles() {
   }
 }
 
+function auditCandleProviderDoesNotCallTradeExecutor() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandleProviderService.js');
+    const safe = sourceExcludes(source, [
+      /tradeExecutor/i,
+      /\bexecuteTrade\s*\(/,
+      /placeOrder\s*\(/,
+      /preflightOrder\s*\(/,
+      /closePosition\s*\(/,
+      /modifyPosition\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('symbolCustom candle provider does not call tradeExecutor', 'PASS', 'SymbolCustom candle provider only reads historical candles and does not reference order placement.')
+      : buildCheck('symbolCustom candle provider does not call tradeExecutor', 'FAIL', 'SymbolCustom candle provider appears to reference live order placement.');
+  } catch (error) {
+    return buildCheck('symbolCustom candle provider does not call tradeExecutor', 'FAIL', `Unable to inspect SymbolCustom candle provider: ${error.message}`);
+  }
+}
+
+function auditCandleProviderDoesNotCallOldBacktestEngine() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandleProviderService.js');
+    const safe = sourceExcludes(source, [
+      /backtestEngine/,
+      /runBacktest\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('symbolCustom candle provider does not call old backtestEngine', 'PASS', 'SymbolCustom candle provider is isolated from the old backtestEngine.')
+      : buildCheck('symbolCustom candle provider does not call old backtestEngine', 'FAIL', 'SymbolCustom candle provider appears to reference old backtestEngine.');
+  } catch (error) {
+    return buildCheck('symbolCustom candle provider does not call old backtestEngine', 'FAIL', `Unable to inspect SymbolCustom candle provider backtest isolation: ${error.message}`);
+  }
+}
+
+function auditCandleProviderDoesNotCallSixStrategies() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandleProviderService.js');
+    const safe = sourceExcludes(source, [
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /Momentum/,
+      /MultiTimeframe/,
+      /VolumeFlowHybrid/,
+      /src\/strategies/,
+      /\.\.\/strategies/,
+    ]);
+
+    return safe
+      ? buildCheck('symbolCustom candle provider does not call six strategies', 'PASS', 'SymbolCustom candle provider does not reference six strategy classes.')
+      : buildCheck('symbolCustom candle provider does not call six strategies', 'FAIL', 'SymbolCustom candle provider appears to reference six strategy classes.');
+  } catch (error) {
+    return buildCheck('symbolCustom candle provider does not call six strategies', 'FAIL', `Unable to inspect SymbolCustom candle provider strategy isolation: ${error.message}`);
+  }
+}
+
+function auditHistoricalBacktestRequiresDateRange() {
+  try {
+    const providerSource = readProjectFile('src/services/symbolCustomCandleProviderService.js');
+    const serviceSource = readProjectFile('src/services/symbolCustomBacktestService.js');
+    const ok = providerSource.includes('SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED')
+      && /if\s*\(!startDate\s*\|\|\s*!endDate\)/.test(providerSource)
+      && serviceSource.includes('SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED');
+
+    return ok
+      ? buildCheck('symbolCustom historical backtest requires date range', 'PASS', 'Historical SymbolCustom backtests require explicit startDate and endDate.')
+      : buildCheck('symbolCustom historical backtest requires date range', 'FAIL', 'Historical SymbolCustom backtests may run without an explicit date range.');
+  } catch (error) {
+    return buildCheck('symbolCustom historical backtest requires date range', 'FAIL', `Unable to inspect historical date range requirement: ${error.message}`);
+  }
+}
+
+function auditPlaceholderStillDoesNotRequireCandles() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomBacktestService.js');
+    const placeholderIndex = source.indexOf('logic.name === PLACEHOLDER_SYMBOL_CUSTOM');
+    const resolveIndex = source.indexOf('resolveBacktestCandles');
+    const ok = placeholderIndex !== -1
+      && resolveIndex !== -1
+      && placeholderIndex < source.indexOf('const resolved = await resolveBacktestCandles');
+
+    return ok
+      ? buildCheck('placeholder still does not require candles', 'PASS', 'Placeholder backtests return stub before candle provider resolution.')
+      : buildCheck('placeholder still does not require candles', 'FAIL', 'Placeholder backtest may require candles unexpectedly.');
+  } catch (error) {
+    return buildCheck('placeholder still does not require candles', 'FAIL', `Unable to inspect placeholder candle behavior: ${error.message}`);
+  }
+}
+
 async function auditLiveEnabledRecords(symbolCustoms) {
   const liveEnabled = symbolCustoms.filter((record) => record.liveEnabled === true);
   if (liveEnabled.length === 0) {
@@ -398,6 +489,11 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditSymbolCustomBacktestDoesNotCallSixStrategies());
   checks.push(auditPlaceholderBacktestReturnsStub());
   checks.push(auditNonPlaceholderBacktestRequiresCandles());
+  checks.push(auditCandleProviderDoesNotCallTradeExecutor());
+  checks.push(auditCandleProviderDoesNotCallOldBacktestEngine());
+  checks.push(auditCandleProviderDoesNotCallSixStrategies());
+  checks.push(auditHistoricalBacktestRequiresDateRange());
+  checks.push(auditPlaceholderStillDoesNotRequireCandles());
   checks.push(auditPaperRuntimeDefaultDisabled());
   checks.push(auditSymbolCustomLiveRuntimeNotConnected());
   checks.push(auditPaperRuntimeNeverCallsTradeExecutor());

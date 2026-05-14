@@ -2,6 +2,7 @@ const {
   PHASE_1_LIVE_WARNING,
   PLACEHOLDER_SYMBOL_CUSTOM,
   parseJsonField,
+  serializeBacktestPayload,
   serializeEditorPayload,
   shouldShowLiveWarning,
   buildSymbolCustomSymbolSummaries,
@@ -75,6 +76,46 @@ describe('symbolCustomManager utils', () => {
     expect(shouldShowLiveWarning({ liveEnabled: true })).toBe(true);
     expect(shouldShowLiveWarning({ liveEnabled: false })).toBe(false);
     expect(PHASE_1_LIVE_WARNING).toContain('not supported in Phase 1');
+  });
+
+  test('serializeBacktestPayload sends historical date range payload', () => {
+    const result = serializeBacktestPayload({
+      record: { parameters: { lookbackBars: 50 } },
+      startDate: '2026-04-01',
+      endDate: '2026-05-01',
+      initialBalance: '500',
+      useHistoricalCandles: true,
+    });
+
+    expect(result).toEqual({
+      valid: true,
+      errors: [],
+      payload: {
+        startDate: '2026-04-01',
+        endDate: '2026-05-01',
+        initialBalance: 500,
+        parameters: { lookbackBars: 50 },
+        costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+        options: { useHistoricalCandles: true },
+      },
+    });
+  });
+
+  test('serializeBacktestPayload requires date range and positive balance', () => {
+    const result = serializeBacktestPayload({
+      startDate: '',
+      endDate: '',
+      initialBalance: '0',
+      useHistoricalCandles: true,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      'startDate is required',
+      'endDate is required',
+      'initialBalance must be a positive number',
+    ]));
+    expect(result.payload).toBeNull();
   });
 
   test('buildSymbolCustomSymbolSummaries builds symbol-level counts', () => {

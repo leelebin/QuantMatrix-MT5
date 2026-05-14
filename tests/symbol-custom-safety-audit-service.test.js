@@ -126,6 +126,21 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'non-placeholder backtest requires candles')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'symbolCustom candle provider does not call tradeExecutor')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'symbolCustom candle provider does not call old backtestEngine')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'symbolCustom candle provider does not call six strategies')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'symbolCustom historical backtest requires date range')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'placeholder still does not require candles')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {

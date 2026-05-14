@@ -73,6 +73,56 @@ function buildZeroSummary() {
   };
 }
 
+function normalizeChartCandle(candle = {}) {
+  return {
+    time: candle.time || candle.timestamp || candle.date || null,
+    open: Number(candle.open),
+    high: Number(candle.high),
+    low: Number(candle.low),
+    close: Number(candle.close),
+    volume: Number(candle.volume ?? candle.tickVolume ?? 0),
+  };
+}
+
+function buildSymbolCustomTradeEvents(trades = []) {
+  return (Array.isArray(trades) ? trades : []).map((trade, index) => ({
+    tradeId: trade.tradeId != null ? trade.tradeId : index + 1,
+    direction: trade.side || trade.direction || '--',
+    entryTime: trade.entryTime || null,
+    entryPrice: trade.entryPrice,
+    entryReason: trade.entryReason || '',
+    setupReason: trade.entryReason || '',
+    triggerReason: trade.logicName || '',
+    exitTime: trade.exitTime || null,
+    exitPrice: trade.exitPrice,
+    exitReason: trade.exitReason || '',
+    profitLoss: trade.pnl,
+    profitPips: null,
+    module: trade.logicName || 'SymbolCustom',
+  }));
+}
+
+function buildSymbolCustomChartData({ symbolCustom, logicName, candles, trades, startDate, endDate }) {
+  const entryCandles = candles && Array.isArray(candles.entry) ? candles.entry : [];
+  if (!entryCandles.length) return null;
+  return {
+    source: 'symbolCustom',
+    symbol: symbolCustom.symbol,
+    strategy: symbolCustom.symbolCustomName,
+    logicName,
+    effectiveTimeframe: symbolCustom.timeframes?.entryTimeframe || '--',
+    period: {
+      start: startDate,
+      end: endDate,
+    },
+    candles: entryCandles.map(normalizeChartCandle),
+    panels: [
+      { kind: 'price', title: 'Price', series: [], referenceLines: [] },
+    ],
+    tradeEvents: buildSymbolCustomTradeEvents(trades),
+  };
+}
+
 function resolveLogicName(symbolCustom = {}) {
   return String(symbolCustom.logicName || symbolCustom.registryLogicName || symbolCustom.symbolCustomName || '').trim();
 }
@@ -147,6 +197,7 @@ function buildBacktestPayload({
   summary,
   trades,
   equityCurve,
+  chartData,
   message,
   error = null,
 }) {
@@ -168,6 +219,7 @@ function buildBacktestPayload({
     summary,
     trades,
     equityCurve,
+    chartData,
     message,
     error,
     completedAt: new Date(),
@@ -261,6 +313,14 @@ async function runSymbolCustomBacktest({
       initialBalance,
       options: options || {},
     });
+    const chartData = buildSymbolCustomChartData({
+      symbolCustom,
+      logicName,
+      candles: resolved.candles,
+      trades: simulation.trades,
+      startDate,
+      endDate,
+    });
 
     return SymbolCustomBacktest.create(buildBacktestPayload({
       symbolCustom,
@@ -276,6 +336,7 @@ async function runSymbolCustomBacktest({
       summary: simulation.summary,
       trades: simulation.trades,
       equityCurve: simulation.equityCurve,
+      chartData,
       message: simulation.message,
     }));
   } catch (error) {

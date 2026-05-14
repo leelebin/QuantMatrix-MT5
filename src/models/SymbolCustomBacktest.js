@@ -138,6 +138,7 @@ const SymbolCustomBacktest = {
       summary: buildSummary(normalizePlainObject(source.summary, 'summary', errors, DEFAULT_SUMMARY)),
       trades: normalizeArray(source.trades, 'trades', errors),
       equityCurve: normalizeArray(source.equityCurve, 'equityCurve', errors),
+      chartData: normalizePlainObject(source.chartData, 'chartData', errors, null),
       message: normalizeOptionalString(source.message, 'message', errors),
       error: normalizeOptionalString(source.error, 'error', errors),
       completedAt: source.completedAt || null,

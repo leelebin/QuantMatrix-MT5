@@ -1,6 +1,10 @@
 const {
   PHASE_1_LIVE_WARNING,
   PLACEHOLDER_SYMBOL_CUSTOM,
+  SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+  SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+  SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+  normalizeBacktestError,
   parseJsonField,
   serializeBacktestPayload,
   serializeEditorPayload,
@@ -116,6 +120,46 @@ describe('symbolCustomManager utils', () => {
       'initialBalance must be a positive number',
     ]));
     expect(result.payload).toBeNull();
+  });
+
+  test('normalizeBacktestError maps MT5 not connected API response to friendly message and hint', () => {
+    expect(normalizeBacktestError({
+      success: false,
+      message: 'MT5 not connected. Call connect() first.',
+      reasonCode: SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+    })).toEqual({
+      message: SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+      hint: SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+      reasonCode: SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+    });
+  });
+
+  test('normalizeBacktestError reads nested MT5 not connected hint from errors', () => {
+    expect(normalizeBacktestError({
+      success: false,
+      message: 'Historical provider failed',
+      errors: [
+        {
+          reasonCode: SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+          hint: 'Go to Dashboard/Diagnostics and connect MT5, then retry.',
+        },
+      ],
+    })).toEqual({
+      message: SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+      hint: SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+      reasonCode: SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+    });
+  });
+
+  test('normalizeBacktestError keeps historical candles not found friendly text', () => {
+    expect(normalizeBacktestError({
+      success: false,
+      message: 'SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND',
+    })).toEqual({
+      message: 'No historical candles found for selected symbol/timeframes/date range.',
+      hint: null,
+      reasonCode: 'SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND',
+    });
   });
 
   test('buildSymbolCustomSymbolSummaries builds symbol-level counts', () => {

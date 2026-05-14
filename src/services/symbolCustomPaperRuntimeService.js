@@ -1,6 +1,10 @@
 const symbolCustomEngine = require('./symbolCustomEngine');
+const { PLACEHOLDER_SYMBOL_CUSTOM } = require('../symbolCustom/logics/PlaceholderSymbolCustom');
 
 const SYMBOL_CUSTOM_PAPER_ENABLED_ENV = 'SYMBOL_CUSTOM_PAPER_ENABLED';
+const SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED = 'SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED';
+const SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE = 'SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE';
+const SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED = 'SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED';
 const DEFAULT_SCAN_INTERVAL_MS = 60 * 1000;
 const MAX_LAST_SIGNALS = 20;
 
@@ -11,6 +15,7 @@ let runtimeActiveProfile = null;
 let lastScanAt = null;
 let lastError = null;
 let activePaperCustoms = 0;
+let lastSignalCount = 0;
 let lastSignals = [];
 
 function isEnabled() {
@@ -22,8 +27,28 @@ function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function buildHttpError(message, statusCode, details = []) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.details = details;
+  return error;
+}
+
 function isPaperTradeSignal(signal = {}) {
   return signal.signal === 'BUY' || signal.signal === 'SELL';
+}
+
+function getLogicName(symbolCustom = {}) {
+  return String(
+    symbolCustom.logicName
+      || symbolCustom.registryLogicName
+      || symbolCustom.symbolCustomName
+      || ''
+  ).trim();
+}
+
+function isPlaceholderSymbolCustom(symbolCustom = {}) {
+  return getLogicName(symbolCustom) === PLACEHOLDER_SYMBOL_CUSTOM;
 }
 
 function rememberSignal(signal) {
@@ -57,24 +82,18 @@ function buildPaperSignalPayload(signal = {}) {
 }
 
 function resolvePaperSignalHandler(service, options = {}) {
-  if (typeof options.paperSignalHandler === 'function') {
-    return {
-      handler: options.paperSignalHandler,
-      context: options.paperSignalHandlerContext || null,
-    };
-  }
-
   const candidateService = options.paperTradingService || service;
-  for (const methodName of ['submitSignal', 'executeSignal', 'handleSignal', '_executePaperTrade']) {
+  for (const methodName of ['submitSymbolCustomSignal', 'submitExternalPaperSignal']) {
     if (candidateService && typeof candidateService[methodName] === 'function') {
       return {
         handler: candidateService[methodName],
         context: candidateService,
+        methodName,
       };
     }
   }
 
-  return { handler: null, context: null };
+  return { handler: null, context: null, methodName: null };
 }
 
 function getDefaultPaperTradingService() {
@@ -99,14 +118,16 @@ async function handleSymbolCustomPaperSignal(signal, options = {}) {
   }
 
   const paperTradingService = options.paperTradingService || getDefaultPaperTradingService();
-  const { handler, context } = resolvePaperSignalHandler(paperTradingService, options);
+  const { handler, context, methodName } = resolvePaperSignalHandler(paperTradingService, options);
   if (!handler) {
-    const error = new Error('SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE');
-    error.statusCode = 500;
-    throw error;
+    throw buildHttpError(SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE, 500);
   }
 
-  await handler.call(context, payload);
+  if (methodName === 'submitExternalPaperSignal') {
+    await handler.call(context, payload, { source: 'symbolCustom' });
+  } else {
+    await handler.call(context, payload);
+  }
 
   console.log(
     `[SymbolCustom] Paper signal submitted source=symbolCustom scope=paper `
@@ -121,17 +142,69 @@ async function handleSymbolCustomPaperSignal(signal, options = {}) {
   };
 }
 
-async function runPaperScan({ getCandlesFn, activeProfile } = {}) {
+function resetScanCounters() {
+  activePaperCustoms = 0;
+  lastSignalCount = 0;
+}
+
+function buildDisabledScanResult() {
+  return {
+    success: false,
+    enabled: false,
+    forced: false,
+    scanned: 0,
+    submitted: 0,
+    ignored: 0,
+    activePaperCustoms: 0,
+    signalCount: 0,
+    signals: [],
+    results: [],
+    reasonCode: SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED,
+  };
+}
+
+function assertCandleProviderAvailable(symbolCustoms, getCandlesFn) {
+  if (typeof getCandlesFn === 'function') {
+    return;
+  }
+
+  const requiresCandles = symbolCustoms.filter((symbolCustom) => !isPlaceholderSymbolCustom(symbolCustom));
+  if (requiresCandles.length === 0) {
+    return;
+  }
+
+  throw buildHttpError(SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED, 400, requiresCandles.map((symbolCustom) => ({
+    symbolCustomId: symbolCustom._id || null,
+    symbolCustomName: symbolCustom.symbolCustomName,
+    logicName: getLogicName(symbolCustom),
+  })));
+}
+
+async function runPaperScan({ getCandlesFn, activeProfile, force = false } = {}) {
+  const forced = force === true;
+  const enabled = isEnabled();
+
+  if (!enabled && !forced) {
+    resetScanCounters();
+    return buildDisabledScanResult();
+  }
+
   try {
+    const effectiveGetCandlesFn = getCandlesFn || runtimeGetCandlesFn;
+    const activeSymbolCustoms = await symbolCustomEngine.listActivePaperSymbolCustoms();
+    activePaperCustoms = activeSymbolCustoms.length;
+    assertCandleProviderAvailable(activeSymbolCustoms, effectiveGetCandlesFn);
+
     const signals = await symbolCustomEngine.analyzeAllPaperSymbolCustoms(
-      getCandlesFn || runtimeGetCandlesFn,
+      effectiveGetCandlesFn,
       {
         scope: 'paper',
         activeProfile: activeProfile || runtimeActiveProfile,
+        symbolCustoms: activeSymbolCustoms,
       }
     );
 
-    activePaperCustoms = signals.length;
+    lastSignalCount = signals.length;
     lastScanAt = new Date();
     lastError = null;
 
@@ -142,7 +215,11 @@ async function runPaperScan({ getCandlesFn, activeProfile } = {}) {
 
     return {
       success: true,
-      scanned: signals.length,
+      enabled,
+      forced,
+      scanned: activePaperCustoms,
+      activePaperCustoms,
+      signalCount: signals.length,
       submitted: results.filter((result) => result.action === 'paper_submitted').length,
       ignored: results.filter((result) => result.action === 'ignored').length,
       signals,
@@ -229,12 +306,16 @@ function getStatus() {
     lastScanAt,
     lastError,
     activePaperCustoms,
+    lastSignalCount,
     lastSignals: cloneValue(lastSignals),
   };
 }
 
 module.exports = {
   SYMBOL_CUSTOM_PAPER_ENABLED_ENV,
+  SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED,
+  SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE,
+  SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED,
   isEnabled,
   runPaperScan,
   handleSymbolCustomPaperSignal,

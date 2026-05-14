@@ -5,7 +5,7 @@ const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2 = 'SYMBOL_CUSTOM_LIVE_NOT_SUPP
 const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1 = SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2;
 const SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED = 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED';
 const SYMBOL_CUSTOM_CONTEXT_INVALID = 'SYMBOL_CUSTOM_CONTEXT_INVALID';
-const VALID_SCOPES = Object.freeze(['paper', 'live']);
+const VALID_SCOPES = Object.freeze(['paper', 'backtest', 'live']);
 
 function cloneValue(value) {
   if (value === undefined) return undefined;
@@ -157,8 +157,9 @@ async function analyzeSymbolCustom(symbolCustom, getCandlesFn, options = {}) {
 }
 
 async function analyzeAllPaperSymbolCustoms(getCandlesFn, options = {}) {
-  const symbolCustoms = await SymbolCustom.findAll({ paperEnabled: true });
-  const activePaperSymbolCustoms = symbolCustoms.filter((symbolCustom) => symbolCustom.paperEnabled === true);
+  const activePaperSymbolCustoms = Array.isArray(options.symbolCustoms)
+    ? options.symbolCustoms.filter((symbolCustom) => symbolCustom.paperEnabled === true)
+    : await listActivePaperSymbolCustoms();
   const signals = [];
 
   for (const symbolCustom of activePaperSymbolCustoms) {
@@ -171,6 +172,11 @@ async function analyzeAllPaperSymbolCustoms(getCandlesFn, options = {}) {
   return signals;
 }
 
+async function listActivePaperSymbolCustoms() {
+  const symbolCustoms = await SymbolCustom.findAll({ paperEnabled: true });
+  return symbolCustoms.filter((symbolCustom) => symbolCustom.paperEnabled === true);
+}
+
 module.exports = {
   SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
   SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
@@ -178,5 +184,6 @@ module.exports = {
   SYMBOL_CUSTOM_CONTEXT_INVALID,
   analyzeSymbolCustom,
   analyzeAllPaperSymbolCustoms,
+  listActivePaperSymbolCustoms,
   buildSymbolCustomSignal,
 };

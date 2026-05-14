@@ -147,11 +147,16 @@ describe('symbolCustomRoutes', () => {
       lastScanAt: null,
       lastError: null,
       activePaperCustoms: 0,
+      lastSignalCount: 0,
       lastSignals: [],
     });
     symbolCustomPaperRuntimeService.runPaperScan.mockResolvedValue({
       success: true,
+      enabled: false,
+      forced: false,
       scanned: 1,
+      activePaperCustoms: 1,
+      signalCount: 1,
       submitted: 0,
       ignored: 1,
       signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
@@ -170,17 +175,23 @@ describe('symbolCustomRoutes', () => {
       lastScanAt: null,
       lastError: null,
       activePaperCustoms: 0,
+      lastSignalCount: 0,
       lastSignals: [],
     });
     expect(scanResponse.status).toBe(200);
     expect(scanResponse.body).toEqual({
       success: true,
+      enabled: false,
+      forced: false,
       scanned: 1,
+      activePaperCustoms: 1,
+      signalCount: 1,
       submitted: 0,
       ignored: 1,
       signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
       results: [],
     });
+    expect(symbolCustomPaperRuntimeService.runPaperScan).toHaveBeenCalledWith({ force: false });
   });
 
   test('SymbolCustom backtest routes are mounted before generic id route', async () => {

@@ -183,6 +183,29 @@ describe('paperTradingService playbook metadata persistence', () => {
     jest.restoreAllMocks();
   });
 
+  test('submitSymbolCustomSignal is a public wrapper for SymbolCustom paper signals', async () => {
+    const executeSpy = jest.spyOn(paperTradingService, '_executePaperTrade').mockResolvedValue({ success: true });
+
+    await paperTradingService.submitSymbolCustomSignal({
+      symbol: 'GBPJPY',
+      signal: 'BUY',
+      symbolCustomId: 'sc-1',
+      symbolCustomName: 'GBPJPY_SYMBOL_CUSTOM',
+      logicName: 'MOCK_SYMBOL_CUSTOM',
+    });
+
+    expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'paper',
+      source: 'symbolCustom',
+      setupType: 'symbol_custom',
+      strategy: 'GBPJPY_SYMBOL_CUSTOM',
+      strategyType: 'SymbolCustom',
+      symbolCustomId: 'sc-1',
+      symbolCustomName: 'GBPJPY_SYMBOL_CUSTOM',
+      logicName: 'MOCK_SYMBOL_CUSTOM',
+    }));
+  });
+
   test('paper position and trade log records store setup and symbol playbook metadata', async () => {
     const signal = {
       symbol: 'XAUUSD',

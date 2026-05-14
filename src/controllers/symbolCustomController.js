@@ -125,7 +125,9 @@ exports.paperRuntimeStatus = async (req, res) => {
 
 exports.scanPaperRuntimeOnce = async (req, res) => {
   try {
-    const result = await symbolCustomPaperRuntimeService.runPaperScan({});
+    const result = await symbolCustomPaperRuntimeService.runPaperScan({
+      force: req.body?.force === true,
+    });
     return res.json({
       success: true,
       ...result,

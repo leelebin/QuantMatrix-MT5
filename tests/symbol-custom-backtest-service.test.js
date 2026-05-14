@@ -70,7 +70,7 @@ function mockStrategyClasses() {
   return strategyMocks;
 }
 
-function loadService({ symbolCustoms = [], backtests = [] } = {}) {
+function loadService({ symbolCustoms = [], backtests = [], registryLogics = {} } = {}) {
   jest.resetModules();
 
   const symbolCustomRecords = symbolCustoms.map((record) => ({ ...record }));
@@ -78,13 +78,34 @@ function loadService({ symbolCustoms = [], backtests = [] } = {}) {
   const symbolCustomsDb = createDb(symbolCustomRecords);
   const symbolCustomBacktestsDb = createDb(backtestRecords);
   const backtestEngine = { runBacktest: jest.fn(), run: jest.fn() };
+  const tradeExecutor = { executeTrade: jest.fn() };
+  const paperTradingService = { submitSymbolCustomSignal: jest.fn(), _executePaperTrade: jest.fn() };
+  const riskManager = { calculateLotSize: jest.fn(), validateTrade: jest.fn() };
   const strategyMocks = mockStrategyClasses();
+  const getSymbolCustomLogic = jest.fn((logicName) => {
+    if (logicName === 'PLACEHOLDER_SYMBOL_CUSTOM') {
+      return {
+        name: 'PLACEHOLDER_SYMBOL_CUSTOM',
+        analyze: jest.fn(() => ({
+          signal: 'NONE',
+          reason: 'Placeholder SymbolCustom has no active trading logic',
+        })),
+      };
+    }
+    return registryLogics[logicName] || null;
+  });
 
   jest.doMock('../src/config/db', () => ({
     symbolCustomsDb,
     symbolCustomBacktestsDb,
   }));
   jest.doMock('../src/services/backtestEngine', () => backtestEngine);
+  jest.doMock('../src/services/tradeExecutor', () => tradeExecutor);
+  jest.doMock('../src/services/paperTradingService', () => paperTradingService);
+  jest.doMock('../src/services/riskManager', () => riskManager);
+  jest.doMock('../src/symbolCustom/registry', () => ({
+    getSymbolCustomLogic,
+  }));
 
   const service = require('../src/services/symbolCustomBacktestService');
   return {
@@ -98,6 +119,10 @@ function loadService({ symbolCustoms = [], backtests = [] } = {}) {
       symbolCustomBacktestsDb,
     },
     backtestEngine,
+    tradeExecutor,
+    paperTradingService,
+    riskManager,
+    getSymbolCustomLogic,
     strategyMocks,
   };
 }
@@ -106,6 +131,10 @@ describe('symbolCustomBacktestService', () => {
   afterEach(() => {
     jest.dontMock('../src/config/db');
     jest.dontMock('../src/services/backtestEngine');
+    jest.dontMock('../src/services/tradeExecutor');
+    jest.dontMock('../src/services/paperTradingService');
+    jest.dontMock('../src/services/riskManager');
+    jest.dontMock('../src/symbolCustom/registry');
     [
       'TrendFollowingStrategy',
       'MeanReversionStrategy',
@@ -156,6 +185,8 @@ describe('symbolCustomBacktestService', () => {
       costModel: { spreadPips: 1.2 },
       summary: {
         trades: 0,
+        wins: 0,
+        losses: 0,
         netPnl: 0,
         grossWin: 0,
         grossLoss: 0,
@@ -164,6 +195,8 @@ describe('symbolCustomBacktestService', () => {
         avgR: null,
         maxDrawdown: 0,
         maxSingleLoss: 0,
+        maxWin: 0,
+        rejectedSignals: 0,
       },
       completedAt: expect.any(Date),
       createdAt: expect.any(Date),
@@ -199,6 +232,143 @@ describe('symbolCustomBacktestService', () => {
     });
   });
 
+  test('non-placeholder logic without candles or provider returns clear error', async () => {
+    const { service } = loadService({
+      symbolCustoms: [
+        {
+          _id: 'sc-needs-candles',
+          symbol: 'GBPJPY',
+          symbolCustomName: 'GBPJPY_MOCK',
+          logicName: 'MOCK_SYMBOL_CUSTOM',
+        },
+      ],
+      registryLogics: {
+        MOCK_SYMBOL_CUSTOM: {
+          name: 'MOCK_SYMBOL_CUSTOM',
+          analyze: jest.fn(),
+        },
+      },
+    });
+
+    await expect(service.runSymbolCustomBacktest({
+      symbolCustomId: 'sc-needs-candles',
+      startDate: '2026-01-01',
+      endDate: '2026-05-01',
+      initialBalance: 500,
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      message: service.SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED,
+    });
+  });
+
+  test('mock non-placeholder logic can complete a profitable backtest and save result', async () => {
+    const analyze = jest.fn(async (context) => (context.currentIndex === 0
+      ? { signal: 'BUY', sl: 95, tp: 110, reason: 'mock buy' }
+      : { signal: 'NONE' }));
+    const { service, records, getSymbolCustomLogic } = loadService({
+      symbolCustoms: [
+        {
+          _id: 'sc-profitable',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_MOCK',
+          logicName: 'MOCK_SYMBOL_CUSTOM',
+          timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+          parameters: { lookbackBars: 12 },
+          riskConfig: { maxRiskPerTradePct: 1 },
+        },
+      ],
+      registryLogics: {
+        MOCK_SYMBOL_CUSTOM: {
+          name: 'MOCK_SYMBOL_CUSTOM',
+          analyze,
+        },
+      },
+    });
+
+    const backtest = await service.runSymbolCustomBacktest({
+      symbolCustomId: 'sc-profitable',
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+      initialBalance: 1000,
+      parameters: { lookbackBars: 20 },
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      candles: {
+        setup: [],
+        entry: [
+          { time: '2026-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100 },
+          { time: '2026-01-01T00:05:00.000Z', open: 100, high: 110, low: 99, close: 109 },
+        ],
+        higher: [],
+      },
+    });
+
+    expect(getSymbolCustomLogic).toHaveBeenCalledWith('MOCK_SYMBOL_CUSTOM');
+    expect(analyze).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'backtest',
+      symbol: 'USDJPY',
+      symbolCustomId: 'sc-profitable',
+      symbolCustomName: 'USDJPY_MOCK',
+      logicName: 'MOCK_SYMBOL_CUSTOM',
+    }));
+    expect(backtest.status).toBe('completed');
+    expect(backtest.finalBalance).toBeGreaterThan(1000);
+    expect(backtest.summary.trades).toBe(1);
+    expect(backtest.summary.netPnl).toBeGreaterThan(0);
+    expect(backtest.trades[0]).toEqual(expect.objectContaining({
+      exitReason: 'TP',
+      positionSizingMode: 'RISK_BASED',
+    }));
+    expect(backtest.costModelUsed).toEqual({ spread: 0, commissionPerTrade: 0, slippage: 0 });
+    expect(records.backtests).toHaveLength(1);
+  });
+
+  test('candleProvider can provide candles for non-placeholder logic', async () => {
+    const analyze = jest.fn(async (context) => (context.currentIndex === 0
+      ? { signal: 'SELL', sl: 105, tp: 90, reason: 'mock sell' }
+      : { signal: 'NONE' }));
+    const candleProvider = jest.fn(async () => ({
+      entry: [
+        { time: '2026-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100 },
+        { time: '2026-01-01T00:05:00.000Z', open: 100, high: 101, low: 90, close: 91 },
+      ],
+    }));
+    const { service } = loadService({
+      symbolCustoms: [
+        {
+          _id: 'sc-provider',
+          symbol: 'AUDUSD',
+          symbolCustomName: 'AUDUSD_MOCK',
+          logicName: 'MOCK_SYMBOL_CUSTOM',
+          timeframes: { entryTimeframe: '5m' },
+        },
+      ],
+      registryLogics: {
+        MOCK_SYMBOL_CUSTOM: {
+          name: 'MOCK_SYMBOL_CUSTOM',
+          analyze,
+        },
+      },
+    });
+
+    const backtest = await service.runSymbolCustomBacktest({
+      symbolCustomId: 'sc-provider',
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+      initialBalance: 1000,
+      candleProvider,
+    });
+
+    expect(candleProvider).toHaveBeenCalledWith({
+      symbol: 'AUDUSD',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+    });
+    expect(backtest.status).toBe('completed');
+    expect(backtest.trades[0].side).toBe('SELL');
+    expect(backtest.trades[0].exitReason).toBe('TP');
+  });
+
   test('list, get, and delete backtests work', async () => {
     const { service } = loadService({
       backtests: [
@@ -220,8 +390,8 @@ describe('symbolCustomBacktestService', () => {
     await expect(service.getSymbolCustomBacktest('bt-1')).resolves.toBeNull();
   });
 
-  test('does not call old backtestEngine or six strategy classes', async () => {
-    const { service, backtestEngine, strategyMocks } = loadService({
+  test('does not call old backtestEngine, six strategy classes, tradeExecutor, paperTradingService, or riskManager', async () => {
+    const { service, backtestEngine, strategyMocks, tradeExecutor, paperTradingService, riskManager } = loadService({
       symbolCustoms: [
         {
           _id: 'sc-1',
@@ -241,6 +411,11 @@ describe('symbolCustomBacktestService', () => {
 
     expect(backtestEngine.runBacktest).not.toHaveBeenCalled();
     expect(backtestEngine.run).not.toHaveBeenCalled();
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(paperTradingService.submitSymbolCustomSignal).not.toHaveBeenCalled();
+    expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
+    expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
+    expect(riskManager.validateTrade).not.toHaveBeenCalled();
     Object.values(strategyMocks).forEach((StrategyClass) => {
       expect(StrategyClass).not.toHaveBeenCalled();
     });

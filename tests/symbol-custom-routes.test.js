@@ -45,6 +45,11 @@ jest.mock('../src/services/symbolCustomSafetyAuditService', () => ({
   runSymbolCustomPhase1SafetyAudit: jest.fn(),
 }));
 
+jest.mock('../src/services/symbolCustomPaperRuntimeService', () => ({
+  getStatus: jest.fn(),
+  runPaperScan: jest.fn(),
+}));
+
 const symbolCustomService = require('../src/services/symbolCustomService');
 const symbolCustomSeedService = require('../src/services/symbolCustomSeedService');
 const symbolCustomBacktestService = require('../src/services/symbolCustomBacktestService');
@@ -52,6 +57,7 @@ const symbolCustomEngine = require('../src/services/symbolCustomEngine');
 const symbolCustomReportService = require('../src/services/symbolCustomReportService');
 const symbolCustomOptimizerService = require('../src/services/symbolCustomOptimizerService');
 const symbolCustomSafetyAuditService = require('../src/services/symbolCustomSafetyAuditService');
+const symbolCustomPaperRuntimeService = require('../src/services/symbolCustomPaperRuntimeService');
 const symbolCustomRoutes = require('../src/routes/symbolCustomRoutes');
 
 function createApp() {
@@ -131,6 +137,49 @@ describe('symbolCustomRoutes', () => {
       success: true,
       checks: [{ name: 'live execution not connected', status: 'PASS', message: 'ok' }],
       summary: { pass: 1, warn: 0, fail: 0 },
+    });
+  });
+
+  test('SymbolCustom paper runtime routes are mounted before generic id route', async () => {
+    symbolCustomPaperRuntimeService.getStatus.mockReturnValue({
+      enabled: false,
+      running: false,
+      lastScanAt: null,
+      lastError: null,
+      activePaperCustoms: 0,
+      lastSignals: [],
+    });
+    symbolCustomPaperRuntimeService.runPaperScan.mockResolvedValue({
+      success: true,
+      scanned: 1,
+      submitted: 0,
+      ignored: 1,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
+    });
+
+    const app = createApp();
+    const statusResponse = await request(app).get('/api/symbol-customs/paper-runtime/status');
+    const scanResponse = await request(app).post('/api/symbol-customs/paper-runtime/scan-once').send({});
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusResponse.body).toEqual({
+      success: true,
+      enabled: false,
+      running: false,
+      lastScanAt: null,
+      lastError: null,
+      activePaperCustoms: 0,
+      lastSignals: [],
+    });
+    expect(scanResponse.status).toBe(200);
+    expect(scanResponse.body).toEqual({
+      success: true,
+      scanned: 1,
+      submitted: 0,
+      ignored: 1,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
     });
   });
 

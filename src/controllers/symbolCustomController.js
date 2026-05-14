@@ -5,6 +5,7 @@ const symbolCustomEngine = require('../services/symbolCustomEngine');
 const symbolCustomReportService = require('../services/symbolCustomReportService');
 const symbolCustomOptimizerService = require('../services/symbolCustomOptimizerService');
 const symbolCustomSafetyAuditService = require('../services/symbolCustomSafetyAuditService');
+const symbolCustomPaperRuntimeService = require('../services/symbolCustomPaperRuntimeService');
 
 function sendMutationResponse(res, result) {
   const payload = {
@@ -108,6 +109,29 @@ exports.safetyAudit = async (req, res) => {
     return res.json(audit);
   } catch (error) {
     return handleError(res, error, 'Failed to run SymbolCustom safety audit');
+  }
+};
+
+exports.paperRuntimeStatus = async (req, res) => {
+  try {
+    return res.json({
+      success: true,
+      ...symbolCustomPaperRuntimeService.getStatus(),
+    });
+  } catch (error) {
+    return handleError(res, error, 'Failed to load SymbolCustom paper runtime status');
+  }
+};
+
+exports.scanPaperRuntimeOnce = async (req, res) => {
+  try {
+    const result = await symbolCustomPaperRuntimeService.runPaperScan({});
+    return res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    return handleError(res, error, 'Failed to scan SymbolCustom paper runtime');
   }
 };
 

@@ -46,6 +46,12 @@ describe('symbolCustomEngine', () => {
       paperEnabled: true,
       timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
       parameters: { lookbackBars: 50 },
+      riskConfig: { maxRiskPerTradePct: 1 },
+      sessionFilter: { enabled: false },
+      newsFilter: { enabled: false },
+      beConfig: { enabled: false },
+      entryConfig: { confirmation: 'stub' },
+      exitConfig: { style: 'stub' },
     }, getCandlesFn, { scope: 'paper', timestamp });
 
     expect(signal).toEqual({
@@ -56,13 +62,19 @@ describe('symbolCustomEngine', () => {
       symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
       logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
       signal: 'NONE',
-      status: undefined,
+      status: 'NO_SIGNAL',
       reason: 'Placeholder SymbolCustom has no active trading logic',
       reasonCode: undefined,
       setupTimeframe: '15m',
       entryTimeframe: '5m',
       higherTimeframe: '1h',
       parameters: { lookbackBars: 50 },
+      riskConfig: { maxRiskPerTradePct: 1 },
+      sessionFilter: { enabled: false },
+      newsFilter: { enabled: false },
+      beConfig: { enabled: false },
+      entryConfig: { confirmation: 'stub' },
+      exitConfig: { style: 'stub' },
       timestamp,
     });
     expect(getCandlesFn).toHaveBeenCalledWith(expect.objectContaining({
@@ -72,7 +84,7 @@ describe('symbolCustomEngine', () => {
     }));
   });
 
-  test('live scope is blocked in Phase 1 before candle fetch or logic analysis', async () => {
+  test('live scope is blocked in Phase 2 before candle fetch or logic analysis', async () => {
     const { engine } = loadEngine();
     const getCandlesFn = jest.fn();
 
@@ -88,7 +100,7 @@ describe('symbolCustomEngine', () => {
       source: 'symbolCustom',
       signal: 'NONE',
       status: 'BLOCKED',
-      reasonCode: engine.SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
+      reasonCode: engine.SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
     }));
     expect(getCandlesFn).not.toHaveBeenCalled();
   });
@@ -119,10 +131,10 @@ describe('symbolCustomEngine', () => {
       symbolCustomName: 'PLACEHOLDER_SYMBOL_CUSTOM',
       timeframes: {},
       parameters: {},
-    }, null, { scope: 'backtest' });
+    }, null, { scope: 'paper' });
 
     expect(signal).toEqual(expect.objectContaining({
-      scope: 'backtest',
+      scope: 'paper',
       logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
       signal: 'NONE',
     }));

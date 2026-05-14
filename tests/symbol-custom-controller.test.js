@@ -38,6 +38,11 @@ jest.mock('../src/services/symbolCustomSafetyAuditService', () => ({
   runSymbolCustomPhase1SafetyAudit: jest.fn(),
 }));
 
+jest.mock('../src/services/symbolCustomPaperRuntimeService', () => ({
+  getStatus: jest.fn(),
+  runPaperScan: jest.fn(),
+}));
+
 const controller = require('../src/controllers/symbolCustomController');
 const symbolCustomService = require('../src/services/symbolCustomService');
 const symbolCustomSeedService = require('../src/services/symbolCustomSeedService');
@@ -46,6 +51,7 @@ const symbolCustomEngine = require('../src/services/symbolCustomEngine');
 const symbolCustomReportService = require('../src/services/symbolCustomReportService');
 const symbolCustomOptimizerService = require('../src/services/symbolCustomOptimizerService');
 const symbolCustomSafetyAuditService = require('../src/services/symbolCustomSafetyAuditService');
+const symbolCustomPaperRuntimeService = require('../src/services/symbolCustomPaperRuntimeService');
 
 function createRes() {
   return {
@@ -226,6 +232,55 @@ describe('symbolCustomController', () => {
       success: true,
       checks: [{ name: 'placeholder does not trade', status: 'PASS', message: 'ok' }],
       summary: { pass: 1, warn: 0, fail: 0 },
+    });
+  });
+
+  test('paperRuntimeStatus returns SymbolCustom paper runtime status shape', async () => {
+    symbolCustomPaperRuntimeService.getStatus.mockReturnValue({
+      enabled: false,
+      running: false,
+      lastScanAt: null,
+      lastError: null,
+      activePaperCustoms: 0,
+      lastSignals: [],
+    });
+
+    const res = createRes();
+    await controller.paperRuntimeStatus({}, res);
+
+    expect(symbolCustomPaperRuntimeService.getStatus).toHaveBeenCalledTimes(1);
+    expect(res.payload).toEqual({
+      success: true,
+      enabled: false,
+      running: false,
+      lastScanAt: null,
+      lastError: null,
+      activePaperCustoms: 0,
+      lastSignals: [],
+    });
+  });
+
+  test('scanPaperRuntimeOnce runs one paper scan without starting scheduler', async () => {
+    symbolCustomPaperRuntimeService.runPaperScan.mockResolvedValue({
+      success: true,
+      scanned: 1,
+      submitted: 0,
+      ignored: 1,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
+    });
+
+    const res = createRes();
+    await controller.scanPaperRuntimeOnce({}, res);
+
+    expect(symbolCustomPaperRuntimeService.runPaperScan).toHaveBeenCalledWith({});
+    expect(res.payload).toEqual({
+      success: true,
+      scanned: 1,
+      submitted: 0,
+      ignored: 1,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
     });
   });
 

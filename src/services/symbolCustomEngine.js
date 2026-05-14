@@ -1,10 +1,11 @@
 const SymbolCustom = require('../models/SymbolCustom');
 const { getSymbolCustomLogic } = require('../symbolCustom/registry');
 
-const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1 = 'SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1';
+const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2 = 'SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2';
+const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1 = SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2;
 const SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED = 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED';
 const SYMBOL_CUSTOM_CONTEXT_INVALID = 'SYMBOL_CUSTOM_CONTEXT_INVALID';
-const VALID_SCOPES = Object.freeze(['paper', 'backtest', 'live']);
+const VALID_SCOPES = Object.freeze(['paper', 'live']);
 
 function cloneValue(value) {
   if (value === undefined) return undefined;
@@ -41,9 +42,14 @@ function getTimeframes(symbolCustom = {}) {
   return symbolCustom.timeframes || {};
 }
 
+function getConfigObject(symbolCustom = {}, field) {
+  return cloneValue(symbolCustom[field] || {});
+}
+
 function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}) {
   const timeframes = getTimeframes(symbolCustom);
   const timestamp = context.timestamp || new Date();
+  const signal = rawResult.signal || 'NONE';
 
   return {
     scope: context.scope || 'paper',
@@ -52,14 +58,20 @@ function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}
     symbolCustomId: symbolCustom._id || null,
     symbolCustomName: symbolCustom.symbolCustomName,
     logicName: context.logicName || getLogicName(symbolCustom),
-    signal: rawResult.signal || 'NONE',
-    status: rawResult.status,
+    signal,
+    status: rawResult.status || (signal === 'NONE' ? 'NO_SIGNAL' : 'SIGNAL'),
     reason: rawResult.reason || null,
     reasonCode: rawResult.reasonCode,
     setupTimeframe: timeframes.setupTimeframe || null,
     entryTimeframe: timeframes.entryTimeframe || null,
     higherTimeframe: timeframes.higherTimeframe || null,
     parameters: cloneValue(symbolCustom.parameters || {}),
+    riskConfig: getConfigObject(symbolCustom, 'riskConfig'),
+    sessionFilter: getConfigObject(symbolCustom, 'sessionFilter'),
+    newsFilter: getConfigObject(symbolCustom, 'newsFilter'),
+    beConfig: getConfigObject(symbolCustom, 'beConfig'),
+    entryConfig: getConfigObject(symbolCustom, 'entryConfig'),
+    exitConfig: getConfigObject(symbolCustom, 'exitConfig'),
     timestamp,
   };
 }
@@ -99,8 +111,8 @@ async function analyzeSymbolCustom(symbolCustom, getCandlesFn, options = {}) {
       {
         signal: 'NONE',
         status: 'BLOCKED',
-        reason: 'SymbolCustom live execution is not supported in Phase 1',
-        reasonCode: SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
+        reason: 'SymbolCustom live execution is not supported in Phase 2',
+        reasonCode: SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
       },
       { scope, logicName, timestamp }
     );
@@ -123,7 +135,14 @@ async function analyzeSymbolCustom(symbolCustom, getCandlesFn, options = {}) {
     logicName,
     timeframes: getTimeframes(symbolCustom),
     parameters: cloneValue(symbolCustom.parameters || {}),
+    riskConfig: getConfigObject(symbolCustom, 'riskConfig'),
+    sessionFilter: getConfigObject(symbolCustom, 'sessionFilter'),
+    newsFilter: getConfigObject(symbolCustom, 'newsFilter'),
+    beConfig: getConfigObject(symbolCustom, 'beConfig'),
+    entryConfig: getConfigObject(symbolCustom, 'entryConfig'),
+    exitConfig: getConfigObject(symbolCustom, 'exitConfig'),
     candles,
+    activeProfile: options.activeProfile,
   };
 
   if (typeof logic.validateContext === 'function') {
@@ -153,6 +172,7 @@ async function analyzeAllPaperSymbolCustoms(getCandlesFn, options = {}) {
 }
 
 module.exports = {
+  SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
   SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
   SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED,
   SYMBOL_CUSTOM_CONTEXT_INVALID,

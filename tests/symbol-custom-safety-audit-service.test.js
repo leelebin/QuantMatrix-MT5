@@ -156,6 +156,9 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference riskManager')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference old backtestEngine')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {

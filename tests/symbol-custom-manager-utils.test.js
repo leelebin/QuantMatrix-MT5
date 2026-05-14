@@ -5,6 +5,8 @@ const {
   serializeEditorPayload,
   shouldShowLiveWarning,
   buildSymbolCustomSymbolSummaries,
+  flattenSymbolCustomReportRow,
+  buildSymbolCustomReportCsv,
 } = require('../public/js/symbolCustomManager');
 
 describe('symbolCustomManager utils', () => {
@@ -99,5 +101,66 @@ describe('symbolCustomManager utils', () => {
         statusSummary: { draft: 1, validated: 1 },
       }),
     ]);
+  });
+
+  test('flattenSymbolCustomReportRow flattens latest backtest and warnings for CSV', () => {
+    expect(flattenSymbolCustomReportRow({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_DRAFT',
+      displayName: 'USDJPY Draft',
+      status: 'draft',
+      paperEnabled: true,
+      liveEnabled: false,
+      isPrimaryLive: false,
+      allowLive: false,
+      logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      latestBacktest: {
+        status: 'stub',
+        trades: 0,
+        netPnl: 0,
+        profitFactor: null,
+      },
+      recommendation: 'PLACEHOLDER_ONLY',
+      warnings: ['SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1'],
+    })).toEqual({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_DRAFT',
+      displayName: 'USDJPY Draft',
+      status: 'draft',
+      paperEnabled: true,
+      liveEnabled: false,
+      isPrimaryLive: false,
+      allowLive: false,
+      logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      latestBacktestStatus: 'stub',
+      latestBacktestTrades: 0,
+      latestBacktestNetPnl: 0,
+      latestBacktestProfitFactor: '',
+      recommendation: 'PLACEHOLDER_ONLY',
+      warnings: 'SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1',
+    });
+  });
+
+  test('buildSymbolCustomReportCsv escapes commas and warning arrays', () => {
+    const csv = buildSymbolCustomReportCsv([
+      {
+        symbol: 'USDJPY',
+        symbolCustomName: 'USDJPY_DRAFT',
+        displayName: 'USDJPY, Draft',
+        status: 'draft',
+        paperEnabled: false,
+        liveEnabled: false,
+        isPrimaryLive: false,
+        allowLive: false,
+        logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+        latestBacktest: { status: 'stub', trades: 0, netPnl: 0, profitFactor: null },
+        recommendation: 'PLACEHOLDER_ONLY',
+        warnings: ['A', 'B'],
+      },
+    ]);
+
+    expect(csv).toContain('symbol,symbolCustomName,displayName,status,paperEnabled');
+    expect(csv).toContain('"USDJPY, Draft"');
+    expect(csv).toContain('PLACEHOLDER_ONLY,A|B');
   });
 });

@@ -88,6 +88,72 @@
     return Array.from(grouped.values()).sort((left, right) => left.symbol.localeCompare(right.symbol));
   }
 
+  function formatCsvValue(value) {
+    if (Array.isArray(value)) {
+      return value.join('|');
+    }
+    if (value == null) {
+      return '';
+    }
+    return String(value);
+  }
+
+  function escapeCsvCell(value) {
+    const text = formatCsvValue(value);
+    if (/[",\r\n]/.test(text)) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  }
+
+  function flattenSymbolCustomReportRow(row) {
+    const source = row || {};
+    const latestBacktest = source.latestBacktest || {};
+    return {
+      symbol: source.symbol || '',
+      symbolCustomName: source.symbolCustomName || '',
+      displayName: source.displayName || '',
+      status: source.status || '',
+      paperEnabled: source.paperEnabled === true,
+      liveEnabled: source.liveEnabled === true,
+      isPrimaryLive: source.isPrimaryLive === true,
+      allowLive: source.allowLive === true,
+      logicName: source.logicName || '',
+      latestBacktestStatus: latestBacktest.status || '',
+      latestBacktestTrades: latestBacktest.trades == null ? '' : latestBacktest.trades,
+      latestBacktestNetPnl: latestBacktest.netPnl == null ? '' : latestBacktest.netPnl,
+      latestBacktestProfitFactor: latestBacktest.profitFactor == null ? '' : latestBacktest.profitFactor,
+      recommendation: source.recommendation || '',
+      warnings: Array.isArray(source.warnings) ? source.warnings.join('|') : '',
+    };
+  }
+
+  function buildSymbolCustomReportCsv(rows) {
+    const headers = [
+      'symbol',
+      'symbolCustomName',
+      'displayName',
+      'status',
+      'paperEnabled',
+      'liveEnabled',
+      'isPrimaryLive',
+      'allowLive',
+      'logicName',
+      'latestBacktestStatus',
+      'latestBacktestTrades',
+      'latestBacktestNetPnl',
+      'latestBacktestProfitFactor',
+      'recommendation',
+      'warnings',
+    ];
+    const lines = [headers.join(',')];
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const flattened = flattenSymbolCustomReportRow(row);
+      lines.push(headers.map((header) => escapeCsvCell(flattened[header])).join(','));
+    });
+    return lines.join('\n');
+  }
+
   function serializeEditorPayload(values) {
     const source = values || {};
     const errors = [];
@@ -144,5 +210,7 @@
     serializeEditorPayload,
     shouldShowLiveWarning,
     buildSymbolCustomSymbolSummaries,
+    flattenSymbolCustomReportRow,
+    buildSymbolCustomReportCsv,
   };
 }));

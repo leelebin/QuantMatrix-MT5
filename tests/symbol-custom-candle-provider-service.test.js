@@ -1,8 +1,8 @@
-function loadProvider({ candlesByKey = {} } = {}) {
+function loadProvider({ candlesByKey = {}, getCandlesImpl = null } = {}) {
   jest.resetModules();
-  const getCandles = jest.fn(async (symbol, timeframe) => (
+  const getCandles = jest.fn(getCandlesImpl || (async (symbol, timeframe) => (
     candlesByKey[`${symbol}:${timeframe}`] || []
-  ));
+  )));
   const mt5Service = { getCandles };
 
   jest.doMock('../src/services/mt5Service', () => mt5Service);
@@ -51,6 +51,35 @@ describe('symbolCustomCandleProviderService', () => {
       statusCode: 400,
       message: service.SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED,
     });
+  });
+
+  test('maps MT5 not connected candle fetch error to friendly SymbolCustom error', async () => {
+    const { service, mt5Service } = loadProvider({
+      getCandlesImpl: async () => {
+        throw new Error('MT5 not connected. Call connect() first.');
+      },
+    });
+
+    await expect(service.getSymbolCustomCandles({
+      symbol: 'USDJPY',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-04-01',
+      endDate: '2026-04-02',
+    })).rejects.toMatchObject({
+      statusCode: 503,
+      message: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+      reasonCode: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+      hint: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+      details: expect.arrayContaining([
+        expect.objectContaining({
+          field: 'mt5',
+          message: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+          reasonCode: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+          hint: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+        }),
+      ]),
+    });
+    expect(mt5Service.getCandles).toHaveBeenCalledTimes(1);
   });
 
   test('returns setup entry and higher candles with fallback timeframes', async () => {

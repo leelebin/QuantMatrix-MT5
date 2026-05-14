@@ -375,6 +375,42 @@ describe('symbolCustomController', () => {
     expect(deleteRes.payload).toEqual({ success: true, backtest: { _id: 'bt-1' } });
   });
 
+  test('runBacktest returns friendly MT5 not connected error fields', async () => {
+    const error = new Error('MT5 is not connected. Please connect MT5 first before running historical SymbolCustom backtest.');
+    error.statusCode = 503;
+    error.reasonCode = 'SYMBOL_CUSTOM_MT5_NOT_CONNECTED';
+    error.hint = 'Go to Dashboard/Diagnostics and connect MT5, then retry.';
+    error.details = [
+      {
+        field: 'mt5',
+        message: error.message,
+        reasonCode: error.reasonCode,
+        hint: error.hint,
+      },
+    ];
+    symbolCustomBacktestService.runSymbolCustomBacktest.mockRejectedValueOnce(error);
+
+    const res = createRes();
+    await controller.runBacktest({
+      params: { id: 'sc-1' },
+      body: {
+        startDate: '2026-04-01',
+        endDate: '2026-05-01',
+        initialBalance: 500,
+        options: { useHistoricalCandles: true },
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(503);
+    expect(res.payload).toEqual({
+      success: false,
+      message: error.message,
+      reasonCode: error.reasonCode,
+      hint: error.hint,
+      errors: error.details,
+    });
+  });
+
   test('backtest get and delete return 404 for missing records', async () => {
     symbolCustomBacktestService.getSymbolCustomBacktest.mockResolvedValueOnce(null);
     symbolCustomBacktestService.deleteSymbolCustomBacktest.mockResolvedValueOnce(null);

@@ -900,10 +900,19 @@ tr:hover{background:var(--bg3)}
         <div class="card-header"><span class="card-title">Run Backtest</span></div>
         <div class="form-row">
           <div class="form-group">
-            <label>Symbol</label>
-            <select id="btSymbol" onchange="loadBacktestParams()"></select>
+            <label>Backtest Mode</label>
+            <select id="btExecutionMode" onchange="switchBacktestExecutionMode(this.value)">
+              <option value="standard" selected>Standard Strategy</option>
+              <option value="symbolCustom">SymbolCustom</option>
+            </select>
           </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
+            <label>Symbol</label>
+            <select id="btSymbol" onchange="handleBacktestSymbolChange()"></select>
+          </div>
+          <div class="form-group" id="btStandardStrategyGroup">
             <label>Strategy</label>
             <select id="btStrategy" onchange="loadBacktestParams()">
               <option value="ALL">All Strategies (compare)</option>
@@ -915,9 +924,13 @@ tr:hover{background:var(--bg3)}
               <option value="VolumeFlowHybrid">Volume Flow Hybrid</option>
             </select>
           </div>
+          <div class="form-group" id="btSymbolCustomGroup" style="display:none">
+            <label>SymbolCustom</label>
+            <select id="btSymbolCustomSelect" onchange="selectBacktestSymbolCustom(this.value)"></select>
+          </div>
         </div>
         <div class="form-row">
-          <div class="form-group">
+          <div class="form-group" id="btStandardTimeframeGroup">
             <label>Timeframe</label>
             <select id="btTimeframe">
               <option value="">Use Symbol Default</option>
@@ -941,7 +954,7 @@ tr:hover{background:var(--bg3)}
           <label>Initial Balance (USD)</label>
           <input type="number" id="btBalance" value="10000">
         </div>
-        <div class="form-row">
+        <div class="form-row" id="btStandardParameterSourceRow">
           <div class="form-group">
             <label>Parameter Source</label>
             <select id="btParameterPreset" onchange="loadBacktestParams()">
@@ -951,7 +964,7 @@ tr:hover{background:var(--bg3)}
           </div>
         </div>
         <div id="btParamSourceStatus" class="bt-chart-meta" style="margin-bottom:12px">Loading parameter source...</div>
-        <div class="card-header" style="margin-top:12px"><span class="card-title">Strategy Parameters</span></div>
+        <div class="card-header" id="btStandardParamsHeader" style="margin-top:12px"><span class="card-title">Strategy Parameters</span></div>
         <div id="btParams"><div class="empty">Loading parameter inputs...</div></div>
         <details id="btNewsBlackoutPanel" style="margin-top:12px">
           <summary style="cursor:pointer;font-weight:600">News Blackout</summary>
@@ -960,6 +973,12 @@ tr:hover{background:var(--bg3)}
           </div>
           <div id="btNewsBlackoutStatus" style="font-size:12px;color:var(--text2);margin-top:8px"></div>
         </details>
+        <div id="btSymbolCustomPanel" style="display:none;margin-top:12px">
+          <div class="readonly-note">SymbolCustom backtests call SymbolCustom logic only. Live and paper execution are not changed.</div>
+          <div id="btSymbolCustomStatus" class="bt-chart-meta" style="margin-bottom:12px">Select a symbol to load SymbolCustom records.</div>
+          <div id="btSymbolCustomSummary"><div class="empty">No SymbolCustom selected</div></div>
+          <button class="btn-outline btn-sm" style="margin-top:10px" id="btSymbolCustomEditBtn" onclick="openSelectedBacktestSymbolCustomInManager()" disabled>Edit in SymbolCustom Manager</button>
+        </div>
         <button class="btn-primary" onclick="runBacktest()" id="btRunBtn">Run Backtest</button>
       </div>
       <div class="card">
@@ -989,9 +1008,16 @@ tr:hover{background:var(--bg3)}
           <div class="empty" style="padding:0;text-align:left">Click a trade marker or row to inspect entry and exit reasons.</div>
         </div>
         <div class="bt-trade-events-wrap">
-          <div class="card-header" style="padding:14px 16px 0;margin-bottom:10px">
+          <div class="card-header" style="padding:14px 16px 0;margin-bottom:10px;gap:8px;flex-wrap:wrap">
             <span class="card-title">Trade Events</span>
+            <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn-outline btn-sm" onclick="copyBacktestTradeEventsForAi()">Copy AI Report</button>
+              <button class="btn-outline btn-sm" onclick="downloadBacktestTradeEventsExport('md')">Download MD</button>
+              <button class="btn-outline btn-sm" onclick="downloadBacktestTradeEventsExport('json')">Download JSON</button>
+              <button class="btn-outline btn-sm" onclick="downloadBacktestTradeEventsExport('csv')">Download CSV</button>
+            </div>
           </div>
+          <div id="btTradeEventsExportStatus" class="bt-chart-meta" style="padding:0 16px 8px">Export current trade events for AI review and optimization analysis.</div>
           <div id="btTradeEvents" class="bt-trade-events-scroll">
             <div class="empty">No trades yet</div>
           </div>
@@ -1827,6 +1853,7 @@ tr:hover{background:var(--bg3)}
 <script src="/vendor/plotly-2.35.2.min.js"></script>
 <script src="/js/symbolPlaybookAnalyticsCsv.js"></script>
 <script src="/js/symbolCustomManager.js"></script>
+<script src="/js/backtestPageUtils.js"></script>
 <script>
 // --- State ---
 const API = '';
@@ -1859,6 +1886,8 @@ let selectedOptimizerResultIndex = 0;
 let optimizerPollTimer = null;
 let optimizerStopRequested = false;
 let backtestMode = 'single';
+let backtestExecutionMode = 'standard';
+let backtestSymbolCustomState = { rows: [], selectedId: null, selectedRecord: null, loading: false };
 let activeBatchJobId = null;
 let activeBatchReport = null;
 let activeBatchResultPage = 1;
@@ -1880,6 +1909,7 @@ let currentSingleBacktestResult = null;
 let currentSingleBacktestRenderMeta = null;
 let currentSingleBacktestFormState = null;
 let activeHistoricalBacktestId = null;
+let activeHistoricalBacktestMode = 'STANDARD';
 let activeHistoricalBacktestDetail = null;
 const DEFAULT_BREAKEVEN = {
   enabled: true,
@@ -2017,8 +2047,6 @@ function onPageSwitch(page) {
   else if (page === 'symbol-custom-manager') loadSymbolCustomManager();
   else if (page === 'backtest') {
     switchBacktestMode(backtestMode);
-    loadBacktestHistory();
-    loadBacktestParams();
     loadBatchJobHistory();
     if (activeBatchJobId) {
       loadBatchJob(activeBatchJobId);
@@ -4889,7 +4917,20 @@ async function saveStrategyBreakevenOverride(strategyId) {
   }
 }
 
+function getBacktestPageUtils() {
+  return window.BacktestPageUtils || {};
+}
+
+function isSymbolCustomBacktestMode() {
+  return backtestExecutionMode === 'symbolCustom';
+}
+
 async function loadBacktestParams() {
+  if (isSymbolCustomBacktestMode()) {
+    await loadBacktestSymbolCustoms();
+    return;
+  }
+
   const selectedStrategy = document.getElementById('btStrategy').value;
   const selectedSymbol = document.getElementById('btSymbol').value;
   const selectedPreset = document.getElementById('btParameterPreset').value || 'default';
@@ -4973,6 +5014,185 @@ async function loadBacktestParams() {
     currentBacktestPresetState = null;
     setBacktestPresetStatus('<span style="color:var(--red)">Failed to load parameter source.</span>', e.message || 'Load error');
   }
+}
+
+function handleBacktestSymbolChange() {
+  if (isSymbolCustomBacktestMode()) {
+    loadBacktestSymbolCustoms();
+    return;
+  }
+  loadBacktestParams();
+}
+
+function setElementVisible(id, visible) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = visible ? '' : 'none';
+}
+
+function updateBacktestRunButtonAvailability(running = false) {
+  const btn = document.getElementById('btRunBtn');
+  if (!btn) return;
+  if (running) {
+    btn.disabled = true;
+    return;
+  }
+  if (isSymbolCustomBacktestMode()) {
+    const utils = getBacktestPageUtils();
+    const state = utils.getSymbolCustomSelectionState
+      ? utils.getSymbolCustomSelectionState(backtestSymbolCustomState.rows, backtestSymbolCustomState.selectedId)
+      : { runEnabled: false };
+    btn.disabled = !state.runEnabled;
+  } else {
+    btn.disabled = false;
+  }
+  btn.textContent = 'Run Backtest';
+}
+
+async function switchBacktestExecutionMode(mode) {
+  backtestExecutionMode = mode === 'symbolCustom' ? 'symbolCustom' : 'standard';
+  const select = document.getElementById('btExecutionMode');
+  if (select) select.value = backtestExecutionMode;
+  const isSymbolCustom = isSymbolCustomBacktestMode();
+
+  setElementVisible('btStandardStrategyGroup', !isSymbolCustom);
+  setElementVisible('btStandardTimeframeGroup', !isSymbolCustom);
+  setElementVisible('btStandardParameterSourceRow', !isSymbolCustom);
+  setElementVisible('btStandardParamsHeader', !isSymbolCustom);
+  setElementVisible('btParams', !isSymbolCustom);
+  setElementVisible('btNewsBlackoutPanel', !isSymbolCustom);
+  setElementVisible('btParamSourceStatus', !isSymbolCustom);
+  setElementVisible('btSymbolCustomGroup', isSymbolCustom);
+  setElementVisible('btSymbolCustomPanel', isSymbolCustom);
+
+  if (isSymbolCustom) {
+    resetSingleBacktestWorkspace('Run a SymbolCustom backtest to see results');
+    await loadBacktestSymbolCustoms();
+  } else {
+    await loadBacktestParams();
+  }
+  await loadBacktestHistory();
+  updateBacktestRunButtonAvailability(false);
+}
+
+function renderBacktestSymbolCustomSummary(record) {
+  const target = document.getElementById('btSymbolCustomSummary');
+  const statusEl = document.getElementById('btSymbolCustomStatus');
+  const editBtn = document.getElementById('btSymbolCustomEditBtn');
+  const utils = getBacktestPageUtils();
+  const state = utils.getSymbolCustomSelectionState
+    ? utils.getSymbolCustomSelectionState(backtestSymbolCustomState.rows, record && record._id)
+    : { runEnabled: false, warning: '' };
+
+  if (editBtn) editBtn.disabled = !record || !record._id;
+  if (statusEl) {
+    statusEl.innerHTML = state.warning
+      ? '<span style="color:var(--yellow)">' + escapeHtml(state.warning) + '</span>'
+      : 'Ready to run SymbolCustom backtest. This does not affect paper or live execution.';
+  }
+  if (!target) return;
+  if (!record) {
+    target.innerHTML = '<div class="empty">No SymbolCustom selected</div>';
+    return;
+  }
+
+  const jsonBlock = (label, value) => (
+    '<tr><td style="color:var(--text2)">' + label + '</td><td><pre style="white-space:pre-wrap;margin:0;font-size:11px;color:var(--text)">' + escapeHtml(JSON.stringify(value || {}, null, 2)) + '</pre></td></tr>'
+  );
+  let html = '<table>';
+  html += '<tr><td style="color:var(--text2)">symbolCustomName</td><td><strong>' + escapeHtml(record.symbolCustomName || '--') + '</strong></td></tr>';
+  html += '<tr><td style="color:var(--text2)">logicName</td><td>' + escapeHtml(record.logicName || record.registryLogicName || '--') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">status</td><td>' + escapeHtml(record.status || '--') + '</td></tr>';
+  html += jsonBlock('timeframes', record.timeframes || {});
+  html += jsonBlock('parameters', record.parameters || {});
+  html += jsonBlock('riskConfig', record.riskConfig || {});
+  html += jsonBlock('beConfig', record.beConfig || {});
+  html += jsonBlock('sessionFilter', record.sessionFilter || {});
+  html += jsonBlock('newsFilter', record.newsFilter || {});
+  html += '</table>';
+  target.innerHTML = html;
+}
+
+function renderBacktestSymbolCustomOptions(rows, selectedId = null) {
+  const select = document.getElementById('btSymbolCustomSelect');
+  const utils = getBacktestPageUtils();
+  const state = utils.getSymbolCustomSelectionState
+    ? utils.getSymbolCustomSelectionState(rows, selectedId)
+    : { rows: rows || [], selectedRecord: null, runEnabled: false, warning: '' };
+
+  backtestSymbolCustomState.selectedRecord = state.selectedRecord || null;
+  backtestSymbolCustomState.selectedId = state.selectedRecord ? state.selectedRecord._id : null;
+
+  if (select) {
+    select.innerHTML = '';
+    if (!state.rows.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No SymbolCustom found';
+      select.appendChild(option);
+      select.disabled = true;
+    } else {
+      state.rows.forEach((record) => {
+        const option = document.createElement('option');
+        option.value = record._id || '';
+        option.textContent = (record.symbolCustomName || record.displayName || record._id || 'SymbolCustom')
+          + (utils.isPlaceholderSymbolCustom && utils.isPlaceholderSymbolCustom(record) ? ' (placeholder)' : '');
+        select.appendChild(option);
+      });
+      select.disabled = false;
+      if (state.selectedRecord && state.selectedRecord._id) select.value = state.selectedRecord._id;
+    }
+  }
+
+  renderBacktestSymbolCustomSummary(state.selectedRecord || null);
+  updateBacktestRunButtonAvailability(false);
+}
+
+async function loadBacktestSymbolCustoms(preferredId = null) {
+  const symbol = document.getElementById('btSymbol')?.value || '';
+  const statusEl = document.getElementById('btSymbolCustomStatus');
+  if (!symbol) {
+    backtestSymbolCustomState = { rows: [], selectedId: null, selectedRecord: null, loading: false };
+    renderBacktestSymbolCustomOptions([]);
+    if (statusEl) statusEl.textContent = 'Select a symbol to load SymbolCustom records.';
+    return;
+  }
+
+  backtestSymbolCustomState.loading = true;
+  if (statusEl) statusEl.textContent = 'Loading SymbolCustom records for ' + symbol + '...';
+  updateBacktestRunButtonAvailability(true);
+  try {
+    const response = await api('/api/symbol-customs/by-symbol/' + encodeURIComponent(symbol));
+    if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustom records');
+    backtestSymbolCustomState.rows = Array.isArray(response.symbolCustoms) ? response.symbolCustoms : [];
+    renderBacktestSymbolCustomOptions(backtestSymbolCustomState.rows, preferredId || backtestSymbolCustomState.selectedId);
+  } catch (error) {
+    backtestSymbolCustomState.rows = [];
+    backtestSymbolCustomState.selectedId = null;
+    backtestSymbolCustomState.selectedRecord = null;
+    renderBacktestSymbolCustomOptions([]);
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(error.message || 'Failed to load SymbolCustom records') + '</span>';
+  } finally {
+    backtestSymbolCustomState.loading = false;
+    updateBacktestRunButtonAvailability(false);
+  }
+}
+
+function selectBacktestSymbolCustom(id) {
+  renderBacktestSymbolCustomOptions(backtestSymbolCustomState.rows, id);
+}
+
+async function openSelectedBacktestSymbolCustomInManager() {
+  const record = backtestSymbolCustomState.selectedRecord;
+  if (!record || !record._id) return;
+  symbolCustomManagerState.selectedSymbol = record.symbol || symbolCustomManagerState.selectedSymbol;
+  symbolCustomManagerState.selectedId = record._id;
+  const navBtn = document.querySelector('.nav button[data-page="symbol-custom-manager"]');
+  if (navBtn) navBtn.click();
+  setTimeout(() => {
+    symbolCustomManagerState.selectedSymbol = record.symbol || symbolCustomManagerState.selectedSymbol;
+    symbolCustomManagerState.selectedId = record._id;
+    loadSymbolCustomManager({ preserveSelection: true });
+  }, 0);
 }
 
 function resolveHistoricalInitialBalance(detail) {
@@ -5062,6 +5282,11 @@ async function saveBacktestNewsBlackout() {
 }
 
 async function runBacktest(options = {}) {
+  if (isSymbolCustomBacktestMode()) {
+    await runSymbolCustomBacktestFromBacktestPage();
+    return;
+  }
+
   const btn = document.getElementById('btRunBtn');
   const strategyType = document.getElementById('btStrategy').value;
   const isAll = strategyType === 'ALL';
@@ -5077,13 +5302,23 @@ async function runBacktest(options = {}) {
   }
   try {
     if (isAll) {
-      const r = await api('/api/backtest/run-all-strategies', 'POST', {
+      const utils = getBacktestPageUtils();
+      const payload = utils.buildStandardAllStrategiesPayload
+        ? utils.buildStandardAllStrategiesPayload({
+          symbol: document.getElementById('btSymbol').value,
+          timeframe: document.getElementById('btTimeframe').value || undefined,
+          startDate: document.getElementById('btStartDate').value,
+          endDate: document.getElementById('btEndDate').value,
+          initialBalance: document.getElementById('btBalance').value,
+        })
+        : {
         symbol: document.getElementById('btSymbol').value,
         timeframe: document.getElementById('btTimeframe').value || undefined,
         startDate: document.getElementById('btStartDate').value,
         endDate: document.getElementById('btEndDate').value,
         initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
-      });
+      };
+      const r = await api('/api/backtest/run-all-strategies', 'POST', payload);
       if (r.success) {
         deactivateHistoricalBacktestView();
         currentSingleBacktestResult = null;
@@ -5095,7 +5330,19 @@ async function runBacktest(options = {}) {
         document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + r.message + '</div>';
       }
     } else {
-      const r = await api('/api/backtest/run', 'POST', {
+      const utils = getBacktestPageUtils();
+      const payload = utils.buildStandardBacktestPayload
+        ? utils.buildStandardBacktestPayload({
+          symbol: document.getElementById('btSymbol').value,
+          strategyType,
+          timeframe: document.getElementById('btTimeframe').value || undefined,
+          startDate: document.getElementById('btStartDate').value,
+          endDate: document.getElementById('btEndDate').value,
+          initialBalance: document.getElementById('btBalance').value,
+          parameterPreset: document.getElementById('btParameterPreset').value || 'default',
+          strategyParams: runtimeOverrideParams,
+        })
+        : {
         symbol: document.getElementById('btSymbol').value,
         strategyType,
         timeframe: document.getElementById('btTimeframe').value || undefined,
@@ -5104,7 +5351,8 @@ async function runBacktest(options = {}) {
         initialBalance: parseInt(document.getElementById('btBalance').value) || 10000,
         parameterPreset: document.getElementById('btParameterPreset').value || 'default',
         strategyParams: runtimeOverrideParams,
-      });
+      };
+      const r = await api('/api/backtest/run', 'POST', payload);
       if (r.success) {
         currentSingleBacktestResult = r.data;
         currentSingleBacktestRenderMeta = renderMeta;
@@ -5122,6 +5370,79 @@ async function runBacktest(options = {}) {
     resetSingleBacktestChart(e.message || 'Backtest failed');
   }
   finally { btn.disabled = false; btn.textContent = 'Run Backtest'; }
+}
+
+async function runSymbolCustomBacktestFromBacktestPage() {
+  const btn = document.getElementById('btRunBtn');
+  const resultEl = document.getElementById('btResult');
+  const utils = getBacktestPageUtils();
+  const selection = utils.getSymbolCustomSelectionState
+    ? utils.getSymbolCustomSelectionState(backtestSymbolCustomState.rows, backtestSymbolCustomState.selectedId)
+    : { selectedRecord: backtestSymbolCustomState.selectedRecord, runEnabled: false, warning: 'No SymbolCustom selected' };
+  const record = selection.selectedRecord;
+
+  if (!selection.runEnabled || !record || !record._id) {
+    const message = selection.warning || 'Select a SymbolCustom with active backtest logic.';
+    if (resultEl) resultEl.innerHTML = '<div class="empty" style="color:var(--yellow)">' + escapeHtml(message) + '</div>';
+    resetSingleBacktestChart(message);
+    return;
+  }
+
+  const request = utils.buildSymbolCustomBacktestRequest
+    ? utils.buildSymbolCustomBacktestRequest(record, {
+      startDate: document.getElementById('btStartDate').value,
+      endDate: document.getElementById('btEndDate').value,
+      initialBalance: document.getElementById('btBalance').value,
+    })
+    : null;
+
+  if (!request) {
+    if (resultEl) resultEl.innerHTML = '<div class="empty" style="color:var(--red)">SymbolCustom backtest helper unavailable</div>';
+    return;
+  }
+
+  const requestedFormState = captureBacktestFormState();
+  deactivateHistoricalBacktestView();
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+  }
+  resetSingleBacktestChart('Running SymbolCustom backtest...');
+
+  try {
+    const response = await api(request.endpoint, 'POST', request.payload);
+    if (!response.success) {
+      const errorInfo = utils.normalizeBacktestError
+        ? utils.normalizeBacktestError(response, 'Failed to run SymbolCustom backtest')
+        : { message: response.message || 'Failed to run SymbolCustom backtest' };
+      if (resultEl) {
+        let html = '<div class="empty" style="color:var(--red)">' + escapeHtml(errorInfo.message) + '</div>';
+        if (errorInfo.hint) {
+          html += '<div class="bt-chart-warning" style="margin-top:8px">' + escapeHtml(errorInfo.hint) + '</div>';
+        }
+        resultEl.innerHTML = html;
+      }
+      resetSingleBacktestChart(errorInfo.message);
+      return;
+    }
+
+    const normalized = utils.normalizeBacktestResult
+      ? utils.normalizeBacktestResult(response.backtest || {}, 'symbolCustom')
+      : (response.backtest || {});
+    currentSingleBacktestResult = normalized;
+    currentSingleBacktestRenderMeta = {
+      label: 'SymbolCustom ' + (normalized.symbolCustomName || record.symbolCustomName || '--'),
+      noChartMessage: 'No SymbolCustom candle chart data returned for this backtest.',
+    };
+    currentSingleBacktestFormState = requestedFormState;
+    renderBacktestResult(normalized, 'btResult', 'equityCanvas', currentSingleBacktestRenderMeta);
+    loadBacktestHistory();
+  } catch (error) {
+    if (resultEl) resultEl.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(error.message || 'Failed to run SymbolCustom backtest') + '</div>';
+    resetSingleBacktestChart(error.message || 'SymbolCustom backtest failed');
+  } finally {
+    updateBacktestRunButtonAvailability(false);
+  }
 }
 
 function renderAllStrategiesResult(data) {
@@ -5187,13 +5508,17 @@ function switchBacktestMode(mode) {
   if (backtestMode === 'batch') {
     if (typeof toggleForcedTimeframeVisibility === 'function') toggleForcedTimeframeVisibility();
     if (typeof updateRunModelHint === 'function') updateRunModelHint();
+  } else {
+    switchBacktestExecutionMode(backtestExecutionMode);
   }
 }
 
 function captureBacktestFormState() {
   return {
+    executionMode: backtestExecutionMode,
     symbol: document.getElementById('btSymbol')?.value || '',
     strategy: document.getElementById('btStrategy')?.value || 'ALL',
+    symbolCustomId: backtestSymbolCustomState.selectedId || '',
     timeframe: document.getElementById('btTimeframe')?.value || '',
     startDate: document.getElementById('btStartDate')?.value || '',
     endDate: document.getElementById('btEndDate')?.value || '',
@@ -5206,6 +5531,7 @@ function applyBacktestFormState(state) {
   if (!state) return;
   if (document.getElementById('btSymbol') && state.symbol) document.getElementById('btSymbol').value = state.symbol;
   if (document.getElementById('btStrategy') && state.strategy) document.getElementById('btStrategy').value = state.strategy;
+  if (state.symbolCustomId) backtestSymbolCustomState.selectedId = state.symbolCustomId;
   if (document.getElementById('btTimeframe')) document.getElementById('btTimeframe').value = state.timeframe || '';
   if (document.getElementById('btStartDate') && state.startDate) document.getElementById('btStartDate').value = state.startDate;
   if (document.getElementById('btEndDate') && state.endDate) document.getElementById('btEndDate').value = state.endDate;
@@ -5215,7 +5541,10 @@ function applyBacktestFormState(state) {
 
 function syncBacktestHistorySelection() {
   document.querySelectorAll('#btHistory tr.backtest-history-row').forEach((row) => {
-    row.classList.toggle('active', row.dataset.backtestId === String(activeHistoricalBacktestId || ''));
+    const activeKey = activeHistoricalBacktestId
+      ? String(activeHistoricalBacktestMode || 'STANDARD') + ':' + String(activeHistoricalBacktestId)
+      : '';
+    row.classList.toggle('active', row.dataset.backtestKey === activeKey);
   });
 }
 
@@ -5231,8 +5560,11 @@ function renderBacktestHistoryBanner(detail) {
 
   const parts = [
     'Viewing historical backtest',
-    (detail.symbol || '--') + ' / ' + (detail.strategy || '--'),
+    (detail.symbol || '--') + ' / ' + (detail.symbolCustomName || detail.strategy || '--'),
   ];
+  if (detail.mode || detail.source) {
+    parts.push((detail.mode || 'STANDARD') + ' / ' + (detail.source || 'six_strategy'));
+  }
   if (detail.createdAt) {
     parts.push(fmtTime(detail.createdAt));
   }
@@ -5251,6 +5583,7 @@ function resetSingleBacktestWorkspace(message = 'Run a backtest to see results')
 
 function deactivateHistoricalBacktestView() {
   activeHistoricalBacktestId = null;
+  activeHistoricalBacktestMode = 'STANDARD';
   activeHistoricalBacktestDetail = null;
   renderBacktestHistoryBanner(null);
   syncBacktestHistorySelection();
@@ -5260,6 +5593,9 @@ async function clearHistoricalBacktestView() {
   deactivateHistoricalBacktestView();
   if (currentSingleBacktestFormState) {
     applyBacktestFormState(currentSingleBacktestFormState);
+    if (currentSingleBacktestFormState.executionMode) {
+      await switchBacktestExecutionMode(currentSingleBacktestFormState.executionMode);
+    }
   }
   if (currentSingleBacktestResult) {
     renderBacktestResult(currentSingleBacktestResult, 'btResult', 'equityCanvas', currentSingleBacktestRenderMeta);
@@ -5272,7 +5608,7 @@ async function clearHistoricalBacktestView() {
 function normalizeBacktestTradeEvents(trades) {
   return (Array.isArray(trades) ? trades : []).map((trade, index) => ({
     tradeId: trade.tradeId != null ? trade.tradeId : (trade.id != null ? trade.id : (index + 1)),
-    direction: trade.direction || trade.type || '--',
+    direction: trade.direction || trade.type || trade.side || '--',
     entryTime: trade.entryTime || null,
     entryPrice: trade.entryPrice,
     entryReason: trade.entryReason || trade.reason || '',
@@ -5282,9 +5618,9 @@ function normalizeBacktestTradeEvents(trades) {
     exitPrice: trade.exitPrice,
     exitReason: trade.exitReasonText || trade.exitReason || '',
     exitReasonCode: trade.exitReason || '',
-    profitLoss: trade.profitLoss,
-    profitPips: trade.profitPips,
-    module: trade.module || (trade.indicatorsAtEntry && trade.indicatorsAtEntry.module) || null,
+    profitLoss: trade.profitLoss != null ? trade.profitLoss : trade.pnl,
+    profitPips: trade.profitPips != null ? trade.profitPips : null,
+    module: trade.module || trade.logicName || (trade.indicatorsAtEntry && trade.indicatorsAtEntry.module) || null,
   }));
 }
 
@@ -5330,7 +5666,7 @@ function renderNeutralOutcomeSummaryRow(summary) {
 }
 
 function renderBacktestResult(data, resultElementId='btResult', canvasId='equityCanvas', overrideMeta=null) {
-  const s = data.summary;
+  const s = data.summary || {};
   const fallbackTradeEvents = normalizeBacktestTradeEvents(data.trades);
   let html = '<table>';
   html += '<tr><td style="color:var(--text2)">Total Trades</td><td>' + s.totalTrades + '</td></tr>';
@@ -5436,6 +5772,7 @@ function buildBacktestTradeRow(trade) {
 function renderSingleBacktestTradeEvents(tradeEvents) {
   const container = document.getElementById('btTradeEvents');
   if (!container) return;
+  updateBacktestTradeEventsExportStatus(tradeEvents);
   if (!tradeEvents || tradeEvents.length === 0) {
     container.innerHTML = '<div class="empty">No trades for this backtest</div>';
     return;
@@ -5449,6 +5786,82 @@ function renderSingleBacktestTradeEvents(tradeEvents) {
   });
   html += '</tbody></table>';
   container.innerHTML = html;
+}
+
+function setBacktestTradeEventsExportStatus(message, type='muted') {
+  const statusEl = document.getElementById('btTradeEventsExportStatus');
+  if (!statusEl) return;
+  statusEl.textContent = message;
+  statusEl.style.color = type === 'error'
+    ? 'var(--red)'
+    : (type === 'success' ? 'var(--green)' : 'var(--text2)');
+}
+
+function updateBacktestTradeEventsExportStatus(tradeEvents) {
+  const hasResult = Boolean(activeHistoricalBacktestDetail || currentSingleBacktestResult);
+  const count = Array.isArray(tradeEvents) ? tradeEvents.length : 0;
+  if (!hasResult) {
+    setBacktestTradeEventsExportStatus('Run or load a single backtest before exporting trade events.');
+    return;
+  }
+  setBacktestTradeEventsExportStatus('Ready to export ' + count + ' trade event' + (count === 1 ? '' : 's') + ' for AI review.');
+}
+
+function getBacktestTradeEventsExport(format='md') {
+  const utils = getBacktestPageUtils();
+  if (!utils.buildBacktestTradeEventsExport) {
+    throw new Error('Backtest export helper is not available');
+  }
+  const result = activeHistoricalBacktestDetail || currentSingleBacktestResult;
+  if (!result && (!backtestChartEvents || backtestChartEvents.length === 0)) {
+    throw new Error('Run or load a single backtest before exporting trade events.');
+  }
+  const mode = activeHistoricalBacktestId
+    ? (activeHistoricalBacktestMode === 'SYMBOLCUSTOM' ? 'symbolCustom' : 'standard')
+    : backtestExecutionMode;
+  return utils.buildBacktestTradeEventsExport({
+    result: result || {},
+    tradeEvents: backtestChartEvents || [],
+    formState: currentSingleBacktestFormState || captureBacktestFormState(),
+    mode,
+    selectedTradeId: selectedBacktestTradeId,
+    format,
+  });
+}
+
+async function copyBacktestTradeEventsForAi() {
+  try {
+    const exportData = getBacktestTradeEventsExport('md');
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      throw new Error('Clipboard API unavailable. Use Download MD instead.');
+    }
+    await navigator.clipboard.writeText(exportData.content);
+    setBacktestTradeEventsExportStatus('Copied AI report with ' + exportData.payload.tradeCount + ' trade event' + (exportData.payload.tradeCount === 1 ? '' : 's') + '.', 'success');
+    wsLog('success', 'Copied backtest trade events AI report');
+  } catch (e) {
+    setBacktestTradeEventsExportStatus(e.message || 'Copy failed', 'error');
+    alert('Copy failed: ' + (e.message || e));
+  }
+}
+
+function downloadBacktestTradeEventsExport(format='md') {
+  try {
+    const exportData = getBacktestTradeEventsExport(format);
+    const blob = new Blob([exportData.content], { type: exportData.mimeType || 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = exportData.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setBacktestTradeEventsExportStatus('Downloaded ' + exportData.filename + '.', 'success');
+    wsLog('success', 'Downloaded backtest trade events export as ' + format);
+  } catch (e) {
+    setBacktestTradeEventsExportStatus(e.message || 'Download failed', 'error');
+    alert('Download failed: ' + (e.message || e));
+  }
 }
 
 function renderSingleBacktestTradeDetail(trade) {
@@ -5950,21 +6363,49 @@ function drawEquityCurve(curve, canvasId='equityCanvas') {
 
 async function loadBacktestHistory() {
   try {
-    const r = await api('/api/backtest/results?limit=10');
-    if (!r.success) return;
     const el = document.getElementById('btHistory');
-    if (!r.data || r.data.length === 0) { el.innerHTML = '<div class="empty">No previous backtests</div>'; return; }
-    let html = '<table class="backtest-history-table"><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Action</th></tr>';
-    r.data.forEach(b => {
-      const s = b.summary;
-      const rowClass = 'backtest-history-row' + (String(activeHistoricalBacktestId || '') === String(b._id) ? ' active' : '');
-      html += '<tr class="' + rowClass + '" data-backtest-id="' + escapeHtml(String(b._id)) + '" onclick="loadHistoricalBacktest(\'' + escapeJsString(String(b._id)) + '\')"><td>' + fmtTime(b.createdAt) + '</td><td>' + b.symbol + '</td><td>' + b.strategy + '</td>';
-      html += '<td>' + s.totalTrades + '</td>';
-      html += '<td>' + (s.winRate*100).toFixed(1) + '%</td>';
-      html += '<td>' + fmtBreakevenCompact(s) + '</td>';
-      html += '<td>' + s.profitFactor + '</td>';
-      html += '<td style="color:' + (s.returnPercent>=0?'var(--green)':'var(--red)') + '">' + s.returnPercent + '%</td>';
-      html += '<td class="actions"><button class="btn-danger btn-sm" onclick="deleteBacktestResult(event, \'' + escapeJsString(String(b._id)) + '\', \'' + escapeJsString(b.symbol + ' / ' + b.strategy) + '\')">Delete</button></td></tr>';
+    const utils = getBacktestPageUtils();
+    const symbolCustomMode = isSymbolCustomBacktestMode();
+    const r = symbolCustomMode
+      ? await api('/api/symbol-customs/backtests?limit=10')
+      : await api('/api/backtest/results?limit=10');
+    if (!r.success) return;
+    const rawRows = symbolCustomMode ? (r.backtests || []) : (r.data || []);
+    const rows = rawRows.slice(0, 10).map((item) => (
+      utils.normalizeBacktestHistoryRow
+        ? utils.normalizeBacktestHistoryRow(item, symbolCustomMode ? 'symbolCustom' : 'standard')
+        : item
+    ));
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty">No previous backtests</div>';
+      return;
+    }
+
+    let html = '<table class="backtest-history-table"><tr><th>Date</th><th>Mode</th><th>Source</th><th>Symbol</th><th>Strategy / Custom</th><th>Logic</th><th>Trades</th><th>Win Rate</th><th>BE</th><th>PF</th><th>Return</th><th>Action</th></tr>';
+    rows.forEach(row => {
+      const s = row.summary || {};
+      const activeKey = String(activeHistoricalBacktestMode || 'STANDARD') + ':' + String(activeHistoricalBacktestId || '');
+      const rowKey = String(row.mode || 'STANDARD') + ':' + String(row.id || '');
+      const rowClass = 'backtest-history-row' + (activeKey === rowKey ? ' active' : '');
+      const isSymbolCustomRow = row.mode === 'SYMBOLCUSTOM';
+      const openFn = isSymbolCustomRow ? 'loadHistoricalSymbolCustomBacktest' : 'loadHistoricalBacktest';
+      const deleteFn = isSymbolCustomRow ? 'deleteSymbolCustomBacktestResult' : 'deleteBacktestResult';
+      const label = row.symbol + ' / ' + row.label;
+      const winRate = s.winRate != null ? (Number(s.winRate) * 100).toFixed(1) + '%' : '--';
+      const returnValue = s.returnPercent != null ? Number(s.returnPercent) : 0;
+      html += '<tr class="' + rowClass + '" data-backtest-key="' + escapeHtml(rowKey) + '" onclick="' + openFn + '(\'' + escapeJsString(String(row.id)) + '\')">';
+      html += '<td>' + fmtTime(row.createdAt) + '</td>';
+      html += '<td><span class="tag tag-blue">' + escapeHtml(row.mode || '--') + '</span></td>';
+      html += '<td>' + escapeHtml(row.source || '--') + '</td>';
+      html += '<td>' + escapeHtml(row.symbol || '--') + '</td>';
+      html += '<td>' + escapeHtml(row.label || '--') + '</td>';
+      html += '<td>' + escapeHtml(row.logicName || '--') + '</td>';
+      html += '<td>' + (s.totalTrades != null ? s.totalTrades : '--') + '</td>';
+      html += '<td>' + winRate + '</td>';
+      html += '<td>' + (isSymbolCustomRow ? '--' : fmtBreakevenCompact(s)) + '</td>';
+      html += '<td>' + (s.profitFactor != null ? s.profitFactor : '--') + '</td>';
+      html += '<td style="color:' + (returnValue >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.returnPercent != null ? returnValue.toFixed(2) + '%' : '--') + '</td>';
+      html += '<td class="actions"><button class="btn-danger btn-sm" onclick="' + deleteFn + '(event, \'' + escapeJsString(String(row.id)) + '\', \'' + escapeJsString(label) + '\')">Delete</button></td></tr>';
     });
     html += '</table>';
     el.innerHTML = html;
@@ -5974,9 +6415,12 @@ async function loadBacktestHistory() {
 
 async function loadHistoricalBacktest(id) {
   activeHistoricalBacktestId = id;
+  activeHistoricalBacktestMode = 'STANDARD';
   syncBacktestHistorySelection();
   renderBacktestHistoryBanner({
     _id: id,
+    mode: 'STANDARD',
+    source: 'six_strategy',
     symbol: 'Loading',
     strategy: 'Historical Result',
   });
@@ -5989,6 +6433,7 @@ async function loadHistoricalBacktest(id) {
     if (!r.success) throw new Error(r.message || 'Failed to load historical backtest');
     const detail = r.data || {};
     activeHistoricalBacktestId = detail._id || id;
+    activeHistoricalBacktestMode = 'STANDARD';
     activeHistoricalBacktestDetail = detail;
     syncHistoricalBacktestForm(detail);
     await renderHistoricalBacktestParameterPreview(detail);
@@ -6001,6 +6446,55 @@ async function loadHistoricalBacktest(id) {
   }
 }
 
+async function loadHistoricalSymbolCustomBacktest(id) {
+  activeHistoricalBacktestId = id;
+  activeHistoricalBacktestMode = 'SYMBOLCUSTOM';
+  syncBacktestHistorySelection();
+  renderBacktestHistoryBanner({
+    _id: id,
+    mode: 'SYMBOLCUSTOM',
+    source: 'symbolCustom',
+    symbol: 'Loading',
+    symbolCustomName: 'Historical Result',
+  });
+  document.getElementById('btResult').innerHTML = '<div class="empty">Loading historical SymbolCustom backtest...</div>';
+  resetSingleBacktestChart('Loading historical SymbolCustom chart...');
+  clearCanvas('equityCanvas');
+
+  try {
+    const response = await api('/api/symbol-customs/backtests/' + encodeURIComponent(id));
+    if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustom backtest');
+    const detail = response.backtest || {};
+    const utils = getBacktestPageUtils();
+    const normalized = utils.normalizeBacktestResult
+      ? utils.normalizeBacktestResult(detail, 'symbolCustom')
+      : detail;
+    activeHistoricalBacktestId = detail._id || id;
+    activeHistoricalBacktestMode = 'SYMBOLCUSTOM';
+    activeHistoricalBacktestDetail = normalized;
+
+    if (detail.symbol && document.getElementById('btSymbol')) {
+      document.getElementById('btSymbol').value = detail.symbol;
+    }
+    backtestSymbolCustomState.selectedId = detail.symbolCustomId || backtestSymbolCustomState.selectedId;
+    if (!isSymbolCustomBacktestMode()) {
+      await switchBacktestExecutionMode('symbolCustom');
+    } else {
+      await loadBacktestSymbolCustoms(detail.symbolCustomId);
+    }
+
+    renderBacktestHistoryBanner(normalized);
+    renderBacktestResult(normalized, 'btResult', 'equityCanvas', {
+      label: 'Historical SymbolCustom snapshot',
+      noChartMessage: 'This SymbolCustom backtest has no stored candle chart snapshot. Summary, trades, and equity remain available.',
+    });
+    syncBacktestHistorySelection();
+  } catch (e) {
+    document.getElementById('btResult').innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(e.message || 'Failed to load SymbolCustom backtest') + '</div>';
+    resetSingleBacktestChart(e.message || 'Failed to load SymbolCustom chart');
+  }
+}
+
 async function deleteBacktestResult(event, id, label) {
   if (event && typeof event.stopPropagation === 'function') {
     event.stopPropagation();
@@ -6010,7 +6504,25 @@ async function deleteBacktestResult(event, id, label) {
     const r = await api('/api/backtest/results/' + id, 'DELETE');
     if (!r.success) throw new Error(r.message || 'Failed to delete backtest result');
     wsLog('success', 'Backtest result deleted');
-    if (String(activeHistoricalBacktestId || '') === String(id)) {
+    if (String(activeHistoricalBacktestId || '') === String(id) && activeHistoricalBacktestMode === 'STANDARD') {
+      await clearHistoricalBacktestView();
+    }
+    await loadBacktestHistory();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function deleteSymbolCustomBacktestResult(event, id, label) {
+  if (event && typeof event.stopPropagation === 'function') {
+    event.stopPropagation();
+  }
+  if (!confirm('Delete SymbolCustom backtest result' + (label ? ' for ' + label : '') + '? This cannot be undone.')) return;
+  try {
+    const response = await api('/api/symbol-customs/backtests/' + encodeURIComponent(id), 'DELETE');
+    if (!response.success) throw new Error(response.message || 'Failed to delete SymbolCustom backtest result');
+    wsLog('success', 'SymbolCustom backtest result deleted');
+    if (String(activeHistoricalBacktestId || '') === String(id) && activeHistoricalBacktestMode === 'SYMBOLCUSTOM') {
       await clearHistoricalBacktestView();
     }
     await loadBacktestHistory();
@@ -7802,6 +8314,7 @@ async function rerunBestOptimizerBacktest() {
   document.getElementById('btEndDate').value = document.getElementById('optEndDate').value;
   document.getElementById('btBalance').value = String(resolveOptimizerInitialBalance(lastOptimizerResult));
   document.getElementById('btParameterPreset').value = 'default';
+  await switchBacktestExecutionMode('standard');
   await fetchStrategyConfigs(true);
   await loadBacktestParams();
   const strategy = getStrategyConfigByName(lastOptimizerResult.strategy);
@@ -9550,6 +10063,28 @@ function renderSymbolCustomBacktestResult(record, backtest) {
   target.innerHTML = html;
 }
 
+function renderSymbolCustomBacktestError(record, errorInfo) {
+  const target = symbolCustomEl('symbolCustomBacktestResult');
+  if (!target) return;
+
+  if (!record || !record._id) {
+    target.innerHTML = '<div class="empty">Select a SymbolCustom</div>';
+    return;
+  }
+
+  const info = errorInfo || {};
+  let html = '<div class="bt-chart-warning">';
+  html += '<strong>' + escapeHtml(info.message || 'Failed to run SymbolCustom backtest') + '</strong>';
+  if (info.hint) {
+    html += '<div style="margin-top:6px">' + escapeHtml(info.hint) + '</div>';
+  }
+  if (info.reasonCode) {
+    html += '<div style="margin-top:6px;color:var(--text2)">Reason: ' + escapeHtml(info.reasonCode) + '</div>';
+  }
+  html += '</div>';
+  target.innerHTML = html;
+}
+
 function renderSymbolCustomSafetyAudit(audit) {
   const target = symbolCustomEl('symbolCustomSafetyAudit');
   if (!target) return;
@@ -9613,11 +10148,8 @@ function getSymbolCustomBacktestFormValues(record) {
 }
 
 function getSymbolCustomBacktestErrorMessage(response, fallback) {
-  const message = response && response.message ? response.message : fallback;
-  if (message === 'SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND') {
-    return 'No historical candles found for selected symbol/timeframes/date range.';
-  }
-  return message || fallback;
+  const utils = getSymbolCustomUtils();
+  return utils.normalizeBacktestError(response, fallback).message;
 }
 
 async function runSelectedSymbolCustomBacktest() {
@@ -9638,7 +10170,10 @@ async function runSelectedSymbolCustomBacktest() {
     showSymbolCustomStatus('Running SymbolCustom backtest...', 'warn');
     const response = await api('/api/symbol-customs/' + encodeURIComponent(record._id) + '/backtest', 'POST', serialized.payload);
     if (!response.success) {
-      throw new Error(getSymbolCustomBacktestErrorMessage(response, 'Failed to run SymbolCustom backtest'));
+      const utils = getSymbolCustomUtils();
+      const errorInfo = utils.normalizeBacktestError(response, 'Failed to run SymbolCustom backtest');
+      renderSymbolCustomBacktestError(record, errorInfo);
+      throw new Error(errorInfo.message);
     }
 
     symbolCustomManagerState.backtestResult = response.backtest || null;

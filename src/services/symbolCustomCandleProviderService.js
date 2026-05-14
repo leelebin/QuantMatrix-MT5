@@ -8,6 +8,9 @@ const {
 const SYMBOL_CUSTOM_ENTRY_TIMEFRAME_REQUIRED = 'SYMBOL_CUSTOM_ENTRY_TIMEFRAME_REQUIRED';
 const SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED = 'SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED';
 const SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND = 'SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND';
+const SYMBOL_CUSTOM_MT5_NOT_CONNECTED = 'SYMBOL_CUSTOM_MT5_NOT_CONNECTED';
+const SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE = 'MT5 is not connected. Please connect MT5 first before running historical SymbolCustom backtest.';
+const SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT = 'Go to Dashboard/Diagnostics and connect MT5, then retry.';
 
 const TIMEFRAME_ALIASES = Object.freeze({
   m1: '1m',
@@ -28,6 +31,27 @@ function buildHttpError(message, statusCode, details = undefined) {
   const error = new Error(message);
   error.statusCode = statusCode;
   if (details) error.details = details;
+  return error;
+}
+
+function isMt5NotConnectedError(error) {
+  const message = String(error?.message || error || '');
+  return /MT5 not connected/i.test(message)
+    || /MT5 is not connected/i.test(message)
+    || (/connect\(\) first/i.test(message) && /MT5/i.test(message));
+}
+
+function buildMt5NotConnectedError() {
+  const error = buildHttpError(SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE, 503, [
+    {
+      field: 'mt5',
+      message: SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+      reasonCode: SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+      hint: SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+    },
+  ]);
+  error.reasonCode = SYMBOL_CUSTOM_MT5_NOT_CONNECTED;
+  error.hint = SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT;
   return error;
 }
 
@@ -108,7 +132,15 @@ function normalizeCandles(candles = []) {
 
 async function fetchHistoricalCandles({ symbol, timeframe, start, endExclusive, limit }) {
   const fetchLimit = limit || estimateFetchLimit(timeframe, start, endExclusive, 10);
-  const rawCandles = await mt5Service.getCandles(symbol, timeframe, start, fetchLimit, endExclusive);
+  let rawCandles;
+  try {
+    rawCandles = await mt5Service.getCandles(symbol, timeframe, start, fetchLimit, endExclusive);
+  } catch (error) {
+    if (isMt5NotConnectedError(error)) {
+      throw buildMt5NotConnectedError();
+    }
+    throw error;
+  }
   const normalized = normalizeCandles(rawCandles);
   return filterCandlesByRange(normalized, start, endExclusive);
 }
@@ -170,6 +202,9 @@ module.exports = {
   SYMBOL_CUSTOM_ENTRY_TIMEFRAME_REQUIRED,
   SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED,
   SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND,
+  SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+  SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+  SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
   buildCandleProviderForSymbolCustom,
   getSymbolCustomCandles,
   normalizeTimeframe,

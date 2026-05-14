@@ -7,6 +7,9 @@
 }(typeof self !== 'undefined' ? self : this, function createSymbolCustomManagerUtils() {
   const PLACEHOLDER_SYMBOL_CUSTOM = 'PLACEHOLDER_SYMBOL_CUSTOM';
   const PHASE_1_LIVE_WARNING = 'SymbolCustom live execution is not supported in Phase 1. This field is saved for future use only.';
+  const SYMBOL_CUSTOM_MT5_NOT_CONNECTED = 'SYMBOL_CUSTOM_MT5_NOT_CONNECTED';
+  const SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE = 'MT5 is not connected. Please connect MT5 first before running historical SymbolCustom backtest.';
+  const SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT = 'Go to Dashboard/Diagnostics and connect MT5, then retry.';
 
   const JSON_FIELD_DEFAULTS = Object.freeze({
     parameterSchema: [],
@@ -233,15 +236,55 @@
     };
   }
 
+  function normalizeBacktestError(response, fallbackMessage) {
+    const source = response || {};
+    const rawMessage = source.message || (source.error && source.error.message) || fallbackMessage || 'Failed to run SymbolCustom backtest';
+    const reasonCode = source.reasonCode
+      || (Array.isArray(source.errors) && source.errors[0] ? source.errors[0].reasonCode : null)
+      || null;
+
+    const isMt5NotConnected = reasonCode === SYMBOL_CUSTOM_MT5_NOT_CONNECTED
+      || /MT5 not connected/i.test(rawMessage)
+      || /MT5 is not connected/i.test(rawMessage);
+
+    if (isMt5NotConnected) {
+      return {
+        message: SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+        hint: source.hint
+          || (Array.isArray(source.errors) && source.errors[0] ? source.errors[0].hint : null)
+          || SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+        reasonCode: SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+      };
+    }
+
+    if (rawMessage === 'SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND') {
+      return {
+        message: 'No historical candles found for selected symbol/timeframes/date range.',
+        hint: null,
+        reasonCode: rawMessage,
+      };
+    }
+
+    return {
+      message: rawMessage,
+      hint: source.hint || null,
+      reasonCode,
+    };
+  }
+
   return {
     PLACEHOLDER_SYMBOL_CUSTOM,
     PHASE_1_LIVE_WARNING,
+    SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+    SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+    SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
     JSON_FIELD_DEFAULTS,
     DEFAULT_PARAMETER_SCHEMA,
     parseJsonField,
     serializeJsonForEditor,
     serializeEditorPayload,
     serializeBacktestPayload,
+    normalizeBacktestError,
     shouldShowLiveWarning,
     buildSymbolCustomSymbolSummaries,
     flattenSymbolCustomReportRow,

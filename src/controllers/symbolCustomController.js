@@ -26,6 +26,8 @@ function handleError(res, error, fallbackMessage) {
   return res.status(statusCode).json({
     success: false,
     message: error.message || fallbackMessage,
+    reasonCode: error.reasonCode || undefined,
+    hint: error.hint || undefined,
     errors: error.details || undefined,
   });
 }

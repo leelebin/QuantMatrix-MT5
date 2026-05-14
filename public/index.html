@@ -9524,41 +9524,26 @@ async function deleteSelectedSymbolCustom() {
 }
 
 async function loadDefaultSymbolCustomDrafts() {
-  const utils = getSymbolCustomUtils();
-  if (!utils.getDefaultSymbolCustomDrafts) {
-    showSymbolCustomStatus('Default draft helper is unavailable.', 'error');
-    return;
-  }
-
   try {
-    const latest = await api('/api/symbol-customs');
-    if (!latest.success) throw new Error(latest.message || 'Failed to load existing SymbolCustoms');
-    const existing = Array.isArray(latest.symbolCustoms) ? latest.symbolCustoms : [];
-    const existingKeys = new Set(existing.map((record) => String(record.symbol || '').toUpperCase() + '::' + String(record.symbolCustomName || '').trim()));
-    const drafts = utils.getDefaultSymbolCustomDrafts();
-    let created = 0;
-    let skipped = 0;
+    const response = await api('/api/symbol-customs/defaults/ensure', 'POST', {});
+    if (!response.success) throw new Error(response.message || 'Failed to ensure default SymbolCustom drafts');
 
-    for (const draft of drafts) {
-      const key = String(draft.symbol || '').toUpperCase() + '::' + String(draft.symbolCustomName || '').trim();
-      if (existingKeys.has(key)) {
-        skipped += 1;
-        continue;
-      }
-      const response = await api('/api/symbol-customs', 'POST', draft);
-      if (!response.success) throw new Error(response.message || 'Failed to create default draft ' + draft.symbolCustomName);
-      created += 1;
-      existingKeys.add(key);
-      symbolCustomManagerState.selectedSymbol = draft.symbol;
-      symbolCustomManagerState.selectedId = response.data && response.data._id ? response.data._id : symbolCustomManagerState.selectedId;
+    const created = Number(response.createdCount) || 0;
+    const existing = Number(response.existingCount) || 0;
+    const newestCreated = Array.isArray(response.created) && response.created.length > 0
+      ? response.created[response.created.length - 1]
+      : null;
+    if (newestCreated) {
+      symbolCustomManagerState.selectedSymbol = newestCreated.symbol || symbolCustomManagerState.selectedSymbol;
+      symbolCustomManagerState.selectedId = newestCreated._id || symbolCustomManagerState.selectedId;
     }
 
-    const statusMessage = 'Default drafts loaded. Created ' + created + ', skipped ' + skipped + '.';
+    const statusMessage = 'Default drafts ensured by backend. Created ' + created + ', existing ' + existing + '.';
     const statusType = created ? 'success' : 'warn';
     await loadSymbolCustomManager({ preserveSelection: true });
     showSymbolCustomStatus(statusMessage, statusType);
   } catch (error) {
-    showSymbolCustomStatus(error.message || 'Failed to load default drafts', 'error');
+    showSymbolCustomStatus(error.message || 'Failed to ensure default drafts', 'error');
   }
 }
 

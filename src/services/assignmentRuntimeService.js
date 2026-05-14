@@ -7,6 +7,8 @@ const { DEFAULT_NEWS_BLACKOUT_CONFIG } = require('../config/newsBlackout');
 const { DEFAULT_EXECUTION_POLICY } = require('./executionPolicyService');
 const { getPrimaryExecutionTimeframe } = require('../utils/timeframe');
 
+const ENABLE_EXPLICIT_STRATEGY_INSTANCE_RUNTIME_CANDIDATES = 'ENABLE_EXPLICIT_STRATEGY_INSTANCE_RUNTIME_CANDIDATES';
+
 const CATEGORY_GROUPS = Object.freeze({
   FOREX: 'forex',
   METALS: 'metals',
@@ -166,6 +168,10 @@ function normalizeAssignmentScope(scope) {
   return String(scope || 'paper').toLowerCase() === 'live' ? 'live' : 'paper';
 }
 
+function isExplicitStrategyInstanceRuntimeCandidatesEnabled() {
+  return String(process.env[ENABLE_EXPLICIT_STRATEGY_INSTANCE_RUNTIME_CANDIDATES] || '').toLowerCase() === 'true';
+}
+
 function buildFallbackInstance(strategy, symbol, scope = 'paper') {
   const normalizedScope = normalizeAssignmentScope(scope);
   const paperEnabled = strategy.enabled !== false;
@@ -260,26 +266,28 @@ async function listActiveAssignments({ activeProfile = null, symbolFilter = null
     }
   }
 
-  const strategyInstances = await StrategyInstance.findAll();
-  for (const instance of strategyInstances) {
-    if (!isExplicitInstanceEnabledForScope(instance, normalizedScope)) {
-      continue;
-    }
+  if (isExplicitStrategyInstanceRuntimeCandidatesEnabled()) {
+    const strategyInstances = await StrategyInstance.findAll();
+    for (const instance of strategyInstances) {
+      if (!isExplicitInstanceEnabledForScope(instance, normalizedScope)) {
+        continue;
+      }
 
-    const strategy = strategyByName.get(instance.strategyName);
-    if (!strategy) {
-      continue;
-    }
+      const strategy = strategyByName.get(instance.strategyName);
+      if (!strategy) {
+        continue;
+      }
 
-    if (filterSet && !filterSet.has(instance.symbol)) {
-      continue;
-    }
+      if (filterSet && !filterSet.has(instance.symbol)) {
+        continue;
+      }
 
-    upsertRuntimeCandidate(candidates, {
-      strategy,
-      symbol: instance.symbol,
-      source: 'strategyInstance',
-    });
+      upsertRuntimeCandidate(candidates, {
+        strategy,
+        symbol: instance.symbol,
+        source: 'strategyInstance',
+      });
+    }
   }
 
   for (const candidate of candidates.values()) {
@@ -493,6 +501,7 @@ module.exports = {
   getScanReason,
   getSignalBucketDefinitionByCadence,
   getSignalCadenceMs,
+  isExplicitStrategyInstanceRuntimeCandidatesEnabled,
   isInstanceEnabledForScope,
   listActiveAssignments,
   normalizeAssignmentScope,

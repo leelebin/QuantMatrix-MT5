@@ -528,6 +528,22 @@ function auditUsdjpyMacroReversalDoesNotReferenceRiskManager() {
   }
 }
 
+function auditUsdjpyMacroReversalDoesNotReferenceOldBacktestEngine() {
+  try {
+    const source = readProjectFile('src/symbolCustom/logics/UsdjpyJpyMacroReversalV1.js');
+    const safe = sourceExcludes(source, [
+      /backtestEngine/,
+      /runBacktest\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference old backtestEngine', 'PASS', 'USDJPY macro reversal does not reference old backtestEngine.')
+      : buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference old backtestEngine', 'FAIL', 'USDJPY macro reversal appears to reference old backtestEngine.');
+  } catch (error) {
+    return buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 does not reference old backtestEngine', 'FAIL', `Unable to inspect USDJPY macro reversal backtest isolation: ${error.message}`);
+  }
+}
+
 function auditPrimaryLiveUniqueness(symbolCustoms) {
   const grouped = new Map();
   symbolCustoms
@@ -602,6 +618,7 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditUsdjpyMacroReversalDoesNotReferenceSixStrategies());
   checks.push(auditUsdjpyMacroReversalDoesNotReferenceTradeExecutor());
   checks.push(auditUsdjpyMacroReversalDoesNotReferenceRiskManager());
+  checks.push(auditUsdjpyMacroReversalDoesNotReferenceOldBacktestEngine());
 
   let symbolCustoms = [];
   try {

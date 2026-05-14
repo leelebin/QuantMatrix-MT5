@@ -337,7 +337,14 @@ describe('symbolCustomController', () => {
     const runRes = createRes();
     await controller.runBacktest({
       params: { id: 'sc-1' },
-      body: { startDate: '2026-01-01', endDate: '2026-05-01', initialBalance: 500 },
+      body: {
+        startDate: '2026-01-01',
+        endDate: '2026-05-01',
+        initialBalance: 500,
+        parameters: { lookbackBars: 50 },
+        costModel: { spread: 0 },
+        options: { useHistoricalCandles: true },
+      },
     }, runRes);
 
     const listRes = createRes();
@@ -354,6 +361,9 @@ describe('symbolCustomController', () => {
       startDate: '2026-01-01',
       endDate: '2026-05-01',
       initialBalance: 500,
+      parameters: { lookbackBars: 50 },
+      costModel: { spread: 0 },
+      options: { useHistoricalCandles: true },
     });
     expect(runRes.payload).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
     expect(listRes.payload).toEqual({

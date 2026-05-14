@@ -200,6 +200,39 @@
     };
   }
 
+  function serializeBacktestPayload(values) {
+    const source = values || {};
+    const errors = [];
+    const record = source.record || {};
+    const initialBalance = Number(source.initialBalance == null || source.initialBalance === ''
+      ? 500
+      : source.initialBalance);
+
+    const payload = {
+      startDate: normalizeString(source.startDate),
+      endDate: normalizeString(source.endDate),
+      initialBalance,
+      parameters: source.parameters || record.parameters || {},
+      costModel: source.costModel || { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      options: {
+        ...(source.options || {}),
+        useHistoricalCandles: source.useHistoricalCandles !== false,
+      },
+    };
+
+    if (!payload.startDate) errors.push('startDate is required');
+    if (!payload.endDate) errors.push('endDate is required');
+    if (!Number.isFinite(initialBalance) || initialBalance <= 0) {
+      errors.push('initialBalance must be a positive number');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      payload: errors.length === 0 ? payload : null,
+    };
+  }
+
   return {
     PLACEHOLDER_SYMBOL_CUSTOM,
     PHASE_1_LIVE_WARNING,
@@ -208,6 +241,7 @@
     parseJsonField,
     serializeJsonForEditor,
     serializeEditorPayload,
+    serializeBacktestPayload,
     shouldShowLiveWarning,
     buildSymbolCustomSymbolSummaries,
     flattenSymbolCustomReportRow,

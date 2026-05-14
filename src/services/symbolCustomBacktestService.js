@@ -3,9 +3,14 @@ const SymbolCustomBacktest = require('../models/SymbolCustomBacktest');
 const { getSymbolCustomLogic } = require('../symbolCustom/registry');
 const { PLACEHOLDER_SYMBOL_CUSTOM } = require('../symbolCustom/logics/PlaceholderSymbolCustom');
 const symbolCustomBacktestRunnerService = require('./symbolCustomBacktestRunnerService');
+const symbolCustomCandleProviderService = require('./symbolCustomCandleProviderService');
 
 const SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED = 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED';
 const SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED = 'SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED';
+const {
+  SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED,
+  SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND,
+} = symbolCustomCandleProviderService;
 const PHASE_1_PLACEHOLDER_BACKTEST_MESSAGE = 'Placeholder SymbolCustom has no active backtest logic';
 
 function buildHttpError(message, statusCode, details = undefined) {
@@ -80,24 +85,52 @@ function hasUsableCandles(candles = {}) {
     && candles.entry.length > 0;
 }
 
-async function resolveBacktestCandles({ symbolCustom, startDate, endDate, candles, candleProvider }) {
+async function resolveBacktestCandles({
+  symbolCustom,
+  startDate,
+  endDate,
+  candles,
+  candleProvider,
+  options = {},
+}) {
   if (hasUsableCandles(candles)) {
-    return candles;
+    return { candles, source: 'body' };
   }
 
-  if (typeof candleProvider === 'function') {
-    const provided = await candleProvider({
-      symbol: symbolCustom.symbol,
-      timeframes: symbolCustom.timeframes || {},
-      startDate,
-      endDate,
-    });
-    if (hasUsableCandles(provided)) {
-      return provided;
-    }
+  const useHistoricalCandles = options.useHistoricalCandles !== false;
+  if (!useHistoricalCandles) {
+    return { candles: null, source: 'disabled' };
   }
 
-  return null;
+  if (!startDate || !endDate) {
+    throw buildHttpError(SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED, 400, [
+      { field: 'startDate', message: 'startDate is required when using historical candles' },
+      { field: 'endDate', message: 'endDate is required when using historical candles' },
+    ]);
+  }
+
+  const provider = typeof candleProvider === 'function'
+    ? candleProvider
+    : symbolCustomCandleProviderService.buildCandleProviderForSymbolCustom(symbolCustom);
+
+  const provided = await provider({
+    symbol: symbolCustom.symbol,
+    timeframes: symbolCustom.timeframes || {},
+    startDate,
+    endDate,
+    limit: options.limit,
+  });
+  if (hasUsableCandles(provided)) {
+    return {
+      candles: provided,
+      source: typeof candleProvider === 'function' ? 'injectedProvider' : 'historicalProvider',
+    };
+  }
+
+  return {
+    candles: null,
+    source: typeof candleProvider === 'function' ? 'injectedProvider' : 'historicalProvider',
+  };
 }
 
 function buildBacktestPayload({
@@ -192,14 +225,22 @@ async function runSymbolCustomBacktest({
     });
   }
 
-  const resolvedCandles = await resolveBacktestCandles({
+  const resolved = await resolveBacktestCandles({
     symbolCustom,
     startDate,
     endDate,
     candles,
     candleProvider,
+    options,
   });
-  if (!resolvedCandles) {
+
+  if (!resolved.candles) {
+    if (resolved.source === 'historicalProvider' || resolved.source === 'injectedProvider') {
+      throw buildHttpError(SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND, 400, [
+        { field: 'candles', message: SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND },
+      ]);
+    }
+
     throw buildHttpError(SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED, 400, [
       { field: 'candles', message: 'candles.entry or candleProvider is required for non-placeholder SymbolCustom backtests' },
     ]);
@@ -214,7 +255,7 @@ async function runSymbolCustomBacktest({
       symbolCustom,
       logic,
       logicName,
-      candles: resolvedCandles,
+      candles: resolved.candles,
       parameters: mergedParameters,
       costModel: costModel || {},
       initialBalance,
@@ -274,6 +315,8 @@ module.exports = {
   PHASE_1_PLACEHOLDER_BACKTEST_MESSAGE,
   SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED,
   SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED,
+  SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED,
+  SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND,
   runSymbolCustomBacktest,
   getSymbolCustomBacktest,
   listSymbolCustomBacktests,

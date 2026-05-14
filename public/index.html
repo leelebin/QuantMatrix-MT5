@@ -720,6 +720,27 @@ tr:hover{background:var(--bg3)}
       <button class="btn-outline btn-sm" onclick="runSelectedSymbolCustomBacktest()">Run Backtest</button>
     </div>
     <div class="readonly-note">SymbolCustom backtests use SymbolCustom logic only. Live execution is not supported.</div>
+    <div class="grid grid-4" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" id="scBacktestStartDate">
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input type="date" id="scBacktestEndDate">
+      </div>
+      <div class="form-group">
+        <label>Initial Balance</label>
+        <input type="number" id="scBacktestInitialBalance" value="500" min="1" step="1">
+      </div>
+      <div class="form-group">
+        <label>Historical Candles</label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="scBacktestUseHistoricalCandles" checked>
+          <span>Use provider</span>
+        </label>
+      </div>
+    </div>
     <div id="symbolCustomBacktestResult" class="symbol-custom-table-wrap">
       <div class="empty">Select a SymbolCustom</div>
     </div>
@@ -9581,6 +9602,24 @@ async function runSymbolCustomSafetyAudit() {
   }
 }
 
+function getSymbolCustomBacktestFormValues(record) {
+  return {
+    record,
+    startDate: symbolCustomEl('scBacktestStartDate')?.value || '',
+    endDate: symbolCustomEl('scBacktestEndDate')?.value || '',
+    initialBalance: symbolCustomEl('scBacktestInitialBalance')?.value || 500,
+    useHistoricalCandles: symbolCustomEl('scBacktestUseHistoricalCandles')?.checked !== false,
+  };
+}
+
+function getSymbolCustomBacktestErrorMessage(response, fallback) {
+  const message = response && response.message ? response.message : fallback;
+  if (message === 'SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND') {
+    return 'No historical candles found for selected symbol/timeframes/date range.';
+  }
+  return message || fallback;
+}
+
 async function runSelectedSymbolCustomBacktest() {
   const record = symbolCustomManagerState.selectedRecord;
   if (!record || !record._id) {
@@ -9589,14 +9628,18 @@ async function runSelectedSymbolCustomBacktest() {
   }
 
   try {
+    const utils = getSymbolCustomUtils();
+    const serialized = utils.serializeBacktestPayload(getSymbolCustomBacktestFormValues(record));
+    if (!serialized.valid) {
+      showSymbolCustomStatus(serialized.errors.join('; '), 'error');
+      return;
+    }
+
     showSymbolCustomStatus('Running SymbolCustom backtest...', 'warn');
-    const response = await api('/api/symbol-customs/' + encodeURIComponent(record._id) + '/backtest', 'POST', {
-      initialBalance: 500,
-      parameters: record.parameters || {},
-      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
-      options: {},
-    });
-    if (!response.success) throw new Error(response.message || 'Failed to run SymbolCustom backtest');
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(record._id) + '/backtest', 'POST', serialized.payload);
+    if (!response.success) {
+      throw new Error(getSymbolCustomBacktestErrorMessage(response, 'Failed to run SymbolCustom backtest'));
+    }
 
     symbolCustomManagerState.backtestResult = response.backtest || null;
     renderSymbolCustomBacktestResult(record, symbolCustomManagerState.backtestResult);

@@ -70,7 +70,12 @@ function mockStrategyClasses() {
   return strategyMocks;
 }
 
-function loadService({ symbolCustoms = [], backtests = [], registryLogics = {} } = {}) {
+function loadService({
+  symbolCustoms = [],
+  backtests = [],
+  registryLogics = {},
+  historicalCandles = null,
+} = {}) {
   jest.resetModules();
 
   const symbolCustomRecords = symbolCustoms.map((record) => ({ ...record }));
@@ -81,6 +86,15 @@ function loadService({ symbolCustoms = [], backtests = [], registryLogics = {} }
   const tradeExecutor = { executeTrade: jest.fn() };
   const paperTradingService = { submitSymbolCustomSignal: jest.fn(), _executePaperTrade: jest.fn() };
   const riskManager = { calculateLotSize: jest.fn(), validateTrade: jest.fn() };
+  const historicalProvider = jest.fn(async () => historicalCandles || { setup: [], entry: [], higher: [] });
+  const symbolCustomCandleProviderService = {
+    SYMBOL_CUSTOM_ENTRY_TIMEFRAME_REQUIRED: 'SYMBOL_CUSTOM_ENTRY_TIMEFRAME_REQUIRED',
+    SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED: 'SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED',
+    SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND: 'SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND',
+    buildCandleProviderForSymbolCustom: jest.fn(() => historicalProvider),
+    getSymbolCustomCandles: historicalProvider,
+    normalizeTimeframe: jest.fn((timeframe) => timeframe),
+  };
   const strategyMocks = mockStrategyClasses();
   const getSymbolCustomLogic = jest.fn((logicName) => {
     if (logicName === 'PLACEHOLDER_SYMBOL_CUSTOM') {
@@ -103,6 +117,7 @@ function loadService({ symbolCustoms = [], backtests = [], registryLogics = {} }
   jest.doMock('../src/services/tradeExecutor', () => tradeExecutor);
   jest.doMock('../src/services/paperTradingService', () => paperTradingService);
   jest.doMock('../src/services/riskManager', () => riskManager);
+  jest.doMock('../src/services/symbolCustomCandleProviderService', () => symbolCustomCandleProviderService);
   jest.doMock('../src/symbolCustom/registry', () => ({
     getSymbolCustomLogic,
   }));
@@ -122,6 +137,8 @@ function loadService({ symbolCustoms = [], backtests = [], registryLogics = {} }
     tradeExecutor,
     paperTradingService,
     riskManager,
+    symbolCustomCandleProviderService,
+    historicalProvider,
     getSymbolCustomLogic,
     strategyMocks,
   };
@@ -134,6 +151,7 @@ describe('symbolCustomBacktestService', () => {
     jest.dontMock('../src/services/tradeExecutor');
     jest.dontMock('../src/services/paperTradingService');
     jest.dontMock('../src/services/riskManager');
+    jest.dontMock('../src/services/symbolCustomCandleProviderService');
     jest.dontMock('../src/symbolCustom/registry');
     [
       'TrendFollowingStrategy',
@@ -232,7 +250,7 @@ describe('symbolCustomBacktestService', () => {
     });
   });
 
-  test('non-placeholder logic without candles or provider returns clear error', async () => {
+  test('non-placeholder logic without candles and historical disabled returns clear error', async () => {
     const { service } = loadService({
       symbolCustoms: [
         {
@@ -255,9 +273,78 @@ describe('symbolCustomBacktestService', () => {
       startDate: '2026-01-01',
       endDate: '2026-05-01',
       initialBalance: 500,
+      options: { useHistoricalCandles: false },
     })).rejects.toMatchObject({
       statusCode: 400,
       message: service.SYMBOL_CUSTOM_BACKTEST_CANDLES_REQUIRED,
+    });
+  });
+
+  test('non-placeholder historical backtest requires date range', async () => {
+    const { service, historicalProvider } = loadService({
+      symbolCustoms: [
+        {
+          _id: 'sc-needs-dates',
+          symbol: 'GBPJPY',
+          symbolCustomName: 'GBPJPY_MOCK',
+          logicName: 'MOCK_SYMBOL_CUSTOM',
+          timeframes: { entryTimeframe: '5m' },
+        },
+      ],
+      registryLogics: {
+        MOCK_SYMBOL_CUSTOM: {
+          name: 'MOCK_SYMBOL_CUSTOM',
+          analyze: jest.fn(),
+        },
+      },
+    });
+
+    await expect(service.runSymbolCustomBacktest({
+      symbolCustomId: 'sc-needs-dates',
+      initialBalance: 500,
+      options: { useHistoricalCandles: true },
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      message: service.SYMBOL_CUSTOM_BACKTEST_DATE_RANGE_REQUIRED,
+    });
+    expect(historicalProvider).not.toHaveBeenCalled();
+  });
+
+  test('historical provider not found returns clear error', async () => {
+    const { service, historicalProvider } = loadService({
+      symbolCustoms: [
+        {
+          _id: 'sc-no-history',
+          symbol: 'GBPJPY',
+          symbolCustomName: 'GBPJPY_MOCK',
+          logicName: 'MOCK_SYMBOL_CUSTOM',
+          timeframes: { entryTimeframe: '5m' },
+        },
+      ],
+      registryLogics: {
+        MOCK_SYMBOL_CUSTOM: {
+          name: 'MOCK_SYMBOL_CUSTOM',
+          analyze: jest.fn(),
+        },
+      },
+    });
+
+    await expect(service.runSymbolCustomBacktest({
+      symbolCustomId: 'sc-no-history',
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+      initialBalance: 500,
+      options: { useHistoricalCandles: true },
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      message: service.SYMBOL_CUSTOM_BACKTEST_CANDLES_NOT_FOUND,
+    });
+    expect(historicalProvider).toHaveBeenCalledWith({
+      symbol: 'GBPJPY',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+      limit: undefined,
     });
   });
 
@@ -265,7 +352,13 @@ describe('symbolCustomBacktestService', () => {
     const analyze = jest.fn(async (context) => (context.currentIndex === 0
       ? { signal: 'BUY', sl: 95, tp: 110, reason: 'mock buy' }
       : { signal: 'NONE' }));
-    const { service, records, getSymbolCustomLogic } = loadService({
+    const {
+      service,
+      records,
+      getSymbolCustomLogic,
+      historicalProvider,
+      symbolCustomCandleProviderService,
+    } = loadService({
       symbolCustoms: [
         {
           _id: 'sc-profitable',
@@ -303,6 +396,8 @@ describe('symbolCustomBacktestService', () => {
     });
 
     expect(getSymbolCustomLogic).toHaveBeenCalledWith('MOCK_SYMBOL_CUSTOM');
+    expect(symbolCustomCandleProviderService.buildCandleProviderForSymbolCustom).not.toHaveBeenCalled();
+    expect(historicalProvider).not.toHaveBeenCalled();
     expect(analyze).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'backtest',
       symbol: 'USDJPY',
@@ -363,9 +458,69 @@ describe('symbolCustomBacktestService', () => {
       timeframes: { entryTimeframe: '5m' },
       startDate: '2026-01-01',
       endDate: '2026-01-02',
+      limit: undefined,
     });
     expect(backtest.status).toBe('completed');
     expect(backtest.trades[0].side).toBe('SELL');
+    expect(backtest.trades[0].exitReason).toBe('TP');
+  });
+
+  test('historical provider can supply setup entry and higher candles for runner execution', async () => {
+    const analyze = jest.fn(async (context) => (context.currentIndex === 0
+      ? { signal: 'BUY', sl: 95, tp: 110, reason: 'historical buy' }
+      : { signal: 'NONE' }));
+    const historicalCandles = {
+      setup: [
+        { time: '2026-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100 },
+      ],
+      entry: [
+        { time: '2026-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100 },
+        { time: '2026-01-01T00:05:00.000Z', open: 100, high: 110, low: 99, close: 109 },
+      ],
+      higher: [
+        { time: '2026-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100 },
+      ],
+    };
+    const { service, historicalProvider, symbolCustomCandleProviderService } = loadService({
+      historicalCandles,
+      symbolCustoms: [
+        {
+          _id: 'sc-history',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_HISTORY_MOCK',
+          logicName: 'MOCK_SYMBOL_CUSTOM',
+          timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+          riskConfig: { maxRiskPerTradePct: 1 },
+        },
+      ],
+      registryLogics: {
+        MOCK_SYMBOL_CUSTOM: {
+          name: 'MOCK_SYMBOL_CUSTOM',
+          analyze,
+        },
+      },
+    });
+
+    const backtest = await service.runSymbolCustomBacktest({
+      symbolCustomId: 'sc-history',
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+      initialBalance: 1000,
+    });
+
+    expect(symbolCustomCandleProviderService.buildCandleProviderForSymbolCustom).toHaveBeenCalledWith(expect.objectContaining({
+      _id: 'sc-history',
+      symbol: 'USDJPY',
+    }));
+    expect(historicalProvider).toHaveBeenCalledWith({
+      symbol: 'USDJPY',
+      timeframes: { setupTimeframe: '15m', entryTimeframe: '5m', higherTimeframe: '1h' },
+      startDate: '2026-01-01',
+      endDate: '2026-01-02',
+      limit: undefined,
+    });
+    expect(backtest.status).toBe('completed');
+    expect(backtest.summary.trades).toBe(1);
     expect(backtest.trades[0].exitReason).toBe('TP');
   });
 

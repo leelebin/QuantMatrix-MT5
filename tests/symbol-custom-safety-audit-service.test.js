@@ -90,6 +90,15 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'placeholder does not trade')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'symbolCustom paper runtime default disabled')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'symbolCustom live runtime not connected')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'paper runtime scheduler env gated')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {
@@ -158,5 +167,14 @@ describe('symbolCustomSafetyAuditService', () => {
 
     expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
     expect(getCheck(audit, 'live execution not connected').status).toBe('PASS');
+    expect(getCheck(audit, 'paper runtime never calls tradeExecutor').status).toBe('PASS');
+  });
+
+  test('paper runtime marks SymbolCustom source metadata', async () => {
+    const { service } = loadAuditService();
+
+    const audit = await service.runSymbolCustomPhase1SafetyAudit();
+
+    expect(getCheck(audit, 'paper runtime marks source symbolCustom').status).toBe('PASS');
   });
 });

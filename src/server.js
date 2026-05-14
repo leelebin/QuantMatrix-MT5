@@ -31,6 +31,7 @@ const strategyEngine = require('./services/strategyEngine');
 const economicCalendarService = require('./services/economicCalendarService');
 const resourceMonitorService = require('./services/resourceMonitorService');
 const dataSyncSchedulerService = require('./services/dataSyncSchedulerService');
+const symbolCustomPaperRuntimeService = require('./services/symbolCustomPaperRuntimeService');
 
 // Install persistent file logging (console.log/warn/error -> logs/system.log,
 // logs/error.log). Console output is preserved.
@@ -213,6 +214,17 @@ async function startServer() {
       } catch (error) {
         console.error(`[DataSync] Scheduler failed to start: ${error.message}`);
       }
+
+      if (process.env.SYMBOL_CUSTOM_PAPER_ENABLED === 'true') {
+        try {
+          symbolCustomPaperRuntimeService.start();
+          console.log('[SymbolCustom] Paper runtime started');
+        } catch (error) {
+          console.error(`[SymbolCustom] Paper runtime failed to start: ${error.message}`);
+        }
+      } else {
+        console.log('[SymbolCustom] Paper runtime disabled');
+      }
     });
 
     server.on('error', handleServerError);
@@ -229,6 +241,7 @@ startServer();
 process.on('SIGTERM', () => {
   console.log('[Server] SIGTERM received, shutting down...');
   dataSyncSchedulerService.stop();
+  symbolCustomPaperRuntimeService.stop();
   websocketService.shutdown();
   if (!server) {
     process.exit(0);
@@ -240,6 +253,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('[Server] SIGINT received, shutting down...');
   dataSyncSchedulerService.stop();
+  symbolCustomPaperRuntimeService.stop();
   websocketService.shutdown();
   if (!server) {
     process.exit(0);

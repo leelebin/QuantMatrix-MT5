@@ -8,6 +8,7 @@ const symbolCustomOptimizerService = require('./symbolCustomOptimizerService');
 const symbolCustomBacktestService = require('./symbolCustomBacktestService');
 
 const PHASE_1_LIVE_WARNING = 'Phase 1 does not support live execution';
+const SYMBOL_CUSTOM_PAPER_ENABLED_ENV = 'SYMBOL_CUSTOM_PAPER_ENABLED';
 
 function buildCheck(name, status, message) {
   return { name, status, message };
@@ -107,9 +108,95 @@ function auditPlaceholderDoesNotTrade() {
   const placeholder = new PlaceholderSymbolCustom();
   const result = placeholder.analyze({});
 
-  return result && result.signal === 'NONE'
+  return result && result.signal === 'NONE' && result.signal !== 'BUY' && result.signal !== 'SELL'
     ? buildCheck('placeholder does not trade', 'PASS', 'PLACEHOLDER_SYMBOL_CUSTOM returns signal NONE.')
     : buildCheck('placeholder does not trade', 'FAIL', 'PLACEHOLDER_SYMBOL_CUSTOM returned a tradable signal.');
+}
+
+function auditPaperRuntimeDefaultDisabled() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const serverSource = readProjectFile('src/server.js');
+    const serviceRequiresTrue = source.includes(SYMBOL_CUSTOM_PAPER_ENABLED_ENV)
+      && /process\.env\[[^\]]*SYMBOL_CUSTOM_PAPER_ENABLED_ENV[^\]]*\]\s*===\s*'true'/.test(source);
+    const serverRequiresTrue = serverSource.includes(`process.env.${SYMBOL_CUSTOM_PAPER_ENABLED_ENV} === 'true'`);
+
+    return serviceRequiresTrue && serverRequiresTrue
+      ? buildCheck('symbolCustom paper runtime default disabled', 'PASS', 'SymbolCustom paper runtime only starts when SYMBOL_CUSTOM_PAPER_ENABLED=true.')
+      : buildCheck('symbolCustom paper runtime default disabled', 'FAIL', 'SymbolCustom paper runtime start is not clearly gated by SYMBOL_CUSTOM_PAPER_ENABLED=true.');
+  } catch (error) {
+    return buildCheck('symbolCustom paper runtime default disabled', 'FAIL', `Unable to inspect paper runtime default: ${error.message}`);
+  }
+}
+
+function auditSymbolCustomLiveRuntimeNotConnected() {
+  try {
+    const engineSource = readProjectFile('src/services/symbolCustomEngine.js');
+    const runtimeSource = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const liveBlocked = /scope\s*===\s*'live'/.test(engineSource)
+      && /BLOCKED/.test(engineSource)
+      && /SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2/.test(engineSource);
+    const runtimeDoesNotStartLive = sourceExcludes(runtimeSource, [
+      /scope:\s*'live'/,
+      /liveEnabled/,
+    ]);
+
+    return liveBlocked && runtimeDoesNotStartLive
+      ? buildCheck('symbolCustom live runtime not connected', 'PASS', 'SymbolCustom live scope is blocked and the paper runtime has no live runtime path.')
+      : buildCheck('symbolCustom live runtime not connected', 'FAIL', 'SymbolCustom live runtime path may be connected.');
+  } catch (error) {
+    return buildCheck('symbolCustom live runtime not connected', 'FAIL', `Unable to inspect live runtime isolation: ${error.message}`);
+  }
+}
+
+function auditPaperRuntimeNeverCallsTradeExecutor() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const safe = sourceExcludes(source, [
+      /tradeExecutor/i,
+      /\bexecuteTrade\s*\(/,
+      /mt5Service/i,
+      /placeOrder\s*\(/,
+      /preflightOrder\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('paper runtime never calls tradeExecutor', 'PASS', 'SymbolCustom paper runtime routes signals through the paper service and does not reference live order placement.')
+      : buildCheck('paper runtime never calls tradeExecutor', 'FAIL', 'SymbolCustom paper runtime appears to reference live order placement.');
+  } catch (error) {
+    return buildCheck('paper runtime never calls tradeExecutor', 'FAIL', `Unable to inspect paper runtime isolation: ${error.message}`);
+  }
+}
+
+function auditPaperRuntimeMarksSymbolCustomSource() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const marksSource = /source:\s*'symbolCustom'/.test(source)
+      && /scope:\s*'paper'/.test(source)
+      && /setupType:\s*'symbol_custom'/.test(source)
+      && /strategyType:\s*'SymbolCustom'/.test(source);
+
+    return marksSource
+      ? buildCheck('paper runtime marks source symbolCustom', 'PASS', 'SymbolCustom paper payloads include source, scope, setupType, and strategyType metadata.')
+      : buildCheck('paper runtime marks source symbolCustom', 'FAIL', 'SymbolCustom paper payload metadata is incomplete.');
+  } catch (error) {
+    return buildCheck('paper runtime marks source symbolCustom', 'FAIL', `Unable to inspect paper payload metadata: ${error.message}`);
+  }
+}
+
+function auditPaperRuntimeRequiresEnvForSchedulerStart() {
+  try {
+    const serverSource = readProjectFile('src/server.js');
+    const requiresEnv = serverSource.includes(`process.env.${SYMBOL_CUSTOM_PAPER_ENABLED_ENV} === 'true'`)
+      && /symbolCustomPaperRuntimeService\.start\s*\(/.test(serverSource)
+      && serverSource.includes('[SymbolCustom] Paper runtime disabled');
+
+    return requiresEnv
+      ? buildCheck('paper runtime scheduler env gated', 'PASS', 'Server startup only starts SymbolCustom paper runtime when SYMBOL_CUSTOM_PAPER_ENABLED=true.')
+      : buildCheck('paper runtime scheduler env gated', 'FAIL', 'Server startup does not clearly gate SymbolCustom paper runtime start by env flag.');
+  } catch (error) {
+    return buildCheck('paper runtime scheduler env gated', 'FAIL', `Unable to inspect server startup gating: ${error.message}`);
+  }
 }
 
 function auditPrimaryLiveUniqueness(symbolCustoms) {
@@ -162,6 +249,11 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditLiveExecutionNotConnected());
   checks.push(auditOldOptimizerUntouched());
   checks.push(auditOldBacktestUntouched());
+  checks.push(auditPaperRuntimeDefaultDisabled());
+  checks.push(auditSymbolCustomLiveRuntimeNotConnected());
+  checks.push(auditPaperRuntimeNeverCallsTradeExecutor());
+  checks.push(auditPaperRuntimeMarksSymbolCustomSource());
+  checks.push(auditPaperRuntimeRequiresEnvForSchedulerStart());
 
   let symbolCustoms = [];
   try {

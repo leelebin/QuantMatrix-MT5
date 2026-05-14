@@ -9,6 +9,8 @@ const {
   ensureDefaults,
   report,
   safetyAudit,
+  paperRuntimeStatus,
+  scanPaperRuntimeOnce,
   runBacktest,
   analyzePaperOnce,
   createOptimizerRun,
@@ -29,12 +31,14 @@ router.get('/', list);
 router.get('/by-symbol/:symbol', getBySymbol);
 router.get('/report', report);
 router.get('/safety-audit', safetyAudit);
+router.get('/paper-runtime/status', paperRuntimeStatus);
 router.get('/optimizer/runs', listOptimizerRuns);
 router.get('/optimizer/runs/:runId', getOptimizerRunById);
 router.get('/backtests', listBacktests);
 router.get('/backtests/:backtestId', getBacktestById);
 router.post('/', create);
 router.post('/defaults/ensure', ensureDefaults);
+router.post('/paper-runtime/scan-once', scanPaperRuntimeOnce);
 router.post('/:id/analyze-paper-once', analyzePaperOnce);
 router.post('/:id/backtest', runBacktest);
 router.post('/:id/optimizer/run', createOptimizerRun);

@@ -703,6 +703,40 @@ tr:hover{background:var(--bg3)}
 
   <div class="card" style="margin-top:16px">
     <div class="card-header">
+      <span class="card-title">Report</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-outline btn-sm" onclick="loadSymbolCustomReport()">Refresh Report</button>
+        <button class="btn-outline btn-sm" onclick="exportSymbolCustomReportCsv()">Export CSV</button>
+      </div>
+    </div>
+    <div id="symbolCustomReport" class="symbol-custom-table-wrap">
+      <div class="empty">No SymbolCustoms</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Optimizer Stub</span>
+      <button class="btn-outline btn-sm" onclick="runSelectedSymbolCustomOptimizerStub()">Run Optimizer Stub</button>
+    </div>
+    <div class="readonly-note"><strong>Phase 1:</strong> generates a parameter preview and stores a stub run only. Heavy optimization is not executed.</div>
+    <div id="symbolCustomOptimizerStub" class="symbol-custom-table-wrap">
+      <div class="empty">Select a SymbolCustom</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
+      <span class="card-title">Safety Audit</span>
+      <button class="btn-outline btn-sm" onclick="runSymbolCustomSafetyAudit()">Run Safety Audit</button>
+    </div>
+    <div id="symbolCustomSafetyAudit" class="symbol-custom-table-wrap">
+      <div class="empty">Safety audit not run</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header">
       <span class="card-title" id="symbolCustomEditorTitle">Editor</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-primary btn-sm" onclick="saveSymbolCustomEditor()">Save</button>
@@ -1802,7 +1836,7 @@ let testOrderSymbolMeta = {};
 let riskSettingsState = { profiles: [], activeProfile: null, activeProfileId: null };
 let maintenanceCacheState = null;
 let maintenanceCacheBusy = false;
-let symbolCustomManagerState = { all: [], selectedSymbol: null, selectedRecords: [], selectedId: null, selectedRecord: null };
+let symbolCustomManagerState = { all: [], selectedSymbol: null, selectedRecords: [], selectedId: null, selectedRecord: null, reportRows: [], optimizerRun: null };
 let parametersLibraryState = { rows: [], visibleRows: [], activeRiskProfile: null, count: 0 };
 let parametersLibraryDetailState = null;
 let editingRiskProfileId = null;
@@ -9277,6 +9311,8 @@ function setSymbolCustomEditorRecord(record) {
 
   updateSymbolCustomLiveWarning();
   renderSymbolCustomList();
+  symbolCustomManagerState.optimizerRun = null;
+  renderSymbolCustomOptimizerStub(source._id ? source : null);
 }
 
 function getSymbolCustomEditorValues() {
@@ -9374,6 +9410,181 @@ function renderSymbolCustomList() {
   target.innerHTML = html;
 }
 
+function renderSymbolCustomReport(rows) {
+  const target = symbolCustomEl('symbolCustomReport');
+  if (!target) return;
+  const reportRows = Array.isArray(rows) ? rows : [];
+
+  if (!reportRows.length) {
+    target.innerHTML = '<div class="empty">No SymbolCustoms</div>';
+    return;
+  }
+
+  let html = '<table class="symbol-custom-table"><tr><th>Symbol</th><th>Name</th><th>Status</th><th>Paper</th><th>Live</th><th>Logic</th><th>BT Status</th><th>BT PF</th><th>Recommendation</th><th>Warnings</th></tr>';
+  reportRows.forEach((row) => {
+    const latestBacktest = row.latestBacktest || {};
+    const warnings = Array.isArray(row.warnings) ? row.warnings.join(', ') : '';
+    html += '<tr>';
+    html += '<td><strong>' + escapeHtml(row.symbol || '--') + '</strong></td>';
+    html += '<td>' + escapeHtml(row.symbolCustomName || '--') + '</td>';
+    html += '<td>' + getSymbolCustomStatusTag(row.status) + '</td>';
+    html += '<td>' + (row.paperEnabled ? '<span class="tag tag-paper">true</span>' : '<span class="tag tag-neutral">false</span>') + '</td>';
+    html += '<td>' + (row.liveEnabled ? '<span class="tag tag-live">true</span>' : '<span class="tag tag-neutral">false</span>') + '</td>';
+    html += '<td>' + escapeHtml(row.logicName || '--') + '</td>';
+    html += '<td>' + escapeHtml(latestBacktest.status || '--') + '</td>';
+    html += '<td>' + escapeHtml(latestBacktest.profitFactor == null ? '--' : latestBacktest.profitFactor) + '</td>';
+    html += '<td><span class="tag tag-blue">' + escapeHtml(row.recommendation || '--') + '</span></td>';
+    html += '<td>' + escapeHtml(warnings || '--') + '</td>';
+    html += '</tr>';
+  });
+  html += '</table>';
+  target.innerHTML = html;
+}
+
+function renderSymbolCustomOptimizerStub(record, optimizerRun) {
+  const target = symbolCustomEl('symbolCustomOptimizerStub');
+  if (!target) return;
+
+  if (!record || !record._id) {
+    target.innerHTML = '<div class="empty">Select a SymbolCustom</div>';
+    return;
+  }
+
+  const schema = Array.isArray(record.parameterSchema) ? record.parameterSchema : [];
+  let html = '<table class="symbol-custom-table"><tr><th>Field</th><th>Value</th></tr>';
+  html += '<tr><td>symbolCustomName</td><td>' + escapeHtml(record.symbolCustomName || '--') + '</td></tr>';
+  html += '<tr><td>logicName</td><td>' + escapeHtml(record.logicName || '--') + '</td></tr>';
+  html += '<tr><td>parameterSchema</td><td><pre style="white-space:pre-wrap;font-size:12px;line-height:1.5">' + escapeHtml(JSON.stringify(schema, null, 2)) + '</pre></td></tr>';
+
+  if (optimizerRun) {
+    html += '<tr><td>status</td><td><span class="tag tag-blue">' + escapeHtml(optimizerRun.status || '--') + '</span></td></tr>';
+    html += '<tr><td>totalCombinations</td><td>' + escapeHtml(optimizerRun.totalCombinations == null ? '--' : optimizerRun.totalCombinations) + '</td></tr>';
+    html += '<tr><td>maxCombinations</td><td>' + escapeHtml(optimizerRun.maxCombinations == null ? '--' : optimizerRun.maxCombinations) + '</td></tr>';
+    html += '<tr><td>message</td><td>' + escapeHtml(optimizerRun.message || '--') + '</td></tr>';
+    html += '<tr><td>parameterGridPreview</td><td><pre style="white-space:pre-wrap;font-size:12px;line-height:1.5">' + escapeHtml(JSON.stringify(optimizerRun.parameterGridPreview || [], null, 2)) + '</pre></td></tr>';
+  } else {
+    html += '<tr><td>totalCombinations</td><td>Run stub to calculate preview</td></tr>';
+    html += '<tr><td>parameterGridPreview</td><td>Run stub to calculate preview</td></tr>';
+  }
+
+  html += '</table>';
+  target.innerHTML = html;
+}
+
+function renderSymbolCustomSafetyAudit(audit) {
+  const target = symbolCustomEl('symbolCustomSafetyAudit');
+  if (!target) return;
+
+  if (!audit || !Array.isArray(audit.checks)) {
+    target.innerHTML = '<div class="empty">Safety audit not run</div>';
+    return;
+  }
+
+  const summary = audit.summary || {};
+  let html = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">PASS '
+    + escapeHtml(summary.pass || 0)
+    + ' | WARN '
+    + escapeHtml(summary.warn || 0)
+    + ' | FAIL '
+    + escapeHtml(summary.fail || 0)
+    + '</div>';
+  html += '<table class="symbol-custom-table"><tr><th>Check</th><th>Status</th><th>Message</th></tr>';
+  audit.checks.forEach((check) => {
+    const status = String(check.status || 'WARN').toUpperCase();
+    let tagClass = 'tag-neutral';
+    if (status === 'PASS') tagClass = 'tag-green';
+    else if (status === 'WARN') tagClass = 'tag-neutral';
+    else if (status === 'FAIL') tagClass = 'tag-red';
+    html += '<tr>';
+    html += '<td><strong>' + escapeHtml(check.name || '--') + '</strong></td>';
+    html += '<td><span class="tag ' + tagClass + '">' + escapeHtml(status) + '</span></td>';
+    html += '<td>' + escapeHtml(check.message || '--') + '</td>';
+    html += '</tr>';
+  });
+  html += '</table>';
+  target.innerHTML = html;
+}
+
+async function runSymbolCustomSafetyAudit() {
+  try {
+    showSymbolCustomStatus('Running SymbolCustom safety audit...', 'warn');
+    const response = await api('/api/symbol-customs/safety-audit');
+    if (!response.success) throw new Error(response.message || 'Failed to run safety audit');
+
+    renderSymbolCustomSafetyAudit(response);
+    const failCount = response.summary && Number(response.summary.fail) ? Number(response.summary.fail) : 0;
+    const warnCount = response.summary && Number(response.summary.warn) ? Number(response.summary.warn) : 0;
+    showSymbolCustomStatus(
+      'Safety audit complete. PASS ' + (response.summary.pass || 0) + ', WARN ' + warnCount + ', FAIL ' + failCount + '.',
+      failCount ? 'error' : (warnCount ? 'warn' : 'success')
+    );
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to run safety audit', 'error');
+  }
+}
+
+async function runSelectedSymbolCustomOptimizerStub() {
+  const record = symbolCustomManagerState.selectedRecord;
+  if (!record || !record._id) {
+    showSymbolCustomStatus('Select a SymbolCustom before running optimizer stub.', 'error');
+    return;
+  }
+
+  try {
+    showSymbolCustomStatus('Creating SymbolCustom optimizer stub run...', 'warn');
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(record._id) + '/optimizer/run', 'POST', {
+      maxCombinations: 50,
+      parameterOverrides: {},
+    });
+    if (!response.success) throw new Error(response.message || 'Failed to create optimizer stub run');
+
+    symbolCustomManagerState.optimizerRun = response.optimizerRun || null;
+    renderSymbolCustomOptimizerStub(record, symbolCustomManagerState.optimizerRun);
+    showSymbolCustomStatus('SymbolCustom optimizer stub run created.', 'success');
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to create optimizer stub run', 'error');
+  }
+}
+
+async function loadSymbolCustomReport() {
+  try {
+    const params = new URLSearchParams();
+    if (symbolCustomManagerState.selectedSymbol) {
+      params.set('symbol', symbolCustomManagerState.selectedSymbol);
+    }
+    const url = '/api/symbol-customs/report' + (params.toString() ? '?' + params.toString() : '');
+    const response = await api(url);
+    if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustom report');
+
+    symbolCustomManagerState.reportRows = Array.isArray(response.symbolCustoms) ? response.symbolCustoms : [];
+    renderSymbolCustomReport(symbolCustomManagerState.reportRows);
+  } catch (error) {
+    symbolCustomManagerState.reportRows = [];
+    renderSymbolCustomReport([]);
+    showSymbolCustomStatus(error.message || 'Failed to load SymbolCustom report', 'error');
+  }
+}
+
+function exportSymbolCustomReportCsv() {
+  const utils = getSymbolCustomUtils();
+  if (!utils.buildSymbolCustomReportCsv) {
+    showSymbolCustomStatus('SymbolCustom report CSV helper is unavailable.', 'error');
+    return;
+  }
+
+  const rows = symbolCustomManagerState.reportRows || [];
+  const csv = utils.buildSymbolCustomReportCsv(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'symbol-custom-report.csv';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 async function loadSymbolCustomManager(options = {}) {
   try {
     showSymbolCustomStatus('Loading SymbolCustoms...', 'warn');
@@ -9390,13 +9601,15 @@ async function loadSymbolCustomManager(options = {}) {
     const nextSymbol = keepSymbol ? symbolCustomManagerState.selectedSymbol : (summaries[0] && summaries[0].symbol);
 
     if (nextSymbol) {
-      await selectSymbolCustomSymbol(nextSymbol, { preserveSelection: options.preserveSelection });
+      await selectSymbolCustomSymbol(nextSymbol, { preserveSelection: options.preserveSelection, skipReport: true });
     } else {
       symbolCustomManagerState.selectedSymbol = null;
       symbolCustomManagerState.selectedRecords = [];
       setSymbolCustomEditorRecord(null);
       renderSymbolCustomList();
     }
+
+    await loadSymbolCustomReport();
 
     showSymbolCustomStatus('SymbolCustoms loaded.', 'success');
   } catch (error) {
@@ -9417,6 +9630,9 @@ async function selectSymbolCustomSymbol(symbol, options = {}) {
     const nextId = keepId ? symbolCustomManagerState.selectedId : (symbolCustomManagerState.selectedRecords[0] && symbolCustomManagerState.selectedRecords[0]._id);
     if (nextId) await selectSymbolCustomRecord(nextId);
     else setSymbolCustomEditorRecord({ symbol });
+    if (!options.skipReport) {
+      await loadSymbolCustomReport();
+    }
   } catch (error) {
     showSymbolCustomStatus(error.message || 'Failed to load SymbolCustoms for symbol', 'error');
   }

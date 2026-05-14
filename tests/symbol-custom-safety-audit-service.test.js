@@ -1,0 +1,162 @@
+function loadAuditService({ symbolCustoms = [] } = {}) {
+  jest.resetModules();
+
+  const SymbolCustom = {
+    findAll: jest.fn(async () => symbolCustoms.map((record) => ({ ...record }))),
+  };
+  const optimizerRunsDb = {
+    insert: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+    find: jest.fn(),
+  };
+  const tradeExecutor = {
+    executeTrade: jest.fn(),
+  };
+  const backtestEngine = {
+    runBacktest: jest.fn(),
+    run: jest.fn(),
+  };
+
+  jest.doMock('../src/models/SymbolCustom', () => SymbolCustom);
+  jest.doMock('../src/config/db', () => ({ optimizerRunsDb }));
+  jest.doMock('../src/services/tradeExecutor', () => tradeExecutor);
+  jest.doMock('../src/services/backtestEngine', () => backtestEngine);
+  jest.doMock('../src/routes/symbolCustomRoutes', () => jest.fn());
+  jest.doMock('../src/services/symbolCustomReportService', () => ({
+    buildSymbolCustomReport: jest.fn(),
+  }));
+  jest.doMock('../src/services/symbolCustomOptimizerService', () => ({
+    buildParameterGridPreview: jest.fn(() => ({
+      totalCombinations: 2,
+      maxCombinations: 2,
+      parameterGridPreview: [{ lookbackBars: 10 }, { lookbackBars: 20 }],
+    })),
+  }));
+  jest.doMock('../src/services/symbolCustomBacktestService', () => ({
+    runSymbolCustomBacktest: jest.fn(),
+  }));
+
+  return {
+    service: require('../src/services/symbolCustomSafetyAuditService'),
+    SymbolCustom,
+    optimizerRunsDb,
+    tradeExecutor,
+    backtestEngine,
+  };
+}
+
+function getCheck(audit, name) {
+  return audit.checks.find((check) => check.name === name);
+}
+
+describe('symbolCustomSafetyAuditService', () => {
+  afterEach(() => {
+    jest.dontMock('../src/models/SymbolCustom');
+    jest.dontMock('../src/config/db');
+    jest.dontMock('../src/services/tradeExecutor');
+    jest.dontMock('../src/services/backtestEngine');
+    jest.dontMock('../src/routes/symbolCustomRoutes');
+    jest.dontMock('../src/services/symbolCustomReportService');
+    jest.dontMock('../src/services/symbolCustomOptimizerService');
+    jest.dontMock('../src/services/symbolCustomBacktestService');
+  });
+
+  test('audit response structure is correct and placeholder returns PASS', async () => {
+    const { service } = loadAuditService({
+      symbolCustoms: [
+        {
+          _id: 'sc-1',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_PLACEHOLDER',
+          logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+          liveEnabled: false,
+          isPrimaryLive: false,
+        },
+      ],
+    });
+
+    const audit = await service.runSymbolCustomPhase1SafetyAudit();
+
+    expect(audit).toEqual({
+      success: true,
+      checks: expect.any(Array),
+      summary: expect.objectContaining({
+        pass: expect.any(Number),
+        warn: expect.any(Number),
+        fail: expect.any(Number),
+      }),
+    });
+    expect(getCheck(audit, 'placeholder does not trade')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+  });
+
+  test('liveEnabled true produces WARN not FAIL', async () => {
+    const { service } = loadAuditService({
+      symbolCustoms: [
+        {
+          _id: 'sc-live',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_LIVE_FLAG',
+          liveEnabled: true,
+          isPrimaryLive: false,
+        },
+      ],
+    });
+
+    const audit = await service.runSymbolCustomPhase1SafetyAudit();
+    const check = getCheck(audit, 'default live disabled');
+
+    expect(check.status).toBe('WARN');
+    expect(check.message).toContain('Phase 1 does not support live execution');
+  });
+
+  test('multiple primary live records produce WARN without automatic fix', async () => {
+    const { service, SymbolCustom } = loadAuditService({
+      symbolCustoms: [
+        { _id: 'sc-1', symbol: 'USDJPY', symbolCustomName: 'A', isPrimaryLive: true },
+        { _id: 'sc-2', symbol: 'USDJPY', symbolCustomName: 'B', isPrimaryLive: true },
+      ],
+    });
+
+    const audit = await service.runSymbolCustomPhase1SafetyAudit();
+    const check = getCheck(audit, 'primary live uniqueness');
+
+    expect(check.status).toBe('WARN');
+    expect(check.message).toContain('No automatic fix applied');
+    expect(SymbolCustom.findAll).toHaveBeenCalledWith({});
+    expect(SymbolCustom.update).toBeUndefined();
+  });
+
+  test('old optimizer db is not touched', async () => {
+    const { service, optimizerRunsDb } = loadAuditService();
+
+    await service.runSymbolCustomPhase1SafetyAudit();
+
+    expect(optimizerRunsDb.insert).not.toHaveBeenCalled();
+    expect(optimizerRunsDb.update).not.toHaveBeenCalled();
+    expect(optimizerRunsDb.remove).not.toHaveBeenCalled();
+    expect(optimizerRunsDb.find).not.toHaveBeenCalled();
+    expect(getCheck(await service.runSymbolCustomPhase1SafetyAudit(), 'old optimizer untouched').status).toBe('PASS');
+  });
+
+  test('old backtestEngine is not called', async () => {
+    const { service, backtestEngine } = loadAuditService();
+
+    const audit = await service.runSymbolCustomPhase1SafetyAudit();
+
+    expect(backtestEngine.runBacktest).not.toHaveBeenCalled();
+    expect(backtestEngine.run).not.toHaveBeenCalled();
+    expect(getCheck(audit, 'old backtest untouched').status).toBe('PASS');
+  });
+
+  test('tradeExecutor is not called', async () => {
+    const { service, tradeExecutor } = loadAuditService();
+
+    const audit = await service.runSymbolCustomPhase1SafetyAudit();
+
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(getCheck(audit, 'live execution not connected').status).toBe('PASS');
+  });
+});

@@ -1,6 +1,6 @@
 {
   "name": "quantmatrix-mt5",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "QuantMatrix MT5 - Quantitative Trading Platform",
   "main": "src/server.js",
   "scripts": {

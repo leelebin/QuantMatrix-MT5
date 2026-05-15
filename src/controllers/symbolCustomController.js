@@ -6,6 +6,8 @@ const symbolCustomReportService = require('../services/symbolCustomReportService
 const symbolCustomOptimizerService = require('../services/symbolCustomOptimizerService');
 const symbolCustomSafetyAuditService = require('../services/symbolCustomSafetyAuditService');
 const symbolCustomPaperRuntimeService = require('../services/symbolCustomPaperRuntimeService');
+const symbolCustomEvaluationService = require('../services/symbolCustomEvaluationService');
+const symbolCustomPresetComparisonService = require('../services/symbolCustomPresetComparisonService');
 
 function sendMutationResponse(res, result) {
   const payload = {
@@ -145,9 +147,22 @@ exports.runBacktest = async (req, res) => {
       ...(req.body || {}),
       symbolCustomId: req.params.id,
     });
-    return res.json({ success: true, backtest });
+    const evaluation = symbolCustomEvaluationService.evaluateSymbolCustomBacktest(backtest);
+    return res.json({ success: true, backtest, evaluation });
   } catch (error) {
     return handleError(res, error, 'Failed to run SymbolCustom backtest');
+  }
+};
+
+exports.runPresetComparison = async (req, res) => {
+  try {
+    const comparison = await symbolCustomPresetComparisonService.runSymbolCustomPresetComparison({
+      ...(req.body || {}),
+      symbolCustomId: req.params.id,
+    });
+    return res.json({ success: true, ...comparison });
+  } catch (error) {
+    return handleError(res, error, 'Failed to run SymbolCustom preset comparison');
   }
 };
 
@@ -243,6 +258,19 @@ exports.getBacktestById = async (req, res) => {
     return res.json({ success: true, backtest });
   } catch (error) {
     return handleError(res, error, 'Failed to load SymbolCustom backtest');
+  }
+};
+
+exports.evaluateBacktest = async (req, res) => {
+  try {
+    const backtest = await symbolCustomBacktestService.getSymbolCustomBacktest(req.params.backtestId);
+    if (!backtest) {
+      return res.status(404).json({ success: false, message: 'SymbolCustom backtest not found' });
+    }
+    const evaluation = symbolCustomEvaluationService.evaluateSymbolCustomBacktest(backtest);
+    return res.json({ success: true, evaluation });
+  } catch (error) {
+    return handleError(res, error, 'Failed to evaluate SymbolCustom backtest');
   }
 };
 

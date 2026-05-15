@@ -991,6 +991,8 @@ tr:hover{background:var(--bg3)}
           <button class="btn-outline btn-sm" onclick="clearHistoricalBacktestView()">Back to Current Run</button>
         </div>
         <div id="btResult"><div class="empty">Run a backtest to see results</div></div>
+        <div id="btSymbolCustomEvaluation" style="display:none;margin-top:16px"></div>
+        <div id="btSymbolCustomPresetComparison" style="display:none;margin-top:16px"></div>
       </div>
     </div>
     <div class="card" style="margin-top:16px">
@@ -1908,6 +1910,8 @@ let selectedBacktestTradeId = null;
 let currentSingleBacktestResult = null;
 let currentSingleBacktestRenderMeta = null;
 let currentSingleBacktestFormState = null;
+let currentSymbolCustomEvaluation = null;
+let currentSymbolCustomPresetComparison = null;
 let activeHistoricalBacktestId = null;
 let activeHistoricalBacktestMode = 'STANDARD';
 let activeHistoricalBacktestDetail = null;
@@ -5408,6 +5412,7 @@ async function runSymbolCustomBacktestFromBacktestPage() {
     btn.textContent = 'Running...';
   }
   resetSingleBacktestChart('Running SymbolCustom backtest...');
+  renderSymbolCustomPresetComparison(null);
 
   try {
     const response = await api(request.endpoint, 'POST', request.payload);
@@ -5429,7 +5434,9 @@ async function runSymbolCustomBacktestFromBacktestPage() {
     const normalized = utils.normalizeBacktestResult
       ? utils.normalizeBacktestResult(response.backtest || {}, 'symbolCustom')
       : (response.backtest || {});
+    normalized.evaluation = response.evaluation || normalized.evaluation || null;
     currentSingleBacktestResult = normalized;
+    currentSymbolCustomEvaluation = normalized.evaluation || null;
     currentSingleBacktestRenderMeta = {
       label: 'SymbolCustom ' + (normalized.symbolCustomName || record.symbolCustomName || '--'),
       noChartMessage: 'No SymbolCustom candle chart data returned for this backtest.',
@@ -5577,6 +5584,8 @@ function resetSingleBacktestWorkspace(message = 'Run a backtest to see results')
   if (resultEl) {
     resultEl.innerHTML = '<div class="empty">' + escapeHtml(message) + '</div>';
   }
+  renderSymbolCustomBacktestEvaluation(null);
+  renderSymbolCustomPresetComparison(null);
   clearCanvas('equityCanvas');
   resetSingleBacktestChart();
 }
@@ -5665,6 +5674,357 @@ function renderNeutralOutcomeSummaryRow(summary) {
     + ' <span style="color:var(--text2)">(' + fmtRate(s.neutralRate) + ')</span></td></tr>';
 }
 
+function isSymbolCustomBacktestResult(data) {
+  return data && (data.source === 'symbolCustom' || data.mode === 'SYMBOLCUSTOM' || data.mode === 'symbolCustom' || data.symbolCustomName);
+}
+
+function formatEvaluationMetric(value, digits=2) {
+  if (value === null || value === undefined || value === '') return '--';
+  const number = Number(value);
+  if (Number.isFinite(number)) return number.toFixed(digits);
+  return String(value);
+}
+
+function renderEvaluationBreakdownTable(title, rows, columns) {
+  const entries = Object.entries(rows || {});
+  let html = '<h4 style="margin:14px 0 8px;color:var(--cyan)">' + escapeHtml(title) + '</h4>';
+  if (!entries.length) return html + '<div class="empty">No data</div>';
+
+  html += '<table class="symbol-custom-table"><tr><th>Group</th>';
+  columns.forEach((column) => { html += '<th>' + escapeHtml(column.label) + '</th>'; });
+  html += '</tr>';
+  entries.forEach(([key, row]) => {
+    html += '<tr><td>' + escapeHtml(key) + '</td>';
+    columns.forEach((column) => {
+      const raw = row ? row[column.key] : null;
+      const text = column.rate ? fmtRate(raw) : formatEvaluationMetric(raw, column.digits == null ? 2 : column.digits);
+      html += '<td>' + escapeHtml(text) + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  return html;
+}
+
+function renderSymbolCustomBacktestEvaluation(evaluation) {
+  const target = document.getElementById('btSymbolCustomEvaluation');
+  if (!target) return;
+  currentSymbolCustomEvaluation = evaluation || null;
+  if (!evaluation) {
+    target.style.display = 'none';
+    target.innerHTML = '';
+    return;
+  }
+
+  target.style.display = '';
+  const recommendation = evaluation.recommendation || {};
+  let html = '<div class="card-header" style="padding:0;margin-bottom:10px;gap:8px;flex-wrap:wrap">';
+  html += '<span class="card-title">SymbolCustom Evaluation</span>';
+  html += '<div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn-outline btn-sm" id="btPresetComparisonBtn" onclick="runSymbolCustomPresetComparisonFromBacktestPage()">Run Preset Comparison</button>';
+  html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomEvaluationExport(\'json\')">Evaluation JSON</button>';
+  html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomEvaluationExport(\'csv\')">Evaluation CSV</button>';
+  html += '</div></div>';
+  html += '<div class="readonly-note">Evaluation is backtest research only. It does not change paper/live settings.</div>';
+  html += '<table class="symbol-custom-table"><tr><th>Metric</th><th>Value</th></tr>';
+  html += '<tr><td>overall recommendation</td><td><span class="tag tag-blue">' + escapeHtml(recommendation.primary || '--') + '</span></td></tr>';
+  html += '<tr><td>recommendation codes</td><td>' + escapeHtml((recommendation.codes || []).join(', ') || '--') + '</td></tr>';
+  html += '<tr><td>warnings</td><td>' + escapeHtml((evaluation.warnings || []).join(' | ') || '--') + '</td></tr>';
+  html += '</table>';
+
+  const baseColumns = [
+    { key: 'trades', label: 'Trades', digits: 0 },
+    { key: 'netPnl', label: 'Net P/L' },
+    { key: 'profitFactor', label: 'PF' },
+    { key: 'winRate', label: 'Win Rate', rate: true },
+    { key: 'avgPnl', label: 'Avg P/L' },
+  ];
+  html += renderEvaluationBreakdownTable('Direction Breakdown', evaluation.directionBreakdown, baseColumns);
+  html += renderEvaluationBreakdownTable('Exit Reason Breakdown', evaluation.exitReasonBreakdown, baseColumns);
+  html += renderEvaluationBreakdownTable('Hourly UTC Breakdown', evaluation.hourlyBreakdownUtc, baseColumns);
+  html += renderEvaluationBreakdownTable('Monthly Breakdown', evaluation.monthlyBreakdown, baseColumns.slice(0, 4));
+
+  const loss = evaluation.consecutiveLossAnalysis || {};
+  html += '<h4 style="margin:14px 0 8px;color:var(--cyan)">Consecutive Loss Analysis</h4>';
+  html += '<table class="symbol-custom-table">';
+  html += '<tr><td>maxConsecutiveLosses</td><td>' + escapeHtml(loss.maxConsecutiveLosses ?? '--') + '</td></tr>';
+  html += '<tr><td>maxConsecutiveWins</td><td>' + escapeHtml(loss.maxConsecutiveWins ?? '--') + '</td></tr>';
+  html += '<tr><td>longestLossStreakStart</td><td>' + escapeHtml(loss.longestLossStreakStart || '--') + '</td></tr>';
+  html += '<tr><td>longestLossStreakEnd</td><td>' + escapeHtml(loss.longestLossStreakEnd || '--') + '</td></tr>';
+  html += '<tr><td>lossStreaksOver3</td><td>' + escapeHtml(loss.lossStreaksOver3 ?? '--') + '</td></tr>';
+  html += '<tr><td>lossStreaksOver5</td><td>' + escapeHtml(loss.lossStreaksOver5 ?? '--') + '</td></tr>';
+  html += '</table>';
+
+  const freq = evaluation.tradeFrequencyAnalysis || {};
+  html += '<h4 style="margin:14px 0 8px;color:var(--cyan)">Trade Frequency</h4>';
+  html += '<table class="symbol-custom-table">';
+  html += '<tr><td>tradesPerDay</td><td>' + escapeHtml(formatEvaluationMetric(freq.tradesPerDay)) + '</td></tr>';
+  html += '<tr><td>averageMinutesBetweenEntries</td><td>' + escapeHtml(formatEvaluationMetric(freq.averageMinutesBetweenEntries)) + '</td></tr>';
+  html += '<tr><td>entriesWithin15m</td><td>' + escapeHtml(freq.entriesWithin15m ?? '--') + '</td></tr>';
+  html += '<tr><td>entriesWithin30m</td><td>' + escapeHtml(freq.entriesWithin30m ?? '--') + '</td></tr>';
+  html += '<tr><td>entriesWithin60m</td><td>' + escapeHtml(freq.entriesWithin60m ?? '--') + '</td></tr>';
+  html += '</table>';
+
+  const costRows = {};
+  Object.entries(evaluation.costSensitivity || {}).forEach(([key, row]) => {
+    costRows[key] = {
+      trades: row.costPerTrade,
+      netPnl: row.netPnlAfterCost,
+      profitFactor: row.profitFactorAfterCost,
+      winRate: row.profitableAfterCost ? 1 : 0,
+    };
+  });
+  html += renderEvaluationBreakdownTable('Cost Sensitivity', costRows, [
+    { key: 'trades', label: 'Cost/Trade' },
+    { key: 'netPnl', label: 'Net P/L' },
+    { key: 'profitFactor', label: 'PF' },
+    { key: 'winRate', label: 'Profitable', rate: true },
+  ]);
+
+  target.innerHTML = html;
+}
+
+function buildSymbolCustomEvaluationCsv(evaluation) {
+  const rows = [['section', 'group', 'trades', 'netPnl', 'profitFactor', 'winRate', 'avgPnl', 'extra']];
+  const csvValue = (value) => {
+    if (value === null || value === undefined) return '';
+    const text = String(value);
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  const addBreakdown = (section, data) => {
+    Object.entries(data || {}).forEach(([key, row]) => {
+      rows.push([section, key, row.trades, row.netPnl, row.profitFactor, row.winRate, row.avgPnl, '']);
+    });
+  };
+  addBreakdown('direction', evaluation.directionBreakdown);
+  addBreakdown('exitReason', evaluation.exitReasonBreakdown);
+  addBreakdown('hourUtc', evaluation.hourlyBreakdownUtc);
+  addBreakdown('month', evaluation.monthlyBreakdown);
+  Object.entries(evaluation.costSensitivity || {}).forEach(([key, row]) => {
+    rows.push(['costSensitivity', key, '', row.netPnlAfterCost, row.profitFactorAfterCost, row.profitableAfterCost, '', 'costPerTrade=' + row.costPerTrade]);
+  });
+  return rows.map((row) => row.map(csvValue).join(',')).join('\n');
+}
+
+function downloadSymbolCustomEvaluationExport(format='json') {
+  if (!currentSymbolCustomEvaluation) {
+    alert('No SymbolCustom evaluation available.');
+    return;
+  }
+  const isCsv = format === 'csv';
+  const content = isCsv
+    ? buildSymbolCustomEvaluationCsv(currentSymbolCustomEvaluation)
+    : JSON.stringify(currentSymbolCustomEvaluation, null, 2);
+  const blob = new Blob([content], { type: isCsv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const name = (currentSymbolCustomEvaluation.symbolCustomName || 'symbol-custom-evaluation').replace(/[^a-z0-9_-]+/gi, '-');
+  link.href = url;
+  link.download = name + '-evaluation.' + (isCsv ? 'csv' : 'json');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getSymbolCustomPresetComparisonTarget() {
+  const source = currentSingleBacktestResult || activeHistoricalBacktestDetail || {};
+  const selectedRecord = (backtestSymbolCustomState.rows || []).find((row) => row._id === backtestSymbolCustomState.selectedId);
+  return {
+    id: source.symbolCustomId || selectedRecord?._id || backtestSymbolCustomState.selectedId || '',
+    symbolCustomName: source.symbolCustomName || selectedRecord?.symbolCustomName || '',
+  };
+}
+
+function buildSymbolCustomPresetComparisonPayload() {
+  const result = currentSingleBacktestResult || activeHistoricalBacktestDetail || {};
+  const startDate = document.getElementById('btStartDate')?.value || result.startDate || '';
+  const endDate = document.getElementById('btEndDate')?.value || result.endDate || '';
+  const initialBalance = Number(document.getElementById('btBalance')?.value || result.initialBalance || 500);
+  return {
+    startDate,
+    endDate,
+    initialBalance: Number.isFinite(initialBalance) ? initialBalance : 500,
+    costModel: result.costModelUsed || result.costModel || {
+      spread: 0,
+      commissionPerTrade: 0,
+      slippage: 0,
+    },
+  };
+}
+
+async function runSymbolCustomPresetComparisonFromBacktestPage() {
+  const target = getSymbolCustomPresetComparisonTarget();
+  const output = document.getElementById('btSymbolCustomPresetComparison');
+  const btn = document.getElementById('btPresetComparisonBtn');
+  if (!target.id) {
+    if (output) {
+      output.style.display = '';
+      output.innerHTML = '<div class="empty" style="color:var(--yellow)">Select a SymbolCustom before running preset comparison.</div>';
+    }
+    return;
+  }
+
+  const payload = buildSymbolCustomPresetComparisonPayload();
+  if (!payload.startDate || !payload.endDate) {
+    if (output) {
+      output.style.display = '';
+      output.innerHTML = '<div class="empty" style="color:var(--yellow)">Start Date and End Date are required for preset comparison.</div>';
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Comparing...';
+  }
+  if (output) {
+    output.style.display = '';
+    output.innerHTML = '<div class="empty">Running guardrail preset comparison...</div>';
+  }
+
+  try {
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(target.id) + '/preset-comparison', 'POST', payload);
+    if (!response.success) {
+      const utils = getBacktestPageUtils();
+      const errorInfo = utils.normalizeBacktestError
+        ? utils.normalizeBacktestError(response, 'Failed to run SymbolCustom preset comparison')
+        : { message: response.message || 'Failed to run SymbolCustom preset comparison' };
+      if (output) {
+        output.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(errorInfo.message) + '</div>'
+          + (errorInfo.hint ? '<div class="bt-chart-warning" style="margin-top:8px">' + escapeHtml(errorInfo.hint) + '</div>' : '');
+      }
+      return;
+    }
+    renderSymbolCustomPresetComparison(response);
+  } catch (error) {
+    if (output) {
+      output.style.display = '';
+      output.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(error.message || 'Failed to run SymbolCustom preset comparison') + '</div>';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Run Preset Comparison';
+    }
+  }
+}
+
+function renderSymbolCustomPresetComparison(comparison) {
+  const target = document.getElementById('btSymbolCustomPresetComparison');
+  if (!target) return;
+  currentSymbolCustomPresetComparison = comparison || null;
+  if (!comparison) {
+    target.style.display = 'none';
+    target.innerHTML = '';
+    return;
+  }
+
+  const results = Array.isArray(comparison.results) ? comparison.results : [];
+  target.style.display = '';
+  let html = '<div class="card-header" style="padding:0;margin-bottom:10px;gap:8px;flex-wrap:wrap">';
+  html += '<span class="card-title">Guardrail Preset Comparison</span>';
+  html += '<div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomPresetComparisonExport(\'json\')">Comparison JSON</button>';
+  html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomPresetComparisonExport(\'csv\')">Comparison CSV</button>';
+  html += '</div></div>';
+  html += '<div class="readonly-note">Preset comparison reruns SymbolCustom backtests only. It does not change paper/live settings.</div>';
+
+  const conclusion = comparison.conclusion || {};
+  html += '<table class="symbol-custom-table" style="margin-bottom:12px">';
+  html += '<tr><td>bestPreset</td><td>' + escapeHtml(comparison.bestPreset?.presetName || '--') + '</td></tr>';
+  html += '<tr><td>conclusion</td><td><span class="tag tag-blue">' + escapeHtml(conclusion.recommendation || '--') + '</span> ' + escapeHtml(conclusion.message || '') + '</td></tr>';
+  html += '</table>';
+
+  if (!results.length) {
+    html += '<div class="empty">' + escapeHtml(conclusion.message || 'No preset comparison results') + '</div>';
+    target.innerHTML = html;
+    return;
+  }
+
+  html += '<div style="overflow-x:auto"><table class="symbol-custom-table"><tr>';
+  ['Preset', 'Trades', 'Net P/L', 'PF', 'Win Rate', 'AvgR', 'Max DD %', 'Medium Cost Net P/L', 'Score', 'Recommendation'].forEach((label) => {
+    html += '<th>' + escapeHtml(label) + '</th>';
+  });
+  html += '</tr>';
+  results.forEach((result) => {
+    const summary = result.summary || {};
+    const mediumCost = result.evaluation?.costSensitivity?.mediumCost || {};
+    html += '<tr>';
+    html += '<td>' + escapeHtml(result.presetName || '--') + '</td>';
+    html += '<td>' + escapeHtml(summary.trades ?? '--') + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(summary.netPnl)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(summary.profitFactor, 4)) + '</td>';
+    html += '<td>' + escapeHtml(fmtRate(summary.winRate)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(summary.avgR, 4)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(summary.maxDrawdownPercent)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(mediumCost.netPnlAfterCost)) + '</td>';
+    html += '<td>' + escapeHtml(result.score ?? '--') + '</td>';
+    html += '<td><span class="tag tag-blue">' + escapeHtml(result.recommendation || '--') + '</span></td>';
+    html += '</tr>';
+  });
+  html += '</table></div>';
+  target.innerHTML = html;
+}
+
+function buildSymbolCustomPresetComparisonCsv(comparison) {
+  const rows = [[
+    'preset',
+    'trades',
+    'netPnl',
+    'profitFactor',
+    'winRate',
+    'avgR',
+    'maxDrawdownPercent',
+    'mediumCostNetPnl',
+    'score',
+    'recommendation',
+  ]];
+  const csvValue = (value) => {
+    if (value === null || value === undefined) return '';
+    const text = String(value);
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  (comparison.results || []).forEach((result) => {
+    const summary = result.summary || {};
+    const mediumCost = result.evaluation?.costSensitivity?.mediumCost || {};
+    rows.push([
+      result.presetName,
+      summary.trades,
+      summary.netPnl,
+      summary.profitFactor,
+      summary.winRate,
+      summary.avgR,
+      summary.maxDrawdownPercent,
+      mediumCost.netPnlAfterCost,
+      result.score,
+      result.recommendation,
+    ]);
+  });
+  return rows.map((row) => row.map(csvValue).join(',')).join('\n');
+}
+
+function downloadSymbolCustomPresetComparisonExport(format='json') {
+  if (!currentSymbolCustomPresetComparison) {
+    alert('No SymbolCustom preset comparison available.');
+    return;
+  }
+  const isCsv = format === 'csv';
+  const content = isCsv
+    ? buildSymbolCustomPresetComparisonCsv(currentSymbolCustomPresetComparison)
+    : JSON.stringify(currentSymbolCustomPresetComparison, null, 2);
+  const blob = new Blob([content], { type: isCsv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const name = (currentSymbolCustomPresetComparison.symbolCustomName || 'symbol-custom-preset-comparison').replace(/[^a-z0-9_-]+/gi, '-');
+  link.href = url;
+  link.download = name + '-preset-comparison.' + (isCsv ? 'csv' : 'json');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function renderBacktestResult(data, resultElementId='btResult', canvasId='equityCanvas', overrideMeta=null) {
   const s = data.summary || {};
   const fallbackTradeEvents = normalizeBacktestTradeEvents(data.trades);
@@ -5723,6 +6083,11 @@ function renderBacktestResult(data, resultElementId='btResult', canvasId='equity
     html += '<div style="font-size:12px;color:var(--text2)">' + escapeHtml(formatBreakevenSummary(data.breakevenConfigUsed)) + '</div>';
   }
   document.getElementById(resultElementId).innerHTML = html;
+  if (resultElementId === 'btResult') {
+    const isSymbolCustomResult = isSymbolCustomBacktestResult(data);
+    renderSymbolCustomBacktestEvaluation(isSymbolCustomResult ? data.evaluation : null);
+    if (!isSymbolCustomResult) renderSymbolCustomPresetComparison(null);
+  }
 
   // Draw equity curve
   if (data.equityCurve) drawEquityCurve(data.equityCurve, canvasId);
@@ -6469,9 +6834,16 @@ async function loadHistoricalSymbolCustomBacktest(id) {
     const normalized = utils.normalizeBacktestResult
       ? utils.normalizeBacktestResult(detail, 'symbolCustom')
       : detail;
+    try {
+      const evaluationResponse = await api('/api/symbol-customs/backtests/' + encodeURIComponent(id) + '/evaluation');
+      if (evaluationResponse.success) normalized.evaluation = evaluationResponse.evaluation || null;
+    } catch (evaluationError) {
+      normalized.evaluation = null;
+    }
     activeHistoricalBacktestId = detail._id || id;
     activeHistoricalBacktestMode = 'SYMBOLCUSTOM';
     activeHistoricalBacktestDetail = normalized;
+    currentSymbolCustomEvaluation = normalized.evaluation || null;
 
     if (detail.symbol && document.getElementById('btSymbol')) {
       document.getElementById('btSymbol').value = detail.symbol;

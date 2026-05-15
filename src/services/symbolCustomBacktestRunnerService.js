@@ -21,6 +21,18 @@ function toEpoch(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function toUtcDateKey(value) {
+  const epoch = toEpoch(value);
+  if (!epoch) return null;
+  return new Date(epoch).toISOString().slice(0, 10);
+}
+
+function toUtcHour(value) {
+  const epoch = toEpoch(value);
+  if (!epoch) return null;
+  return new Date(epoch).getUTCHours();
+}
+
 function getBarsUpTo(candles = [], currentBar = {}) {
   const currentEpoch = toEpoch(getBarTime(currentBar));
   if (!currentEpoch) return candles.slice();
@@ -165,7 +177,21 @@ function buildContext({
   currentIndex,
   openPosition,
   balance,
+  closedTrades,
 }) {
+  const currentTime = getBarTime(currentBar);
+  const currentDateUtc = toUtcDateKey(currentTime);
+  const lastClosedTrade = closedTrades.length ? closedTrades[closedTrades.length - 1] : null;
+  const todayClosedTrades = currentDateUtc
+    ? closedTrades.filter((trade) => toUtcDateKey(trade.exitTime) === currentDateUtc)
+    : [];
+  const todayTrades = currentDateUtc
+    ? closedTrades.filter((trade) => trade.entryDateUtc === currentDateUtc)
+    : [];
+  if (openPosition && openPosition.entryDateUtc === currentDateUtc) {
+    todayTrades.push(cloneValue(openPosition));
+  }
+
   return {
     scope: 'backtest',
     symbol: symbolCustom.symbol,
@@ -188,6 +214,14 @@ function buildContext({
     currentBar,
     currentIndex,
     openPosition: openPosition ? cloneValue(openPosition) : null,
+    closedTrades: cloneValue(closedTrades),
+    lastClosedTrade: lastClosedTrade ? cloneValue(lastClosedTrade) : null,
+    currentUtcHour: toUtcHour(currentTime),
+    todayClosedTrades: cloneValue(todayClosedTrades),
+    todayTrades: cloneValue(todayTrades),
+    barsSinceLastExit: lastClosedTrade && Number.isFinite(Number(lastClosedTrade.exitIndex))
+      ? currentIndex - Number(lastClosedTrade.exitIndex)
+      : null,
     balance,
     equity: balance,
   };
@@ -250,7 +284,7 @@ function buildSummary(trades, equityCurve, initialBalance, rejectedSignals) {
   };
 }
 
-function openTrade({ symbolCustom, logicName, result, currentBar, balance, riskPerTradePct, costModel }) {
+function openTrade({ symbolCustom, logicName, result, currentBar, currentIndex, balance, riskPerTradePct, costModel }) {
   const side = result.signal;
   const close = toNumber(currentBar.close, null);
   if (!Number.isFinite(close)) return null;
@@ -272,6 +306,9 @@ function openTrade({ symbolCustom, logicName, result, currentBar, balance, riskP
     logicName,
     side,
     entryTime: getBarTime(currentBar),
+    entryIndex: currentIndex,
+    entryHourUtc: toUtcHour(getBarTime(currentBar)),
+    entryDateUtc: toUtcDateKey(getBarTime(currentBar)),
     entryPrice,
     sl,
     tp,
@@ -282,7 +319,7 @@ function openTrade({ symbolCustom, logicName, result, currentBar, balance, riskP
   };
 }
 
-function closeTrade(position, currentBar, exitPrice, exitReason, costModel) {
+function closeTrade(position, currentBar, currentIndex, exitPrice, exitReason, costModel) {
   const pnl = calculatePnl(position, exitPrice, costModel);
   const plannedRiskAmount = position.plannedRiskAmount;
   return {
@@ -291,8 +328,12 @@ function closeTrade(position, currentBar, exitPrice, exitReason, costModel) {
     logicName: position.logicName,
     side: position.side,
     entryTime: position.entryTime,
+    entryIndex: position.entryIndex,
+    entryHourUtc: position.entryHourUtc,
+    entryDateUtc: position.entryDateUtc,
     entryPrice: position.entryPrice,
     exitTime: getBarTime(currentBar),
+    exitIndex: currentIndex,
     exitPrice,
     sl: position.sl,
     tp: position.tp,
@@ -333,7 +374,7 @@ async function runSymbolCustomBacktestSimulation({
     if (openPosition) {
       const barrierExit = detectStopTakeProfitExit(openPosition, currentBar);
       if (barrierExit) {
-        const trade = closeTrade(openPosition, currentBar, barrierExit.exitPrice, barrierExit.exitReason, costModelUsed);
+        const trade = closeTrade(openPosition, currentBar, currentIndex, barrierExit.exitPrice, barrierExit.exitReason, costModelUsed);
         trades.push(trade);
         balance += trade.pnl;
         openPosition = null;
@@ -351,6 +392,7 @@ async function runSymbolCustomBacktestSimulation({
       currentIndex,
       openPosition,
       balance,
+      closedTrades: trades,
     });
 
     const result = await logic.analyze(context) || {};
@@ -358,7 +400,7 @@ async function runSymbolCustomBacktestSimulation({
 
     if (openPosition && signal === 'CLOSE') {
       const exitPrice = toNumber(currentBar.close, openPosition.entryPrice);
-      const trade = closeTrade(openPosition, currentBar, exitPrice, 'CUSTOM_CLOSE', costModelUsed);
+      const trade = closeTrade(openPosition, currentBar, currentIndex, exitPrice, 'CUSTOM_CLOSE', costModelUsed);
       trades.push(trade);
       balance += trade.pnl;
       openPosition = null;
@@ -368,6 +410,7 @@ async function runSymbolCustomBacktestSimulation({
         logicName,
         result,
         currentBar,
+        currentIndex,
         balance,
         riskPerTradePct,
         costModel: costModelUsed,
@@ -385,7 +428,8 @@ async function runSymbolCustomBacktestSimulation({
 
   const finalBar = entryCandles[entryCandles.length - 1] || null;
   if (openPosition && finalBar) {
-    const trade = closeTrade(openPosition, finalBar, toNumber(finalBar.close, openPosition.entryPrice), 'END_OF_BACKTEST', costModelUsed);
+    const finalIndex = entryCandles.length - 1;
+    const trade = closeTrade(openPosition, finalBar, finalIndex, toNumber(finalBar.close, openPosition.entryPrice), 'END_OF_BACKTEST', costModelUsed);
     trades.push(trade);
     balance += trade.pnl;
     openPosition = null;

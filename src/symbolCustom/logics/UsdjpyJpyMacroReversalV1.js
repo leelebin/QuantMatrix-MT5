@@ -1,6 +1,7 @@
 const BaseSymbolCustom = require('../BaseSymbolCustom');
 
 const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
+const USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = 2;
 const BACKTEST_ONLY_REASON = 'USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only in Phase 2D';
 
 const DEFAULT_PARAMETER_SCHEMA = Object.freeze([
@@ -16,6 +17,14 @@ const DEFAULT_PARAMETER_SCHEMA = Object.freeze([
   { key: 'maxBarsInTrade', label: 'Max Bars In Trade', type: 'number', defaultValue: 18, min: 6, max: 36, step: 3 },
   { key: 'minAtr', label: 'Minimum ATR', type: 'number', defaultValue: 0, min: 0, max: 1, step: 0.01 },
   { key: 'cooldownBars', label: 'Cooldown Bars', type: 'number', defaultValue: 6, min: 0, max: 24, step: 3 },
+  { key: 'enableBuy', label: 'Enable BUY', type: 'boolean', defaultValue: true },
+  { key: 'enableSell', label: 'Enable SELL', type: 'boolean', defaultValue: true },
+  { key: 'allowedUtcHours', label: 'Allowed UTC Hours', type: 'string', defaultValue: '' },
+  { key: 'blockedUtcHours', label: 'Blocked UTC Hours', type: 'string', defaultValue: '' },
+  { key: 'cooldownBarsAfterAnyExit', label: 'Cooldown Bars After Any Exit', type: 'number', defaultValue: 0, min: 0, max: 48, step: 3 },
+  { key: 'cooldownBarsAfterSL', label: 'Cooldown Bars After SL', type: 'number', defaultValue: 0, min: 0, max: 96, step: 3 },
+  { key: 'maxDailyLosses', label: 'Max Daily Losses', type: 'number', defaultValue: 0, min: 0, max: 10, step: 1 },
+  { key: 'maxDailyTrades', label: 'Max Daily Trades', type: 'number', defaultValue: 0, min: 0, max: 50, step: 1 },
 ]);
 
 function cloneValue(value) {
@@ -40,6 +49,22 @@ function getRange(candle = {}) {
 
 function getCandleTime(candle = {}) {
   return candle.time || candle.timestamp || candle.date || null;
+}
+
+function parseUtcHours(value) {
+  if (value == null || String(value).trim() === '') return [];
+  return String(value)
+    .split(',')
+    .map((item) => Number(String(item).trim()))
+    .filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23);
+}
+
+function getUtcHourFromContext(context = {}, currentBar = {}) {
+  const explicit = Number(context.currentUtcHour);
+  if (Number.isInteger(explicit) && explicit >= 0 && explicit <= 23) return explicit;
+  const time = getCandleTime(currentBar);
+  const date = time ? new Date(time) : null;
+  return date && Number.isFinite(date.getTime()) ? date.getUTCHours() : null;
 }
 
 function calculateSMA(candles = [], period = 14) {
@@ -169,6 +194,50 @@ function countBarsInTrade(entryCandles = [], openPosition = {}, currentIndex = 0
   return 0;
 }
 
+function shouldBlockByGuardrails({ parameters, context, currentBar }) {
+  const currentUtcHour = getUtcHourFromContext(context, currentBar);
+  const allowedHours = parseUtcHours(parameters.allowedUtcHours);
+  const blockedHours = parseUtcHours(parameters.blockedUtcHours);
+
+  if (currentUtcHour !== null && allowedHours.length > 0 && !allowedHours.includes(currentUtcHour)) {
+    return 'UTC hour not in allowedUtcHours';
+  }
+  if (currentUtcHour !== null && blockedHours.includes(currentUtcHour)) {
+    return 'UTC hour blocked by blockedUtcHours';
+  }
+
+  const barsSinceLastExit = toNumber(context.barsSinceLastExit, null);
+  const lastClosedTrade = context.lastClosedTrade || null;
+  if (
+    Number.isFinite(barsSinceLastExit)
+    && parameters.cooldownBarsAfterAnyExit > 0
+    && barsSinceLastExit <= parameters.cooldownBarsAfterAnyExit
+  ) {
+    return 'Cooldown after any exit active';
+  }
+  if (
+    lastClosedTrade
+    && lastClosedTrade.exitReason === 'SL'
+    && Number.isFinite(barsSinceLastExit)
+    && parameters.cooldownBarsAfterSL > 0
+    && barsSinceLastExit <= parameters.cooldownBarsAfterSL
+  ) {
+    return 'Cooldown after SL active';
+  }
+
+  const todayClosedTrades = Array.isArray(context.todayClosedTrades) ? context.todayClosedTrades : [];
+  const todayTrades = Array.isArray(context.todayTrades) ? context.todayTrades : [];
+  const dailyLosses = todayClosedTrades.filter((trade) => toNumber(trade.pnl, 0) < 0).length;
+  if (parameters.maxDailyLosses > 0 && dailyLosses >= parameters.maxDailyLosses) {
+    return 'Max daily losses reached';
+  }
+  if (parameters.maxDailyTrades > 0 && todayTrades.length >= parameters.maxDailyTrades) {
+    return 'Max daily trades reached';
+  }
+
+  return null;
+}
+
 class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
   constructor(meta = {}) {
     super({
@@ -243,6 +312,16 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
     }
 
     const currentBar = context.currentBar || entryCandles[entryCandles.length - 1] || {};
+    const guardrailReason = shouldBlockByGuardrails({ parameters, context, currentBar });
+    if (guardrailReason) {
+      return {
+        signal: 'NONE',
+        reason: guardrailReason,
+        symbolCustomName: this.name,
+        symbol,
+      };
+    }
+
     const currentClose = getClose(currentBar);
     const lookbackClose = getClose(entryCandles[entryCandles.length - 1 - parameters.lookbackBars]);
     const atr = calculateATR(entryCandles, parameters.atrPeriod);
@@ -287,6 +366,16 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
       && rsi <= parameters.rsiOversold
       && hasBullishConfirm
     ) {
+      if (parameters.enableBuy === false) {
+        return {
+          signal: 'NONE',
+          reason: 'BUY disabled by enableBuy=false',
+          symbolCustomName: this.name,
+          symbol,
+          metadata,
+        };
+      }
+
       return {
         signal: 'BUY',
         sl: currentClose - (parameters.slAtrMultiplier * atr),
@@ -303,6 +392,16 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
       && rsi >= parameters.rsiOverbought
       && hasBearishConfirm
     ) {
+      if (parameters.enableSell === false) {
+        return {
+          signal: 'NONE',
+          reason: 'SELL disabled by enableSell=false',
+          symbolCustomName: this.name,
+          symbol,
+          metadata,
+        };
+      }
+
       return {
         signal: 'SELL',
         sl: currentClose + (parameters.slAtrMultiplier * atr),
@@ -330,6 +429,7 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
 
 module.exports = UsdjpyJpyMacroReversalV1;
 module.exports.USDJPY_JPY_MACRO_REVERSAL_V1 = USDJPY_JPY_MACRO_REVERSAL_V1;
+module.exports.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = USDJPY_JPY_MACRO_REVERSAL_V1_VERSION;
 module.exports.BACKTEST_ONLY_REASON = BACKTEST_ONLY_REASON;
 module.exports.DEFAULT_PARAMETER_SCHEMA = DEFAULT_PARAMETER_SCHEMA;
 module.exports._internals = {
@@ -337,4 +437,5 @@ module.exports._internals = {
   calculatePriceRange,
   calculateRSI,
   calculateSMA,
+  parseUtcHours,
 };

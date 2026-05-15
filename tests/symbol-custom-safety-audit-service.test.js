@@ -159,6 +159,39 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference old backtestEngine')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'USDJPY guardrails are backtest-only')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'USDJPY paper/live still return NONE after guardrail changes')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'evaluation service does not call tradeExecutor')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'evaluation service does not call riskManager')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'evaluation service does not call old backtestEngine')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'evaluation service does not call six strategies')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'preset comparison does not call tradeExecutor')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'preset comparison does not call paperTradingService')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'preset comparison does not call old backtestEngine')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'preset comparison does not call six strategies')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'USDJPY paper/live remains NONE for preset comparison')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {

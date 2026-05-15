@@ -69,6 +69,14 @@ function buildContext(candles, overrides = {}) {
       maxBarsInTrade: 18,
       minAtr: 0,
       cooldownBars: 6,
+      enableBuy: true,
+      enableSell: true,
+      allowedUtcHours: '',
+      blockedUtcHours: '',
+      cooldownBarsAfterAnyExit: 0,
+      cooldownBarsAfterSL: 0,
+      maxDailyLosses: 0,
+      maxDailyTrades: 0,
     },
     ...overrides,
   };
@@ -178,11 +186,141 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       'maxBarsInTrade',
       'minAtr',
       'cooldownBars',
+      'enableBuy',
+      'enableSell',
+      'allowedUtcHours',
+      'blockedUtcHours',
+      'cooldownBarsAfterAnyExit',
+      'cooldownBarsAfterSL',
+      'maxDailyLosses',
+      'maxDailyTrades',
     ]);
     expect(logic.getDefaultParameters()).toEqual(expect.objectContaining({
       lookbackBars: 36,
       impulseAtrMultiplier: 1.8,
       maxBarsInTrade: 18,
+      enableBuy: true,
+      enableSell: true,
+      allowedUtcHours: '',
+    }));
+    expect(UsdjpyJpyMacroReversalV1.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION).toBe(2);
+  });
+
+  test('enableBuy=false blocks BUY setup', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      parameters: {
+        ...buildContext(candles).parameters,
+        enableBuy: false,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'BUY disabled by enableBuy=false',
+    }));
+  });
+
+  test('enableSell=false blocks SELL setup', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'up' });
+    const result = logic.analyze(buildContext(candles, {
+      parameters: {
+        ...buildContext(candles).parameters,
+        enableSell: false,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'SELL disabled by enableSell=false',
+    }));
+  });
+
+  test('allowedUtcHours blocks hours not listed', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      currentUtcHour: 22,
+      parameters: {
+        ...buildContext(candles).parameters,
+        allowedUtcHours: '0,1,2',
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'UTC hour not in allowedUtcHours',
+    }));
+  });
+
+  test('blockedUtcHours blocks listed hours', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      currentUtcHour: 3,
+      parameters: {
+        ...buildContext(candles).parameters,
+        blockedUtcHours: '3,4',
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'UTC hour blocked by blockedUtcHours',
+    }));
+  });
+
+  test('cooldownBarsAfterSL blocks entries after SL', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: 2,
+      lastClosedTrade: { exitReason: 'SL', pnl: -5 },
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterSL: 3,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'Cooldown after SL active',
+    }));
+  });
+
+  test('maxDailyLosses blocks entries after daily loss limit', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      todayClosedTrades: [{ pnl: -1 }, { pnl: -2 }],
+      parameters: {
+        ...buildContext(candles).parameters,
+        maxDailyLosses: 2,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'Max daily losses reached',
+    }));
+  });
+
+  test('maxDailyTrades blocks entries after daily trade limit', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      todayTrades: [{ pnl: 1 }, { pnl: -1 }],
+      parameters: {
+        ...buildContext(candles).parameters,
+        maxDailyTrades: 2,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'Max daily trades reached',
     }));
   });
 

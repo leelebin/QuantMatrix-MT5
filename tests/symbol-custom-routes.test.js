@@ -50,6 +50,10 @@ jest.mock('../src/services/symbolCustomPaperRuntimeService', () => ({
   runPaperScan: jest.fn(),
 }));
 
+jest.mock('../src/services/symbolCustomPresetComparisonService', () => ({
+  runSymbolCustomPresetComparison: jest.fn(),
+}));
+
 const symbolCustomService = require('../src/services/symbolCustomService');
 const symbolCustomSeedService = require('../src/services/symbolCustomSeedService');
 const symbolCustomBacktestService = require('../src/services/symbolCustomBacktestService');
@@ -58,6 +62,7 @@ const symbolCustomReportService = require('../src/services/symbolCustomReportSer
 const symbolCustomOptimizerService = require('../src/services/symbolCustomOptimizerService');
 const symbolCustomSafetyAuditService = require('../src/services/symbolCustomSafetyAuditService');
 const symbolCustomPaperRuntimeService = require('../src/services/symbolCustomPaperRuntimeService');
+const symbolCustomPresetComparisonService = require('../src/services/symbolCustomPresetComparisonService');
 const symbolCustomRoutes = require('../src/routes/symbolCustomRoutes');
 
 function createApp() {
@@ -226,7 +231,13 @@ describe('symbolCustomRoutes', () => {
       backtests: [{ _id: 'bt-1', status: 'stub' }],
     });
     expect(getResponse.body).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
-    expect(runResponse.body).toEqual({ success: true, backtest: { _id: 'bt-2', status: 'stub' } });
+    expect(runResponse.body).toEqual(expect.objectContaining({
+      success: true,
+      backtest: { _id: 'bt-2', status: 'stub' },
+      evaluation: expect.objectContaining({
+        recommendation: expect.any(Object),
+      }),
+    }));
     expect(deleteResponse.body).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
     expect(symbolCustomBacktestService.runSymbolCustomBacktest).toHaveBeenCalledWith({
       symbolCustomId: 'sc-1',
@@ -234,6 +245,89 @@ describe('symbolCustomRoutes', () => {
       endDate: '2026-05-01',
       initialBalance: 500,
     });
+  });
+
+  test('POST /api/symbol-customs/:id/preset-comparison works before generic id route', async () => {
+    symbolCustomPresetComparisonService.runSymbolCustomPresetComparison.mockResolvedValue({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      startDate: '2025-03-15',
+      endDate: '2026-05-15',
+      results: [{ presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' }],
+      bestPreset: { presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' },
+      conclusion: { recommendation: 'REJECT_NO_EDGE', message: 'No edge' },
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-usdjpy/preset-comparison')
+      .send({
+        startDate: '2025-03-15',
+        endDate: '2026-05-15',
+        initialBalance: 500,
+        costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      });
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomPresetComparisonService.runSymbolCustomPresetComparison).toHaveBeenCalledWith({
+      symbolCustomId: 'sc-usdjpy',
+      startDate: '2025-03-15',
+      endDate: '2026-05-15',
+      initialBalance: 500,
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+    });
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      results: [{ presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' }],
+      bestPreset: { presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' },
+    }));
+  });
+
+  test('POST /api/symbol-customs/:id/preset-comparison returns clear invalid SymbolCustom error', async () => {
+    const error = new Error('SymbolCustom not found');
+    error.statusCode = 404;
+    error.reasonCode = 'SYMBOL_CUSTOM_NOT_FOUND';
+    symbolCustomPresetComparisonService.runSymbolCustomPresetComparison.mockRejectedValueOnce(error);
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/missing/preset-comparison')
+      .send({});
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(expect.objectContaining({
+      success: false,
+      message: 'SymbolCustom not found',
+      reasonCode: 'SYMBOL_CUSTOM_NOT_FOUND',
+    }));
+  });
+
+  test('POST /api/symbol-customs/:id/preset-comparison returns placeholder reason', async () => {
+    symbolCustomPresetComparisonService.runSymbolCustomPresetComparison.mockResolvedValue({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_PLACEHOLDER',
+      logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      results: [],
+      bestPreset: null,
+      conclusion: {
+        recommendation: 'REJECT_NO_EDGE',
+        reasonCode: 'PLACEHOLDER_SYMBOL_CUSTOM',
+        message: 'Placeholder SymbolCustom has no active backtest logic for preset comparison.',
+      },
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-placeholder/preset-comparison')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      results: [],
+      bestPreset: null,
+      conclusion: expect.objectContaining({
+        reasonCode: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      }),
+    }));
   });
 
   test('POST /api/symbol-customs/:id/analyze-paper-once returns a read-only paper signal', async () => {

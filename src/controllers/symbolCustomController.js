@@ -7,6 +7,7 @@ const symbolCustomOptimizerService = require('../services/symbolCustomOptimizerS
 const symbolCustomSafetyAuditService = require('../services/symbolCustomSafetyAuditService');
 const symbolCustomPaperRuntimeService = require('../services/symbolCustomPaperRuntimeService');
 const symbolCustomEvaluationService = require('../services/symbolCustomEvaluationService');
+const symbolCustomPresetComparisonService = require('../services/symbolCustomPresetComparisonService');
 
 function sendMutationResponse(res, result) {
   const payload = {
@@ -150,6 +151,18 @@ exports.runBacktest = async (req, res) => {
     return res.json({ success: true, backtest, evaluation });
   } catch (error) {
     return handleError(res, error, 'Failed to run SymbolCustom backtest');
+  }
+};
+
+exports.runPresetComparison = async (req, res) => {
+  try {
+    const comparison = await symbolCustomPresetComparisonService.runSymbolCustomPresetComparison({
+      ...(req.body || {}),
+      symbolCustomId: req.params.id,
+    });
+    return res.json({ success: true, ...comparison });
+  } catch (error) {
+    return handleError(res, error, 'Failed to run SymbolCustom preset comparison');
   }
 };
 

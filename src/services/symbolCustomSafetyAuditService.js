@@ -660,6 +660,105 @@ function auditEvaluationServiceDoesNotCallSixStrategies() {
   }
 }
 
+function auditPresetComparisonDoesNotCallTradeExecutor() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPresetComparisonService.js');
+    const safe = sourceExcludes(source, [
+      /tradeExecutor/i,
+      /\bexecuteTrade\s*\(/,
+      /placeOrder\s*\(/,
+      /preflightOrder\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('preset comparison does not call tradeExecutor', 'PASS', 'SymbolCustom preset comparison only orchestrates backtest/evaluation services.')
+      : buildCheck('preset comparison does not call tradeExecutor', 'FAIL', 'SymbolCustom preset comparison appears to reference live order execution.');
+  } catch (error) {
+    return buildCheck('preset comparison does not call tradeExecutor', 'FAIL', `Unable to inspect preset comparison tradeExecutor isolation: ${error.message}`);
+  }
+}
+
+function auditPresetComparisonDoesNotCallPaperTradingService() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPresetComparisonService.js');
+    const safe = sourceExcludes(source, [
+      /paperTradingService/i,
+      /submitSymbolCustomSignal\s*\(/,
+      /submitExternalPaperSignal\s*\(/,
+      /_executePaperTrade\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('preset comparison does not call paperTradingService', 'PASS', 'SymbolCustom preset comparison does not submit paper signals.')
+      : buildCheck('preset comparison does not call paperTradingService', 'FAIL', 'SymbolCustom preset comparison appears to reference paper execution.');
+  } catch (error) {
+    return buildCheck('preset comparison does not call paperTradingService', 'FAIL', `Unable to inspect preset comparison paper isolation: ${error.message}`);
+  }
+}
+
+function auditPresetComparisonDoesNotCallOldBacktestEngine() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPresetComparisonService.js');
+    const safe = sourceExcludes(source, [
+      /backtestEngine/,
+      /runBacktest\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('preset comparison does not call old backtestEngine', 'PASS', 'SymbolCustom preset comparison uses SymbolCustom backtest service only.')
+      : buildCheck('preset comparison does not call old backtestEngine', 'FAIL', 'SymbolCustom preset comparison appears to reference old backtestEngine.');
+  } catch (error) {
+    return buildCheck('preset comparison does not call old backtestEngine', 'FAIL', `Unable to inspect preset comparison backtest isolation: ${error.message}`);
+  }
+}
+
+function auditPresetComparisonDoesNotCallSixStrategies() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPresetComparisonService.js');
+    const safe = sourceExcludes(source, [
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /Momentum/,
+      /MultiTimeframe/,
+      /VolumeFlowHybrid/,
+      /src\/strategies/,
+      /\.\.\/strategies/,
+    ]);
+
+    return safe
+      ? buildCheck('preset comparison does not call six strategies', 'PASS', 'SymbolCustom preset comparison does not reference six strategy classes.')
+      : buildCheck('preset comparison does not call six strategies', 'FAIL', 'SymbolCustom preset comparison appears to reference six strategy classes.');
+  } catch (error) {
+    return buildCheck('preset comparison does not call six strategies', 'FAIL', `Unable to inspect preset comparison strategy isolation: ${error.message}`);
+  }
+}
+
+function auditUsdjpyPaperLiveRemainNoneForPresetComparison() {
+  try {
+    const { getSymbolCustomLogic } = require('../symbolCustom/registry');
+    const logic = getSymbolCustomLogic(USDJPY_JPY_MACRO_REVERSAL_V1);
+    const parameters = {
+      enableBuy: true,
+      enableSell: true,
+      allowedUtcHours: '23,0,1,7,8,9,10',
+      cooldownBarsAfterAnyExit: 6,
+      cooldownBarsAfterSL: 18,
+      maxDailyLosses: 3,
+      maxDailyTrades: 6,
+    };
+    const paper = logic.analyze({ scope: 'paper', parameters, currentUtcHour: 0 });
+    const live = logic.analyze({ scope: 'live', parameters, currentUtcHour: 0 });
+    const safe = paper?.signal === 'NONE' && live?.signal === 'NONE';
+
+    return safe
+      ? buildCheck('USDJPY paper/live remains NONE for preset comparison', 'PASS', 'Guardrail presets do not enable USDJPY paper/live signals.')
+      : buildCheck('USDJPY paper/live remains NONE for preset comparison', 'FAIL', 'USDJPY emitted a tradable paper/live signal under preset parameters.');
+  } catch (error) {
+    return buildCheck('USDJPY paper/live remains NONE for preset comparison', 'FAIL', `Unable to test USDJPY preset paper/live safety: ${error.message}`);
+  }
+}
+
 function auditPrimaryLiveUniqueness(symbolCustoms) {
   const grouped = new Map();
   symbolCustoms
@@ -741,6 +840,11 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditEvaluationServiceDoesNotCallRiskManager());
   checks.push(auditEvaluationServiceDoesNotCallOldBacktestEngine());
   checks.push(auditEvaluationServiceDoesNotCallSixStrategies());
+  checks.push(auditPresetComparisonDoesNotCallTradeExecutor());
+  checks.push(auditPresetComparisonDoesNotCallPaperTradingService());
+  checks.push(auditPresetComparisonDoesNotCallOldBacktestEngine());
+  checks.push(auditPresetComparisonDoesNotCallSixStrategies());
+  checks.push(auditUsdjpyPaperLiveRemainNoneForPresetComparison());
 
   let symbolCustoms = [];
   try {

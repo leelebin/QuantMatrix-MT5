@@ -177,6 +177,21 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'evaluation service does not call six strategies')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'preset comparison does not call tradeExecutor')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'preset comparison does not call paperTradingService')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'preset comparison does not call old backtestEngine')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'preset comparison does not call six strategies')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'USDJPY paper/live remains NONE for preset comparison')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {

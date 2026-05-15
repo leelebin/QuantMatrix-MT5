@@ -193,4 +193,54 @@ describe('symbolCustomBacktestRunnerService', () => {
     expect(result.summary.profitFactor).toBeGreaterThan(0);
     expect(result.summary.maxSingleLoss).toBeLessThan(0);
   });
+
+  test('logic context includes closedTrades, currentUtcHour, todayClosedTrades, and barsSinceLastExit', async () => {
+    const observed = [];
+    const logic = {
+      analyze: jest.fn(async (context) => {
+        observed.push(context);
+        if (context.currentIndex === 0) return { signal: 'BUY', sl: 95, tp: 110, reason: 'open' };
+        return { signal: 'NONE' };
+      }),
+    };
+
+    await runWithLogic(logic, [
+      bar(0, { close: 100 }),
+      bar(1, { high: 110, low: 99, close: 110 }),
+      bar(2, { high: 111, low: 109, close: 110 }),
+    ]);
+
+    const afterExitContext = observed.find((context) => context.currentIndex === 2);
+    expect(afterExitContext).toEqual(expect.objectContaining({
+      currentUtcHour: 0,
+      barsSinceLastExit: 1,
+    }));
+    expect(afterExitContext.closedTrades).toHaveLength(1);
+    expect(afterExitContext.todayClosedTrades).toHaveLength(1);
+    expect(afterExitContext.todayTrades).toHaveLength(1);
+    expect(afterExitContext.lastClosedTrade).toEqual(expect.objectContaining({
+      exitReason: 'TP',
+      exitIndex: 1,
+    }));
+  });
+
+  test('trade records include entryIndex, exitIndex, entryHourUtc, and entryDateUtc', async () => {
+    const logic = {
+      analyze: jest.fn(async (context) => (context.currentIndex === 0
+        ? { signal: 'BUY', sl: 95, tp: 110, reason: 'indexed trade' }
+        : { signal: 'NONE' })),
+    };
+
+    const result = await runWithLogic(logic, [
+      bar(0, { close: 100 }),
+      bar(1, { high: 110, low: 99, close: 110 }),
+    ]);
+
+    expect(result.trades[0]).toEqual(expect.objectContaining({
+      entryIndex: 0,
+      exitIndex: 1,
+      entryHourUtc: 0,
+      entryDateUtc: '2026-01-01',
+    }));
+  });
 });

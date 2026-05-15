@@ -332,6 +332,13 @@ describe('symbolCustomController', () => {
       { _id: 'bt-2' },
     ]);
     symbolCustomBacktestService.getSymbolCustomBacktest.mockResolvedValueOnce({ _id: 'bt-1' });
+    symbolCustomBacktestService.getSymbolCustomBacktest.mockResolvedValueOnce({
+      _id: 'bt-1',
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      summary: { trades: 0, profitFactor: 0 },
+      trades: [],
+    });
     symbolCustomBacktestService.deleteSymbolCustomBacktest.mockResolvedValueOnce({ _id: 'bt-1' });
 
     const runRes = createRes();
@@ -353,6 +360,9 @@ describe('symbolCustomController', () => {
     const getRes = createRes();
     await controller.getBacktestById({ params: { backtestId: 'bt-1' } }, getRes);
 
+    const evaluationRes = createRes();
+    await controller.evaluateBacktest({ params: { backtestId: 'bt-1' } }, evaluationRes);
+
     const deleteRes = createRes();
     await controller.removeBacktest({ params: { backtestId: 'bt-1' } }, deleteRes);
 
@@ -365,13 +375,26 @@ describe('symbolCustomController', () => {
       costModel: { spread: 0 },
       options: { useHistoricalCandles: true },
     });
-    expect(runRes.payload).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
+    expect(runRes.payload).toEqual(expect.objectContaining({
+      success: true,
+      backtest: { _id: 'bt-1', status: 'stub' },
+      evaluation: expect.objectContaining({
+        recommendation: expect.any(Object),
+      }),
+    }));
     expect(listRes.payload).toEqual({
       success: true,
       count: 2,
       backtests: [{ _id: 'bt-1' }, { _id: 'bt-2' }],
     });
     expect(getRes.payload).toEqual({ success: true, backtest: { _id: 'bt-1' } });
+    expect(evaluationRes.payload).toEqual(expect.objectContaining({
+      success: true,
+      evaluation: expect.objectContaining({
+        symbol: 'USDJPY',
+        directionBreakdown: expect.any(Object),
+      }),
+    }));
     expect(deleteRes.payload).toEqual({ success: true, backtest: { _id: 'bt-1' } });
   });
 
@@ -418,11 +441,17 @@ describe('symbolCustomController', () => {
     const getRes = createRes();
     await controller.getBacktestById({ params: { backtestId: 'missing' } }, getRes);
 
+    symbolCustomBacktestService.getSymbolCustomBacktest.mockResolvedValueOnce(null);
+    const evaluationRes = createRes();
+    await controller.evaluateBacktest({ params: { backtestId: 'missing' } }, evaluationRes);
+
     const deleteRes = createRes();
     await controller.removeBacktest({ params: { backtestId: 'missing' } }, deleteRes);
 
     expect(getRes.statusCode).toBe(404);
     expect(getRes.payload).toEqual({ success: false, message: 'SymbolCustom backtest not found' });
+    expect(evaluationRes.statusCode).toBe(404);
+    expect(evaluationRes.payload).toEqual({ success: false, message: 'SymbolCustom backtest not found' });
     expect(deleteRes.statusCode).toBe(404);
     expect(deleteRes.payload).toEqual({ success: false, message: 'SymbolCustom backtest not found' });
   });

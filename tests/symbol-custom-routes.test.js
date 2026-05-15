@@ -226,7 +226,13 @@ describe('symbolCustomRoutes', () => {
       backtests: [{ _id: 'bt-1', status: 'stub' }],
     });
     expect(getResponse.body).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
-    expect(runResponse.body).toEqual({ success: true, backtest: { _id: 'bt-2', status: 'stub' } });
+    expect(runResponse.body).toEqual(expect.objectContaining({
+      success: true,
+      backtest: { _id: 'bt-2', status: 'stub' },
+      evaluation: expect.objectContaining({
+        recommendation: expect.any(Object),
+      }),
+    }));
     expect(deleteResponse.body).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
     expect(symbolCustomBacktestService.runSymbolCustomBacktest).toHaveBeenCalledWith({
       symbolCustomId: 'sc-1',

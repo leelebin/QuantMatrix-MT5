@@ -62,7 +62,10 @@ function loadSeedService({ records = [] } = {}) {
 
   const seedService = require('../src/services/symbolCustomSeedService');
   const { PLACEHOLDER_SYMBOL_CUSTOM } = require('../src/symbolCustom/logics/PlaceholderSymbolCustom');
-  const { USDJPY_JPY_MACRO_REVERSAL_V1 } = require('../src/symbolCustom/logics/UsdjpyJpyMacroReversalV1');
+  const {
+    USDJPY_JPY_MACRO_REVERSAL_V1,
+    USDJPY_JPY_MACRO_REVERSAL_V1_VERSION,
+  } = require('../src/symbolCustom/logics/UsdjpyJpyMacroReversalV1');
 
   return {
     seedService,
@@ -70,6 +73,7 @@ function loadSeedService({ records = [] } = {}) {
     symbolCustomsDb,
     PLACEHOLDER_SYMBOL_CUSTOM,
     USDJPY_JPY_MACRO_REVERSAL_V1,
+    USDJPY_JPY_MACRO_REVERSAL_V1_VERSION,
   };
 }
 
@@ -110,6 +114,7 @@ describe('symbolCustomSeedService', () => {
       records,
       PLACEHOLDER_SYMBOL_CUSTOM,
       USDJPY_JPY_MACRO_REVERSAL_V1,
+      USDJPY_JPY_MACRO_REVERSAL_V1_VERSION,
     } = loadSeedService();
 
     await seedService.ensureDefaultSymbolCustomDrafts();
@@ -131,6 +136,7 @@ describe('symbolCustomSeedService', () => {
     const usdjpy = records.find((record) => record.symbolCustomName === 'USDJPY_JPY_MACRO_REVERSAL_V1');
     expect(usdjpy.logicName).toBe(USDJPY_JPY_MACRO_REVERSAL_V1);
     expect(usdjpy.registryLogicName).toBe(USDJPY_JPY_MACRO_REVERSAL_V1);
+    expect(usdjpy.version).toBe(USDJPY_JPY_MACRO_REVERSAL_V1_VERSION);
     expect(usdjpy.parameterSchema.map((field) => field.key)).toEqual([
       'lookbackBars',
       'impulseAtrMultiplier',
@@ -144,6 +150,14 @@ describe('symbolCustomSeedService', () => {
       'maxBarsInTrade',
       'minAtr',
       'cooldownBars',
+      'enableBuy',
+      'enableSell',
+      'allowedUtcHours',
+      'blockedUtcHours',
+      'cooldownBarsAfterAnyExit',
+      'cooldownBarsAfterSL',
+      'maxDailyLosses',
+      'maxDailyTrades',
     ]);
 
     records

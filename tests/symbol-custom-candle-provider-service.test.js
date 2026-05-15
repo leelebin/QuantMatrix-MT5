@@ -1,9 +1,26 @@
-function loadProvider({ candlesByKey = {}, getCandlesImpl = null } = {}) {
+function loadProvider({
+  candlesByKey = {},
+  getCandlesImpl = null,
+  isConnected = true,
+  includeIsConnected = true,
+  includeConnect = true,
+  connectImpl = null,
+} = {}) {
   jest.resetModules();
+  const connectionState = { connected: isConnected };
   const getCandles = jest.fn(getCandlesImpl || (async (symbol, timeframe) => (
     candlesByKey[`${symbol}:${timeframe}`] || []
   )));
+  const connect = jest.fn(connectImpl || (async () => {
+    connectionState.connected = true;
+  }));
   const mt5Service = { getCandles };
+  if (includeIsConnected) {
+    mt5Service.isConnected = jest.fn(() => connectionState.connected);
+  }
+  if (includeConnect) {
+    mt5Service.connect = connect;
+  }
 
   jest.doMock('../src/services/mt5Service', () => mt5Service);
 
@@ -80,6 +97,128 @@ describe('symbolCustomCandleProviderService', () => {
       ]),
     });
     expect(mt5Service.getCandles).toHaveBeenCalledTimes(1);
+  });
+
+  test('connects MT5 before getCandles when disconnected', async () => {
+    const { service, mt5Service } = loadProvider({
+      isConnected: false,
+      candlesByKey: {
+        'USDJPY:5m': [
+          { time: '2026-04-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100.5 },
+        ],
+      },
+    });
+
+    await service.getSymbolCustomCandles({
+      symbol: 'USDJPY',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-04-01',
+      endDate: '2026-04-02',
+    });
+
+    expect(mt5Service.connect).toHaveBeenCalledTimes(1);
+    expect(mt5Service.getCandles).toHaveBeenCalledTimes(1);
+    expect(mt5Service.connect.mock.invocationCallOrder[0]).toBeLessThan(
+      mt5Service.getCandles.mock.invocationCallOrder[0]
+    );
+  });
+
+  test('does not connect MT5 again when already connected', async () => {
+    const { service, mt5Service } = loadProvider({
+      isConnected: true,
+      candlesByKey: {
+        'USDJPY:5m': [
+          { time: '2026-04-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100.5 },
+        ],
+      },
+    });
+
+    await service.getSymbolCustomCandles({
+      symbol: 'USDJPY',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-04-01',
+      endDate: '2026-04-02',
+    });
+
+    expect(mt5Service.isConnected).toHaveBeenCalled();
+    expect(mt5Service.connect).not.toHaveBeenCalled();
+    expect(mt5Service.getCandles).toHaveBeenCalledTimes(1);
+  });
+
+  test('connects MT5 when isConnected is unavailable but connect exists', async () => {
+    const { service, mt5Service } = loadProvider({
+      includeIsConnected: false,
+      candlesByKey: {
+        'USDJPY:5m': [
+          { time: '2026-04-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100.5 },
+        ],
+      },
+    });
+
+    await service.getSymbolCustomCandles({
+      symbol: 'USDJPY',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-04-01',
+      endDate: '2026-04-02',
+    });
+
+    expect(mt5Service.isConnected).toBeUndefined();
+    expect(mt5Service.connect).toHaveBeenCalledTimes(1);
+    expect(mt5Service.getCandles).toHaveBeenCalledTimes(1);
+  });
+
+  test('same fallback timeframe connects once and fetches candles once', async () => {
+    const entryCandles = [
+      { time: '2026-04-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100.5 },
+    ];
+    const { service, mt5Service } = loadProvider({
+      isConnected: false,
+      candlesByKey: {
+        'USDJPY:5m': entryCandles,
+      },
+    });
+
+    await service.getSymbolCustomCandles({
+      symbol: 'USDJPY',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-04-01',
+      endDate: '2026-04-02',
+    });
+
+    expect(mt5Service.connect).toHaveBeenCalledTimes(1);
+    expect(mt5Service.getCandles).toHaveBeenCalledTimes(1);
+  });
+
+  test('maps MT5 connect failure to friendly SymbolCustom error', async () => {
+    const { service, mt5Service } = loadProvider({
+      isConnected: false,
+      connectImpl: async () => {
+        throw new Error('Unable to connect to MT5 terminal');
+      },
+    });
+
+    await expect(service.getSymbolCustomCandles({
+      symbol: 'USDJPY',
+      timeframes: { entryTimeframe: '5m' },
+      startDate: '2026-04-01',
+      endDate: '2026-04-02',
+    })).rejects.toMatchObject({
+      statusCode: 503,
+      message: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
+      reasonCode: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
+      hint: service.SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+    });
+    expect(mt5Service.connect).toHaveBeenCalledTimes(1);
+    expect(mt5Service.getCandles).not.toHaveBeenCalled();
+  });
+
+  test('candle provider source does not reference order placement APIs', () => {
+    const source = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'src', 'services', 'symbolCustomCandleProviderService.js'),
+      'utf8'
+    );
+
+    expect(source).not.toMatch(/placeOrder|preflightOrder|closePosition|tradeExecutor|riskManager/);
   });
 
   test('returns setup entry and higher candles with fallback timeframes', async () => {

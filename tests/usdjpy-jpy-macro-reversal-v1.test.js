@@ -203,7 +203,7 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       enableSell: true,
       allowedUtcHours: '',
     }));
-    expect(UsdjpyJpyMacroReversalV1.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION).toBe(2);
+    expect(UsdjpyJpyMacroReversalV1.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION).toBe(3);
   });
 
   test('enableBuy=false blocks BUY setup', () => {

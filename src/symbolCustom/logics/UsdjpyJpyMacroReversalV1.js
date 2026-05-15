@@ -1,7 +1,7 @@
 const BaseSymbolCustom = require('../BaseSymbolCustom');
 
 const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
-const USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = 2;
+const USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = 3;
 const BACKTEST_ONLY_REASON = 'USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only in Phase 2D';
 
 const DEFAULT_PARAMETER_SCHEMA = Object.freeze([

@@ -27,6 +27,8 @@ const TIMEFRAME_ALIASES = Object.freeze({
   w1: '1w',
 });
 
+let mt5ConnectPromise = null;
+
 function buildHttpError(message, statusCode, details = undefined) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -53,6 +55,28 @@ function buildMt5NotConnectedError() {
   error.reasonCode = SYMBOL_CUSTOM_MT5_NOT_CONNECTED;
   error.hint = SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT;
   return error;
+}
+
+async function ensureMt5ConnectedForHistoricalCandles() {
+  if (typeof mt5Service.isConnected === 'function' && mt5Service.isConnected()) {
+    return;
+  }
+
+  if (typeof mt5Service.connect !== 'function') {
+    return;
+  }
+
+  if (!mt5ConnectPromise) {
+    mt5ConnectPromise = mt5Service.connect()
+      .catch(() => {
+        throw buildMt5NotConnectedError();
+      })
+      .finally(() => {
+        mt5ConnectPromise = null;
+      });
+  }
+
+  await mt5ConnectPromise;
 }
 
 function normalizeTimeframe(timeframe) {
@@ -134,6 +158,7 @@ async function fetchHistoricalCandles({ symbol, timeframe, start, endExclusive, 
   const fetchLimit = limit || estimateFetchLimit(timeframe, start, endExclusive, 10);
   let rawCandles;
   try {
+    await ensureMt5ConnectedForHistoricalCandles();
     rawCandles = await mt5Service.getCandles(symbol, timeframe, start, fetchLimit, endExclusive);
   } catch (error) {
     if (isMt5NotConnectedError(error)) {

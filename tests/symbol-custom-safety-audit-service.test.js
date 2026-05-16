@@ -58,8 +58,9 @@ describe('symbolCustomSafetyAuditService', () => {
     jest.dontMock('../src/services/backtestEngine');
     jest.dontMock('../src/routes/symbolCustomRoutes');
     jest.dontMock('../src/services/symbolCustomReportService');
-    jest.dontMock('../src/services/symbolCustomOptimizerService');
-    jest.dontMock('../src/services/symbolCustomBacktestService');
+  jest.dontMock('../src/services/symbolCustomOptimizerService');
+  jest.dontMock('../src/services/symbolCustomBacktestService');
+  jest.dontMock('../src/services/symbolCustomCandidateValidationService');
   });
 
   test('audit response structure is correct and placeholder returns PASS', async () => {
@@ -190,6 +191,27 @@ describe('symbolCustomSafetyAuditService', () => {
       status: 'PASS',
     }));
     expect(getCheck(audit, 'USDJPY paper/live remains NONE for preset comparison')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'candidate validation does not call tradeExecutor')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'candidate validation does not call riskManager')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'candidate validation does not call paperTradingService')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'candidate validation does not call old backtestEngine')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'candidate validation does not call six strategies')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'schema sync does not change paper/live/liveEnabled')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'schema sync does not touch trading systems')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
   });

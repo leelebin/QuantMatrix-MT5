@@ -13,6 +13,7 @@ const {
   scanPaperRuntimeOnce,
   runBacktest,
   runPresetComparison,
+  runCandidateValidation,
   analyzePaperOnce,
   createOptimizerRun,
   listOptimizerRuns,
@@ -22,6 +23,7 @@ const {
   getBacktestById,
   evaluateBacktest,
   removeBacktest,
+  syncSchema,
   update,
   remove,
   duplicate,
@@ -44,8 +46,10 @@ router.post('/defaults/ensure', ensureDefaults);
 router.post('/paper-runtime/scan-once', scanPaperRuntimeOnce);
 router.post('/backtests/:backtestId/evaluate', evaluateBacktest);
 router.post('/:id/analyze-paper-once', analyzePaperOnce);
+router.post('/:id/sync-schema', syncSchema);
 router.post('/:id/backtest', runBacktest);
 router.post('/:id/preset-comparison', runPresetComparison);
+router.post('/:id/candidate-validation', runCandidateValidation);
 router.post('/:id/optimizer/run', createOptimizerRun);
 router.delete('/optimizer/runs/:runId', removeOptimizerRun);
 router.delete('/backtests/:backtestId', removeBacktest);

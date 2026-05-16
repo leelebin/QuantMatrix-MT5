@@ -4,6 +4,8 @@ const {
   PLACEHOLDER_SYMBOL_CUSTOM,
   buildStandardBacktestPayload,
   buildSymbolCustomBacktestRequest,
+  buildSymbolCustomPresetComparisonRequest,
+  buildSymbolCustomCandidateValidationRequest,
   getSymbolCustomSelectionState,
   normalizeBacktestError,
   normalizeBacktestHistoryRow,
@@ -61,6 +63,56 @@ describe('backtestPageUtils', () => {
       options: {
         useHistoricalCandles: true,
       },
+    });
+  });
+
+  test('buildSymbolCustomPresetComparisonRequest targets SymbolCustom preset API with page values', () => {
+    const request = buildSymbolCustomPresetComparisonRequest({
+      _id: 'sc-guardrail',
+    }, {
+      startDate: '2025-03-15',
+      endDate: '2026-05-15',
+      initialBalance: '500',
+      costModel: { spread: 0.1, commissionPerTrade: 0.25, slippage: 0.05 },
+    });
+
+    expect(request.endpoint).toBe('/api/symbol-customs/sc-guardrail/preset-comparison');
+    expect(request.payload).toEqual({
+      startDate: '2025-03-15',
+      endDate: '2026-05-15',
+      initialBalance: 500,
+      costModel: { spread: 0.1, commissionPerTrade: 0.25, slippage: 0.05 },
+    });
+  });
+
+  test('buildSymbolCustomCandidateValidationRequest targets validation API with candidate parameters and windows', () => {
+    const request = buildSymbolCustomCandidateValidationRequest({
+      _id: 'sc-guardrail',
+    }, {
+      candidateName: 'buy_session_conservative',
+      candidateParameters: {
+        enableBuy: true,
+        enableSell: false,
+        allowedUtcHours: '23,0,1,7,8,9,10',
+      },
+      windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+      startDate: '2025-03-15',
+      endDate: '2026-05-15',
+      initialBalance: '500',
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+    });
+
+    expect(request.endpoint).toBe('/api/symbol-customs/sc-guardrail/candidate-validation');
+    expect(request.payload).toEqual({
+      candidateName: 'buy_session_conservative',
+      candidateParameters: {
+        enableBuy: true,
+        enableSell: false,
+        allowedUtcHours: '23,0,1,7,8,9,10',
+      },
+      windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+      initialBalance: 500,
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
     });
   });
 

@@ -82,6 +82,44 @@
     };
   }
 
+  function buildSymbolCustomPresetComparisonRequest(symbolCustom = {}, values = {}) {
+    return {
+      endpoint: '/api/symbol-customs/' + encodeURIComponent(symbolCustom._id || '') + '/preset-comparison',
+      payload: {
+        startDate: values.startDate,
+        endDate: values.endDate,
+        initialBalance: parseInitialBalance(values.initialBalance, 500),
+        costModel: values.costModel || {
+          spread: 0,
+          commissionPerTrade: 0,
+          slippage: 0,
+        },
+      },
+    };
+  }
+
+  function buildSymbolCustomCandidateValidationRequest(symbolCustom = {}, values = {}) {
+    return {
+      endpoint: '/api/symbol-customs/' + encodeURIComponent(symbolCustom._id || '') + '/candidate-validation',
+      payload: {
+        candidateName: values.candidateName || 'buy_session_conservative',
+        candidateParameters: values.candidateParameters || {},
+        windows: values.windows || [
+          { label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' },
+          { label: '4M', startDate: '2026-01-15', endDate: '2026-05-15' },
+          { label: '8M', startDate: '2025-09-15', endDate: '2026-05-15' },
+          { label: '12M', startDate: '2025-05-15', endDate: '2026-05-15' },
+        ],
+        initialBalance: parseInitialBalance(values.initialBalance, 500),
+        costModel: values.costModel || {
+          spread: 0,
+          commissionPerTrade: 0,
+          slippage: 0,
+        },
+      },
+    };
+  }
+
   function getSymbolCustomSelectionState(records = [], selectedId = null) {
     const rows = Array.isArray(records) ? records : [];
     if (rows.length === 0) {
@@ -510,6 +548,8 @@
     buildStandardBacktestPayload,
     buildStandardAllStrategiesPayload,
     buildSymbolCustomBacktestRequest,
+    buildSymbolCustomPresetComparisonRequest,
+    buildSymbolCustomCandidateValidationRequest,
     getSymbolCustomSelectionState,
     isPlaceholderSymbolCustom,
     normalizeBacktestError,

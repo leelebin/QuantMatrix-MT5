@@ -13,6 +13,7 @@ jest.mock('../src/services/symbolCustomService', () => ({
   updateSymbolCustom: jest.fn(),
   deleteSymbolCustom: jest.fn(),
   duplicateSymbolCustom: jest.fn(),
+  syncSymbolCustomSchemaFromLogic: jest.fn(),
 }));
 
 jest.mock('../src/services/symbolCustomSeedService', () => ({
@@ -54,6 +55,10 @@ jest.mock('../src/services/symbolCustomPresetComparisonService', () => ({
   runSymbolCustomPresetComparison: jest.fn(),
 }));
 
+jest.mock('../src/services/symbolCustomCandidateValidationService', () => ({
+  runSymbolCustomCandidateValidation: jest.fn(),
+}));
+
 const symbolCustomService = require('../src/services/symbolCustomService');
 const symbolCustomSeedService = require('../src/services/symbolCustomSeedService');
 const symbolCustomBacktestService = require('../src/services/symbolCustomBacktestService');
@@ -63,6 +68,7 @@ const symbolCustomOptimizerService = require('../src/services/symbolCustomOptimi
 const symbolCustomSafetyAuditService = require('../src/services/symbolCustomSafetyAuditService');
 const symbolCustomPaperRuntimeService = require('../src/services/symbolCustomPaperRuntimeService');
 const symbolCustomPresetComparisonService = require('../src/services/symbolCustomPresetComparisonService');
+const symbolCustomCandidateValidationService = require('../src/services/symbolCustomCandidateValidationService');
 const symbolCustomRoutes = require('../src/routes/symbolCustomRoutes');
 
 function createApp() {
@@ -330,6 +336,46 @@ describe('symbolCustomRoutes', () => {
     }));
   });
 
+  test('POST /api/symbol-customs/:id/candidate-validation works before generic id route', async () => {
+    symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation.mockResolvedValue({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      candidateName: 'buy_session_conservative',
+      candidateParameters: { enableBuy: true, enableSell: false },
+      windows: [{ label: '2M', trades: 80, validationStatus: 'PASS', reason: 'PASS_RULES_MET' }],
+      passCount: 1,
+      failCount: 0,
+      overallRecommendation: 'VALIDATION_PASSED',
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-usdjpy/candidate-validation')
+      .send({
+        candidateName: 'buy_session_conservative',
+        candidateParameters: { enableBuy: true, enableSell: false },
+        windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+        initialBalance: 500,
+        costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      });
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation).toHaveBeenCalledWith({
+      symbolCustomId: 'sc-usdjpy',
+      candidateName: 'buy_session_conservative',
+      candidateParameters: { enableBuy: true, enableSell: false },
+      windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+      initialBalance: 500,
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+    });
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      candidateName: 'buy_session_conservative',
+      windows: [{ label: '2M', trades: 80, validationStatus: 'PASS', reason: 'PASS_RULES_MET' }],
+      overallRecommendation: 'VALIDATION_PASSED',
+    }));
+  });
+
   test('POST /api/symbol-customs/:id/analyze-paper-once returns a read-only paper signal', async () => {
     symbolCustomService.getSymbolCustom.mockResolvedValue({
       _id: 'sc-1',
@@ -363,6 +409,29 @@ describe('symbolCustomRoutes', () => {
       expect.objectContaining({ scope: 'paper', candles: { entry: [] } })
     );
     expect(symbolCustomService.updateSymbolCustom).not.toHaveBeenCalled();
+  });
+
+  test('POST /api/symbol-customs/:id/sync-schema works before generic id route', async () => {
+    symbolCustomService.syncSymbolCustomSchemaFromLogic.mockResolvedValue({
+      symbolCustom: { _id: 'sc-1', parameters: { enableBuy: true } },
+      addedParameters: ['enableBuy'],
+      keptParameters: [],
+      addedSchemaFields: ['enableBuy'],
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-1/sync-schema')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomService.syncSymbolCustomSchemaFromLogic).toHaveBeenCalledWith('sc-1', {});
+    expect(response.body).toEqual({
+      success: true,
+      symbolCustom: { _id: 'sc-1', parameters: { enableBuy: true } },
+      addedParameters: ['enableBuy'],
+      keptParameters: [],
+      addedSchemaFields: ['enableBuy'],
+    });
   });
 
   test('SymbolCustom optimizer stub routes are mounted before generic id route', async () => {

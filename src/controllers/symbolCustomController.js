@@ -8,6 +8,7 @@ const symbolCustomSafetyAuditService = require('../services/symbolCustomSafetyAu
 const symbolCustomPaperRuntimeService = require('../services/symbolCustomPaperRuntimeService');
 const symbolCustomEvaluationService = require('../services/symbolCustomEvaluationService');
 const symbolCustomPresetComparisonService = require('../services/symbolCustomPresetComparisonService');
+const symbolCustomCandidateValidationService = require('../services/symbolCustomCandidateValidationService');
 
 function sendMutationResponse(res, result) {
   const payload = {
@@ -166,6 +167,18 @@ exports.runPresetComparison = async (req, res) => {
   }
 };
 
+exports.runCandidateValidation = async (req, res) => {
+  try {
+    const validation = await symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation({
+      ...(req.body || {}),
+      symbolCustomId: req.params.id,
+    });
+    return res.json({ success: true, ...validation });
+  } catch (error) {
+    return handleError(res, error, 'Failed to run SymbolCustom candidate validation');
+  }
+};
+
 exports.analyzePaperOnce = async (req, res) => {
   try {
     const symbolCustom = await symbolCustomService.getSymbolCustom(req.params.id);
@@ -184,6 +197,24 @@ exports.analyzePaperOnce = async (req, res) => {
     return res.json({ success: true, signal });
   } catch (error) {
     return handleError(res, error, 'Failed to analyze SymbolCustom paper signal');
+  }
+};
+
+exports.syncSchema = async (req, res) => {
+  try {
+    const result = await symbolCustomService.syncSymbolCustomSchemaFromLogic(req.params.id, req.body || {});
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'SymbolCustom not found' });
+    }
+    return res.json({
+      success: true,
+      symbolCustom: result.symbolCustom,
+      addedParameters: result.addedParameters || [],
+      keptParameters: result.keptParameters || [],
+      addedSchemaFields: result.addedSchemaFields || [],
+    });
+  } catch (error) {
+    return handleError(res, error, 'Failed to sync SymbolCustom schema');
   }
 };
 

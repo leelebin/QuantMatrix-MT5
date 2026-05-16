@@ -6,6 +6,7 @@ jest.mock('../src/services/symbolCustomService', () => ({
   updateSymbolCustom: jest.fn(),
   deleteSymbolCustom: jest.fn(),
   duplicateSymbolCustom: jest.fn(),
+  syncSymbolCustomSchemaFromLogic: jest.fn(),
 }));
 
 jest.mock('../src/services/symbolCustomSeedService', () => ({
@@ -47,6 +48,10 @@ jest.mock('../src/services/symbolCustomPresetComparisonService', () => ({
   runSymbolCustomPresetComparison: jest.fn(),
 }));
 
+jest.mock('../src/services/symbolCustomCandidateValidationService', () => ({
+  runSymbolCustomCandidateValidation: jest.fn(),
+}));
+
 const controller = require('../src/controllers/symbolCustomController');
 const symbolCustomService = require('../src/services/symbolCustomService');
 const symbolCustomSeedService = require('../src/services/symbolCustomSeedService');
@@ -57,6 +62,7 @@ const symbolCustomOptimizerService = require('../src/services/symbolCustomOptimi
 const symbolCustomSafetyAuditService = require('../src/services/symbolCustomSafetyAuditService');
 const symbolCustomPaperRuntimeService = require('../src/services/symbolCustomPaperRuntimeService');
 const symbolCustomPresetComparisonService = require('../src/services/symbolCustomPresetComparisonService');
+const symbolCustomCandidateValidationService = require('../src/services/symbolCustomCandidateValidationService');
 
 function createRes() {
   return {
@@ -174,6 +180,38 @@ describe('symbolCustomController', () => {
       success: true,
       data: { _id: 'sc-1' },
     });
+  });
+
+  test('syncSchema returns added and kept schema fields', async () => {
+    symbolCustomService.syncSymbolCustomSchemaFromLogic.mockResolvedValue({
+      symbolCustom: { _id: 'sc-1', parameters: { lookbackBars: 36, enableBuy: true } },
+      addedParameters: ['enableBuy'],
+      keptParameters: ['lookbackBars'],
+      addedSchemaFields: ['enableBuy'],
+    });
+
+    const res = createRes();
+    await controller.syncSchema({ params: { id: 'sc-1' }, body: {} }, res);
+
+    expect(symbolCustomService.syncSymbolCustomSchemaFromLogic).toHaveBeenCalledWith('sc-1', {});
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      success: true,
+      symbolCustom: { _id: 'sc-1', parameters: { lookbackBars: 36, enableBuy: true } },
+      addedParameters: ['enableBuy'],
+      keptParameters: ['lookbackBars'],
+      addedSchemaFields: ['enableBuy'],
+    });
+  });
+
+  test('syncSchema returns 404 for missing records', async () => {
+    symbolCustomService.syncSymbolCustomSchemaFromLogic.mockResolvedValue(null);
+
+    const res = createRes();
+    await controller.syncSchema({ params: { id: 'missing' }, body: {} }, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.payload).toEqual({ success: false, message: 'SymbolCustom not found' });
   });
 
   test('ensureDefaults returns backend default draft seed result', async () => {
@@ -526,6 +564,72 @@ describe('symbolCustomController', () => {
         reasonCode: 'PLACEHOLDER_SYMBOL_CUSTOM',
       }),
     }));
+  });
+
+  test('runCandidateValidation returns multi-window validation response shape', async () => {
+    symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation.mockResolvedValue({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      candidateName: 'buy_session_conservative',
+      candidateParameters: { enableBuy: true, enableSell: false },
+      windows: [{ label: '2M', trades: 60, validationStatus: 'PASS', reason: 'PASS_RULES_MET' }],
+      passCount: 1,
+      failCount: 0,
+      overallRecommendation: 'VALIDATION_PASSED',
+    });
+
+    const res = createRes();
+    await controller.runCandidateValidation({
+      params: { id: 'sc-usdjpy' },
+      body: {
+        candidateName: 'buy_session_conservative',
+        candidateParameters: { enableBuy: true, enableSell: false },
+        windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+        initialBalance: 500,
+        costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      },
+    }, res);
+
+    expect(symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation).toHaveBeenCalledWith({
+      symbolCustomId: 'sc-usdjpy',
+      candidateName: 'buy_session_conservative',
+      candidateParameters: { enableBuy: true, enableSell: false },
+      windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+      initialBalance: 500,
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+    });
+    expect(res.payload).toEqual({
+      success: true,
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      candidateName: 'buy_session_conservative',
+      candidateParameters: { enableBuy: true, enableSell: false },
+      windows: [{ label: '2M', trades: 60, validationStatus: 'PASS', reason: 'PASS_RULES_MET' }],
+      passCount: 1,
+      failCount: 0,
+      overallRecommendation: 'VALIDATION_PASSED',
+    });
+  });
+
+  test('runCandidateValidation returns clear invalid SymbolCustom error', async () => {
+    const error = new Error('SymbolCustom not found');
+    error.statusCode = 404;
+    error.reasonCode = 'SYMBOL_CUSTOM_NOT_FOUND';
+    symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation.mockRejectedValueOnce(error);
+
+    const res = createRes();
+    await controller.runCandidateValidation({ params: { id: 'missing' }, body: {} }, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.payload).toEqual({
+      success: false,
+      message: 'SymbolCustom not found',
+      reasonCode: 'SYMBOL_CUSTOM_NOT_FOUND',
+      hint: undefined,
+      errors: undefined,
+    });
   });
 
   test('backtest get and delete return 404 for missing records', async () => {

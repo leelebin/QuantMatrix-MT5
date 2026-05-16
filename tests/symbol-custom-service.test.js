@@ -50,7 +50,7 @@ function createSymbolCustomsDb(records) {
   };
 }
 
-function loadService({ records = [] } = {}) {
+function loadService({ records = [], logics = {} } = {}) {
   jest.resetModules();
 
   const symbolCustomRecords = records.map((record) => ({ ...record }));
@@ -62,12 +62,25 @@ function loadService({ records = [] } = {}) {
   jest.doMock('../src/services/tradeExecutor', () => ({
     executeTrade: jest.fn(),
   }));
+  jest.doMock('../src/symbolCustom/registry', () => ({
+    getSymbolCustomLogic: jest.fn((logicName) => {
+      const defaults = {
+        PLACEHOLDER_SYMBOL_CUSTOM: {
+          getDefaultParameterSchema: () => [],
+          getDefaultParameters: () => ({}),
+        },
+      };
+      return logics[logicName] || defaults[logicName] || null;
+    }),
+  }));
 
   const service = require('../src/services/symbolCustomService');
   const tradeExecutor = require('../src/services/tradeExecutor');
+  const registry = require('../src/symbolCustom/registry');
   return {
     service,
     tradeExecutor,
+    registry,
     records: symbolCustomRecords,
   };
 }
@@ -76,6 +89,7 @@ describe('symbolCustomService CRUD', () => {
   afterEach(() => {
     jest.dontMock('../src/config/db');
     jest.dontMock('../src/services/tradeExecutor');
+    jest.dontMock('../src/symbolCustom/registry');
   });
 
   test('creates and lists SymbolCustom records', async () => {
@@ -208,5 +222,145 @@ describe('symbolCustomService CRUD', () => {
 
     expect(rows.find((row) => row._id === second.symbolCustom._id).isPrimaryLive).toBe(true);
     expect(rows.find((row) => row._id === first.symbolCustom._id).isPrimaryLive).toBe(false);
+  });
+
+  test('sync adds missing parameters and parameterSchema fields from registered logic', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-sync',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'TEST_LOGIC',
+          status: 'draft',
+          paperEnabled: false,
+          liveEnabled: false,
+          allowLive: false,
+          isPrimaryLive: false,
+          parameterSchema: [{ key: 'lookbackBars', type: 'number' }],
+          parameters: { lookbackBars: 36 },
+        },
+      ],
+      logics: {
+        TEST_LOGIC: {
+          getDefaultParameterSchema: () => [
+            { key: 'lookbackBars', type: 'number', defaultValue: 36 },
+            { key: 'enableBuy', type: 'boolean', defaultValue: true },
+            { key: 'enableSell', type: 'boolean', defaultValue: true },
+          ],
+          getDefaultParameters: () => ({
+            lookbackBars: 36,
+            enableBuy: true,
+            enableSell: true,
+          }),
+        },
+      },
+    });
+
+    const result = await service.syncSymbolCustomSchemaFromLogic('sc-sync');
+
+    expect(result.addedParameters).toEqual(['enableBuy', 'enableSell']);
+    expect(result.keptParameters).toEqual(['lookbackBars']);
+    expect(result.addedSchemaFields).toEqual(['enableBuy', 'enableSell']);
+    expect(result.symbolCustom.parameters).toEqual({
+      lookbackBars: 36,
+      enableBuy: true,
+      enableSell: true,
+    });
+    expect(result.symbolCustom.parameterSchema.map((field) => field.key)).toEqual([
+      'lookbackBars',
+      'enableBuy',
+      'enableSell',
+    ]);
+    expect(result.symbolCustom.schemaSyncStatus.hasMissing).toBe(false);
+  });
+
+  test('sync does not overwrite existing parameter values or change execution flags', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-guardrails',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'TEST_LOGIC',
+          status: 'validated',
+          paperEnabled: true,
+          liveEnabled: true,
+          allowLive: true,
+          isPrimaryLive: true,
+          parameterSchema: [{ key: 'enableBuy', type: 'boolean' }],
+          parameters: { enableBuy: false },
+        },
+      ],
+      logics: {
+        TEST_LOGIC: {
+          getDefaultParameterSchema: () => [
+            { key: 'enableBuy', type: 'boolean', defaultValue: true },
+            { key: 'enableSell', type: 'boolean', defaultValue: true },
+          ],
+          getDefaultParameters: () => ({
+            enableBuy: true,
+            enableSell: true,
+          }),
+        },
+      },
+    });
+
+    const result = await service.syncSymbolCustomSchemaFromLogic('sc-guardrails');
+
+    expect(result.symbolCustom.parameters).toEqual({
+      enableBuy: false,
+      enableSell: true,
+    });
+    expect(result.symbolCustom).toEqual(expect.objectContaining({
+      status: 'validated',
+      paperEnabled: true,
+      liveEnabled: true,
+      allowLive: true,
+      isPrimaryLive: true,
+    }));
+  });
+
+  test('sync returns a clear error for unknown logic', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-unknown',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_UNKNOWN',
+          logicName: 'UNKNOWN_LOGIC',
+          parameterSchema: [],
+          parameters: {},
+        },
+      ],
+    });
+
+    await expect(service.syncSymbolCustomSchemaFromLogic('sc-unknown')).rejects.toEqual(expect.objectContaining({
+      message: 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED',
+      statusCode: 400,
+      reasonCode: 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED',
+    }));
+  });
+
+  test('placeholder sync works as a no-op', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-placeholder',
+          symbol: 'GBPJPY',
+          symbolCustomName: 'GBPJPY_PLACEHOLDER',
+          logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+          parameterSchema: [],
+          parameters: {},
+        },
+      ],
+    });
+
+    const result = await service.syncSymbolCustomSchemaFromLogic('sc-placeholder');
+
+    expect(result.addedParameters).toEqual([]);
+    expect(result.keptParameters).toEqual([]);
+    expect(result.addedSchemaFields).toEqual([]);
+    expect(result.symbolCustom.parameters).toEqual({});
   });
 });

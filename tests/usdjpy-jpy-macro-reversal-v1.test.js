@@ -290,6 +290,136 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
     }));
   });
 
+  test('cooldownBarsAfterAnyExit does not block first trade when no lastClosedTrade exists', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: null,
+      lastClosedTrade: null,
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterAnyExit: 6,
+      },
+    }));
+
+    expect(result.signal).toBe('BUY');
+  });
+
+  test('cooldownBarsAfterAnyExit does not block first SELL when no lastClosedTrade exists', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'up' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: null,
+      lastClosedTrade: null,
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterAnyExit: 6,
+      },
+    }));
+
+    expect(result.signal).toBe('SELL');
+  });
+
+  test('cooldownBarsAfterAnyExit ignores undefined barsSinceLastExit', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: undefined,
+      lastClosedTrade: { exitReason: 'TP', pnl: 5 },
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterAnyExit: 6,
+      },
+    }));
+
+    expect(result.signal).toBe('BUY');
+  });
+
+  test('cooldownBarsAfterAnyExit only blocks after a closed trade', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: 2,
+      lastClosedTrade: { exitReason: 'TP', pnl: 5 },
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterAnyExit: 6,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'Cooldown after any exit active',
+    }));
+  });
+
+  test('cooldownBarsAfterAnyExit allows signals when cooldown has ended', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: 6,
+      lastClosedTrade: { exitReason: 'TP', pnl: 5 },
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterAnyExit: 6,
+      },
+    }));
+
+    expect(result.signal).toBe('BUY');
+  });
+
+  test('cooldownBarsAfterSL does not block after non-SL exits', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: 2,
+      lastClosedTrade: { exitReason: 'TP', pnl: 5 },
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterSL: 6,
+      },
+    }));
+
+    expect(result.signal).toBe('BUY');
+  });
+
+  test('cooldownBarsAfterSL allows signals when SL cooldown has ended', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      barsSinceLastExit: 6,
+      lastClosedTrade: { exitReason: 'SL', pnl: -5 },
+      parameters: {
+        ...buildContext(candles).parameters,
+        cooldownBarsAfterSL: 6,
+      },
+    }));
+
+    expect(result.signal).toBe('BUY');
+  });
+
+  test('combined_conservative guardrails do not block the first eligible backtest signal', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      currentUtcHour: 0,
+      barsSinceLastExit: null,
+      lastClosedTrade: null,
+      parameters: {
+        ...buildContext(candles).parameters,
+        allowedUtcHours: '23,0,1,7,8,9,10',
+        cooldownBarsAfterAnyExit: 6,
+        cooldownBarsAfterSL: 18,
+        maxDailyLosses: 3,
+        maxDailyTrades: 6,
+        enableBuy: true,
+        enableSell: true,
+      },
+    }));
+
+    expect(result.signal).toBe('BUY');
+  });
+
   test('maxDailyLosses blocks entries after daily loss limit', () => {
     const logic = new UsdjpyJpyMacroReversalV1();
     const candles = buildCandles({ direction: 'down' });

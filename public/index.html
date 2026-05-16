@@ -771,6 +771,7 @@ tr:hover{background:var(--bg3)}
     <div class="card-header">
       <span class="card-title" id="symbolCustomEditorTitle">Editor</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-outline btn-sm" onclick="syncSelectedSymbolCustomSchemaFromLogic()">Sync Parameters From Logic</button>
         <button class="btn-primary btn-sm" onclick="saveSymbolCustomEditor()">Save</button>
         <button class="btn-outline btn-sm" onclick="duplicateSelectedSymbolCustom()">Duplicate</button>
         <button class="btn-danger btn-sm" onclick="deleteSelectedSymbolCustom()">Delete</button>
@@ -780,6 +781,7 @@ tr:hover{background:var(--bg3)}
     <div id="symbolCustomLiveWarning" class="symbol-custom-warning">
       SymbolCustom live execution is not supported in Phase 1. This field is saved for future use only.
     </div>
+    <div id="symbolCustomSchemaSyncWarning" class="symbol-custom-warning"></div>
 
     <div class="symbol-custom-editor-grid">
       <div class="form-group">
@@ -977,7 +979,12 @@ tr:hover{background:var(--bg3)}
           <div class="readonly-note">SymbolCustom backtests call SymbolCustom logic only. Live and paper execution are not changed.</div>
           <div id="btSymbolCustomStatus" class="bt-chart-meta" style="margin-bottom:12px">Select a symbol to load SymbolCustom records.</div>
           <div id="btSymbolCustomSummary"><div class="empty">No SymbolCustom selected</div></div>
-          <button class="btn-outline btn-sm" style="margin-top:10px" id="btSymbolCustomEditBtn" onclick="openSelectedBacktestSymbolCustomInManager()" disabled>Edit in SymbolCustom Manager</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn-outline btn-sm" id="btSymbolCustomEditBtn" onclick="openSelectedBacktestSymbolCustomInManager()" disabled>Edit in SymbolCustom Manager</button>
+            <button class="btn-outline btn-sm" id="btSymbolCustomSyncBtn" onclick="syncBacktestSymbolCustomSchemaFromLogic()" disabled>Sync Parameters From Logic</button>
+            <button class="btn-outline btn-sm" id="btSymbolCustomPresetComparisonPanelBtn" onclick="runSymbolCustomPresetComparisonFromBacktestPage()" disabled>Run Preset Comparison</button>
+            <button class="btn-outline btn-sm" id="btSymbolCustomCandidateValidationPanelBtn" onclick="runSymbolCustomCandidateValidationFromBacktestPage()" disabled title="Run preset comparison first, then validate the best candidate.">Validate Best Candidate</button>
+          </div>
         </div>
         <button class="btn-primary" onclick="runBacktest()" id="btRunBtn">Run Backtest</button>
       </div>
@@ -993,6 +1000,7 @@ tr:hover{background:var(--bg3)}
         <div id="btResult"><div class="empty">Run a backtest to see results</div></div>
         <div id="btSymbolCustomEvaluation" style="display:none;margin-top:16px"></div>
         <div id="btSymbolCustomPresetComparison" style="display:none;margin-top:16px"></div>
+        <div id="btSymbolCustomCandidateValidation" style="display:none;margin-top:16px"></div>
       </div>
     </div>
     <div class="card" style="margin-top:16px">
@@ -1912,6 +1920,7 @@ let currentSingleBacktestRenderMeta = null;
 let currentSingleBacktestFormState = null;
 let currentSymbolCustomEvaluation = null;
 let currentSymbolCustomPresetComparison = null;
+let currentSymbolCustomCandidateValidation = null;
 let activeHistoricalBacktestId = null;
 let activeHistoricalBacktestMode = 'STANDARD';
 let activeHistoricalBacktestDetail = null;
@@ -5082,16 +5091,35 @@ function renderBacktestSymbolCustomSummary(record) {
   const target = document.getElementById('btSymbolCustomSummary');
   const statusEl = document.getElementById('btSymbolCustomStatus');
   const editBtn = document.getElementById('btSymbolCustomEditBtn');
+  const syncBtn = document.getElementById('btSymbolCustomSyncBtn');
+  const presetBtn = document.getElementById('btSymbolCustomPresetComparisonPanelBtn');
+  const validatePanelBtn = document.getElementById('btSymbolCustomCandidateValidationPanelBtn');
   const utils = getBacktestPageUtils();
+  const symbolCustomUtils = getSymbolCustomUtils();
   const state = utils.getSymbolCustomSelectionState
     ? utils.getSymbolCustomSelectionState(backtestSymbolCustomState.rows, record && record._id)
     : { runEnabled: false, warning: '' };
+  const schemaWarning = symbolCustomUtils.buildSchemaSyncWarning
+    ? symbolCustomUtils.buildSchemaSyncWarning(record || {})
+    : '';
 
   if (editBtn) editBtn.disabled = !record || !record._id;
+  if (syncBtn) syncBtn.disabled = !record || !record._id;
+  if (presetBtn) presetBtn.disabled = !state.runEnabled || !record || !record._id;
+  if (validatePanelBtn) {
+    const hasBestPreset = Boolean(currentSymbolCustomPresetComparison && currentSymbolCustomPresetComparison.bestPreset);
+    validatePanelBtn.disabled = !state.runEnabled || !record || !record._id || !hasBestPreset;
+    validatePanelBtn.title = hasBestPreset
+      ? 'Validate the current best preset across 2M / 4M / 8M / 12M windows.'
+      : 'Run Preset Comparison first, then validate the best candidate.';
+  }
   if (statusEl) {
     statusEl.innerHTML = state.warning
       ? '<span style="color:var(--yellow)">' + escapeHtml(state.warning) + '</span>'
       : 'Ready to run SymbolCustom backtest. This does not affect paper or live execution.';
+    if (schemaWarning) {
+      statusEl.innerHTML += '<div style="color:var(--yellow);margin-top:4px">' + escapeHtml(schemaWarning) + '</div>';
+    }
   }
   if (!target) return;
   if (!record) {
@@ -5113,6 +5141,12 @@ function renderBacktestSymbolCustomSummary(record) {
   html += jsonBlock('sessionFilter', record.sessionFilter || {});
   html += jsonBlock('newsFilter', record.newsFilter || {});
   html += '</table>';
+  if (schemaWarning) {
+    html += '<div class="bt-chart-warning" style="margin-top:10px">'
+      + escapeHtml(schemaWarning)
+      + '<div style="margin-top:6px">This adds missing parameters from the registered logic without overwriting existing values. Backtest is still allowed because logic can fall back to defaults.</div>'
+      + '</div>';
+  }
   target.innerHTML = html;
 }
 
@@ -5197,6 +5231,37 @@ async function openSelectedBacktestSymbolCustomInManager() {
     symbolCustomManagerState.selectedId = record._id;
     loadSymbolCustomManager({ preserveSelection: true });
   }, 0);
+}
+
+async function syncBacktestSymbolCustomSchemaFromLogic() {
+  const record = backtestSymbolCustomState.selectedRecord;
+  const statusEl = document.getElementById('btSymbolCustomStatus');
+  if (!record || !record._id) return;
+
+  try {
+    if (statusEl) statusEl.textContent = 'Syncing SymbolCustom parameters from registered logic...';
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(record._id) + '/sync-schema', 'POST', {});
+    if (!response.success) throw new Error(response.message || 'Failed to sync SymbolCustom schema');
+
+    const updated = response.symbolCustom || record;
+    backtestSymbolCustomState.rows = (backtestSymbolCustomState.rows || []).map((row) => (
+      row._id === updated._id ? updated : row
+    ));
+    backtestSymbolCustomState.selectedId = updated._id;
+    backtestSymbolCustomState.selectedRecord = updated;
+    renderBacktestSymbolCustomOptions(backtestSymbolCustomState.rows, updated._id);
+    if (statusEl) {
+      const added = Array.isArray(response.addedParameters) ? response.addedParameters.length : 0;
+      const addedSchema = Array.isArray(response.addedSchemaFields) ? response.addedSchemaFields.length : 0;
+      statusEl.innerHTML = '<span style="color:var(--green)">Schema sync complete. Added parameters '
+        + escapeHtml(added)
+        + ', schema fields '
+        + escapeHtml(addedSchema)
+        + '.</span>';
+    }
+  } catch (error) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(error.message || 'Failed to sync SymbolCustom schema') + '</span>';
+  }
 }
 
 function resolveHistoricalInitialBalance(detail) {
@@ -5413,6 +5478,7 @@ async function runSymbolCustomBacktestFromBacktestPage() {
   }
   resetSingleBacktestChart('Running SymbolCustom backtest...');
   renderSymbolCustomPresetComparison(null);
+  renderSymbolCustomCandidateValidation(null);
 
   try {
     const response = await api(request.endpoint, 'POST', request.payload);
@@ -5586,6 +5652,7 @@ function resetSingleBacktestWorkspace(message = 'Run a backtest to see results')
   }
   renderSymbolCustomBacktestEvaluation(null);
   renderSymbolCustomPresetComparison(null);
+  renderSymbolCustomCandidateValidation(null);
   clearCanvas('equityCanvas');
   resetSingleBacktestChart();
 }
@@ -5841,7 +5908,21 @@ function buildSymbolCustomPresetComparisonPayload() {
   const startDate = document.getElementById('btStartDate')?.value || result.startDate || '';
   const endDate = document.getElementById('btEndDate')?.value || result.endDate || '';
   const initialBalance = Number(document.getElementById('btBalance')?.value || result.initialBalance || 500);
-  return {
+  const utils = getBacktestPageUtils();
+  const request = utils.buildSymbolCustomPresetComparisonRequest
+    ? utils.buildSymbolCustomPresetComparisonRequest({ _id: 'payload-only' }, {
+      startDate,
+      endDate,
+      initialBalance: Number.isFinite(initialBalance) ? initialBalance : 500,
+      costModel: result.costModelUsed || result.costModel || {
+        spread: 0,
+        commissionPerTrade: 0,
+        slippage: 0,
+      },
+    })
+    : null;
+
+  return request ? request.payload : {
     startDate,
     endDate,
     initialBalance: Number.isFinite(initialBalance) ? initialBalance : 500,
@@ -5857,6 +5938,7 @@ async function runSymbolCustomPresetComparisonFromBacktestPage() {
   const target = getSymbolCustomPresetComparisonTarget();
   const output = document.getElementById('btSymbolCustomPresetComparison');
   const btn = document.getElementById('btPresetComparisonBtn');
+  const panelBtn = document.getElementById('btSymbolCustomPresetComparisonPanelBtn');
   if (!target.id) {
     if (output) {
       output.style.display = '';
@@ -5878,15 +5960,23 @@ async function runSymbolCustomPresetComparisonFromBacktestPage() {
     btn.disabled = true;
     btn.textContent = 'Comparing...';
   }
+  if (panelBtn) {
+    panelBtn.disabled = true;
+    panelBtn.textContent = 'Comparing...';
+  }
   if (output) {
     output.style.display = '';
     output.innerHTML = '<div class="empty">Running guardrail preset comparison...</div>';
   }
+  renderSymbolCustomCandidateValidation(null);
 
   try {
-    const response = await api('/api/symbol-customs/' + encodeURIComponent(target.id) + '/preset-comparison', 'POST', payload);
+    const utils = getBacktestPageUtils();
+    const request = utils.buildSymbolCustomPresetComparisonRequest
+      ? utils.buildSymbolCustomPresetComparisonRequest({ _id: target.id }, payload)
+      : { endpoint: '/api/symbol-customs/' + encodeURIComponent(target.id) + '/preset-comparison', payload };
+    const response = await api(request.endpoint, 'POST', request.payload);
     if (!response.success) {
-      const utils = getBacktestPageUtils();
       const errorInfo = utils.normalizeBacktestError
         ? utils.normalizeBacktestError(response, 'Failed to run SymbolCustom preset comparison')
         : { message: response.message || 'Failed to run SymbolCustom preset comparison' };
@@ -5907,13 +5997,24 @@ async function runSymbolCustomPresetComparisonFromBacktestPage() {
       btn.disabled = false;
       btn.textContent = 'Run Preset Comparison';
     }
+    if (panelBtn) {
+      panelBtn.disabled = false;
+      panelBtn.textContent = 'Run Preset Comparison';
+    }
   }
 }
 
 function renderSymbolCustomPresetComparison(comparison) {
   const target = document.getElementById('btSymbolCustomPresetComparison');
+  const validatePanelBtn = document.getElementById('btSymbolCustomCandidateValidationPanelBtn');
   if (!target) return;
   currentSymbolCustomPresetComparison = comparison || null;
+  if (validatePanelBtn) {
+    validatePanelBtn.disabled = !comparison || !comparison.bestPreset;
+    validatePanelBtn.title = comparison && comparison.bestPreset
+      ? 'Validate the current best preset across 2M / 4M / 8M / 12M windows.'
+      : 'Run Preset Comparison first, then validate the best candidate.';
+  }
   if (!comparison) {
     target.style.display = 'none';
     target.innerHTML = '';
@@ -5925,6 +6026,7 @@ function renderSymbolCustomPresetComparison(comparison) {
   let html = '<div class="card-header" style="padding:0;margin-bottom:10px;gap:8px;flex-wrap:wrap">';
   html += '<span class="card-title">Guardrail Preset Comparison</span>';
   html += '<div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn-outline btn-sm" id="btCandidateValidationBtn" onclick="runSymbolCustomCandidateValidationFromBacktestPage()">Validate Best Candidate</button>';
   html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomPresetComparisonExport(\'json\')">Comparison JSON</button>';
   html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomPresetComparisonExport(\'csv\')">Comparison CSV</button>';
   html += '</div></div>';
@@ -5965,6 +6067,233 @@ function renderSymbolCustomPresetComparison(comparison) {
   });
   html += '</table></div>';
   target.innerHTML = html;
+}
+
+function buildSymbolCustomCandidateValidationWindows(endDateValue) {
+  const end = endDateValue ? new Date(endDateValue + 'T00:00:00.000Z') : null;
+  if (!end || Number.isNaN(end.getTime())) {
+    return [
+      { label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' },
+      { label: '4M', startDate: '2026-01-15', endDate: '2026-05-15' },
+      { label: '8M', startDate: '2025-09-15', endDate: '2026-05-15' },
+      { label: '12M', startDate: '2025-05-15', endDate: '2026-05-15' },
+    ];
+  }
+  const toDate = (date) => date.toISOString().slice(0, 10);
+  const subtractMonths = (months) => {
+    const date = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+    date.setUTCMonth(date.getUTCMonth() - months);
+    return toDate(date);
+  };
+  const endDate = toDate(end);
+  return [
+    { label: '2M', startDate: subtractMonths(2), endDate },
+    { label: '4M', startDate: subtractMonths(4), endDate },
+    { label: '8M', startDate: subtractMonths(8), endDate },
+    { label: '12M', startDate: subtractMonths(12), endDate },
+  ];
+}
+
+function getBestSymbolCustomPresetForValidation() {
+  const comparison = currentSymbolCustomPresetComparison || {};
+  const bestName = comparison.bestPreset?.presetName || '';
+  if (!bestName) return null;
+  return (comparison.results || []).find((result) => result.presetName === bestName)
+    || comparison.bestPreset
+    || null;
+}
+
+function buildSymbolCustomCandidateValidationPayload(bestPreset) {
+  const result = currentSingleBacktestResult || activeHistoricalBacktestDetail || {};
+  const endDate = document.getElementById('btEndDate')?.value || currentSymbolCustomPresetComparison?.endDate || result.endDate || '';
+  const initialBalance = Number(document.getElementById('btBalance')?.value || result.initialBalance || 500);
+  const costModel = result.costModelUsed || result.costModel || {
+    spread: 0,
+    commissionPerTrade: 0,
+    slippage: 0,
+  };
+
+  return {
+    candidateName: bestPreset.presetName || currentSymbolCustomPresetComparison?.bestPreset?.presetName || 'buy_session_conservative',
+    candidateParameters: bestPreset.parameters || {},
+    windows: buildSymbolCustomCandidateValidationWindows(endDate),
+    initialBalance: Number.isFinite(initialBalance) ? initialBalance : 500,
+    costModel,
+  };
+}
+
+async function runSymbolCustomCandidateValidationFromBacktestPage() {
+  const target = getSymbolCustomPresetComparisonTarget();
+  const output = document.getElementById('btSymbolCustomCandidateValidation');
+  const btn = document.getElementById('btCandidateValidationBtn');
+  const panelBtn = document.getElementById('btSymbolCustomCandidateValidationPanelBtn');
+  const bestPreset = getBestSymbolCustomPresetForValidation();
+
+  if (!target.id || !bestPreset) {
+    if (output) {
+      output.style.display = '';
+      output.innerHTML = '<div class="empty" style="color:var(--yellow)">Run preset comparison first, then validate the best candidate.</div>';
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Validating...';
+  }
+  if (panelBtn) {
+    panelBtn.disabled = true;
+    panelBtn.textContent = 'Validating...';
+  }
+  if (output) {
+    output.style.display = '';
+    output.innerHTML = '<div class="empty">Running 2M / 4M / 8M / 12M candidate validation...</div>';
+  }
+
+  try {
+    const payload = buildSymbolCustomCandidateValidationPayload(bestPreset);
+    const utils = getBacktestPageUtils();
+    const request = utils.buildSymbolCustomCandidateValidationRequest
+      ? utils.buildSymbolCustomCandidateValidationRequest({ _id: target.id }, payload)
+      : { endpoint: '/api/symbol-customs/' + encodeURIComponent(target.id) + '/candidate-validation', payload };
+    const response = await api(request.endpoint, 'POST', request.payload);
+    if (!response.success) {
+      const errorInfo = utils.normalizeBacktestError
+        ? utils.normalizeBacktestError(response, 'Failed to run SymbolCustom candidate validation')
+        : { message: response.message || 'Failed to run SymbolCustom candidate validation' };
+      if (output) {
+        output.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(errorInfo.message) + '</div>'
+          + (errorInfo.hint ? '<div class="bt-chart-warning" style="margin-top:8px">' + escapeHtml(errorInfo.hint) + '</div>' : '');
+      }
+      return;
+    }
+    renderSymbolCustomCandidateValidation(response);
+  } catch (error) {
+    if (output) {
+      output.style.display = '';
+      output.innerHTML = '<div class="empty" style="color:var(--red)">' + escapeHtml(error.message || 'Failed to run SymbolCustom candidate validation') + '</div>';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Validate Best Candidate';
+    }
+    if (panelBtn) {
+      panelBtn.disabled = false;
+      panelBtn.textContent = 'Validate Best Candidate';
+    }
+  }
+}
+
+function renderSymbolCustomCandidateValidation(validation) {
+  const target = document.getElementById('btSymbolCustomCandidateValidation');
+  if (!target) return;
+  currentSymbolCustomCandidateValidation = validation || null;
+  if (!validation) {
+    target.style.display = 'none';
+    target.innerHTML = '';
+    return;
+  }
+
+  const windows = Array.isArray(validation.windows) ? validation.windows : [];
+  target.style.display = '';
+  let html = '<div class="card-header" style="padding:0;margin-bottom:10px;gap:8px;flex-wrap:wrap">';
+  html += '<span class="card-title">Candidate Validation</span>';
+  html += '<div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomCandidateValidationExport(\'json\')">Validation JSON</button>';
+  html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomCandidateValidationExport(\'csv\')">Validation CSV</button>';
+  html += '</div></div>';
+  html += '<div class="readonly-note">Candidate validation reruns SymbolCustom backtests only. It does not save parameters or change paper/live settings.</div>';
+  html += '<table class="symbol-custom-table" style="margin-bottom:12px">';
+  html += '<tr><td>candidate</td><td><strong>' + escapeHtml(validation.candidateName || '--') + '</strong></td></tr>';
+  html += '<tr><td>overallRecommendation</td><td><span class="tag tag-blue">' + escapeHtml(validation.overallRecommendation || '--') + '</span></td></tr>';
+  html += '<tr><td>pass / fail</td><td>' + escapeHtml(validation.passCount ?? 0) + ' / ' + escapeHtml(validation.failCount ?? 0) + '</td></tr>';
+  html += '</table>';
+
+  if (!windows.length) {
+    html += '<div class="empty">' + escapeHtml(validation.conclusion?.message || 'No candidate validation windows were produced') + '</div>';
+    target.innerHTML = html;
+    return;
+  }
+
+  html += '<div style="overflow-x:auto"><table class="symbol-custom-table"><tr>';
+  ['Window', 'Trades', 'Net P/L', 'PF', 'Win Rate', 'AvgR', 'Max DD %', 'Medium Cost Net P/L', 'Pass / Fail', 'Reason'].forEach((label) => {
+    html += '<th>' + escapeHtml(label) + '</th>';
+  });
+  html += '</tr>';
+  windows.forEach((window) => {
+    const tagClass = window.validationStatus === 'PASS' ? 'tag-active' : 'tag';
+    html += '<tr>';
+    html += '<td>' + escapeHtml(window.label || '--') + '</td>';
+    html += '<td>' + escapeHtml(window.trades ?? '--') + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(window.netPnl)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(window.profitFactor, 4)) + '</td>';
+    html += '<td>' + escapeHtml(fmtRate(window.winRate)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(window.avgR, 4)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(window.maxDrawdownPercent)) + '</td>';
+    html += '<td>' + escapeHtml(formatEvaluationMetric(window.mediumCostNetPnl)) + '</td>';
+    html += '<td><span class="tag ' + tagClass + '">' + escapeHtml(window.validationStatus || '--') + '</span></td>';
+    html += '<td>' + escapeHtml(window.reason || '--') + '</td>';
+    html += '</tr>';
+  });
+  html += '</table></div>';
+  target.innerHTML = html;
+}
+
+function buildSymbolCustomCandidateValidationCsv(validation) {
+  const rows = [[
+    'window',
+    'trades',
+    'netPnl',
+    'profitFactor',
+    'winRate',
+    'avgR',
+    'maxDrawdownPercent',
+    'mediumCostNetPnl',
+    'validationStatus',
+    'reason',
+  ]];
+  const csvValue = (value) => {
+    if (value === null || value === undefined) return '';
+    const text = String(value);
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  (validation.windows || []).forEach((window) => {
+    rows.push([
+      window.label,
+      window.trades,
+      window.netPnl,
+      window.profitFactor,
+      window.winRate,
+      window.avgR,
+      window.maxDrawdownPercent,
+      window.mediumCostNetPnl,
+      window.validationStatus,
+      window.reason,
+    ]);
+  });
+  return rows.map((row) => row.map(csvValue).join(',')).join('\n');
+}
+
+function downloadSymbolCustomCandidateValidationExport(format='json') {
+  if (!currentSymbolCustomCandidateValidation) {
+    alert('No SymbolCustom candidate validation available.');
+    return;
+  }
+  const isCsv = format === 'csv';
+  const content = isCsv
+    ? buildSymbolCustomCandidateValidationCsv(currentSymbolCustomCandidateValidation)
+    : JSON.stringify(currentSymbolCustomCandidateValidation, null, 2);
+  const blob = new Blob([content], { type: isCsv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const name = (currentSymbolCustomCandidateValidation.symbolCustomName || 'symbol-custom-candidate-validation').replace(/[^a-z0-9_-]+/gi, '-');
+  link.href = url;
+  link.download = name + '-candidate-validation.' + (isCsv ? 'csv' : 'json');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function buildSymbolCustomPresetComparisonCsv(comparison) {
@@ -6086,7 +6415,10 @@ function renderBacktestResult(data, resultElementId='btResult', canvasId='equity
   if (resultElementId === 'btResult') {
     const isSymbolCustomResult = isSymbolCustomBacktestResult(data);
     renderSymbolCustomBacktestEvaluation(isSymbolCustomResult ? data.evaluation : null);
-    if (!isSymbolCustomResult) renderSymbolCustomPresetComparison(null);
+    if (!isSymbolCustomResult) {
+      renderSymbolCustomPresetComparison(null);
+      renderSymbolCustomCandidateValidation(null);
+    }
   }
 
   // Draw equity curve
@@ -10227,6 +10559,7 @@ function setSymbolCustomEditorRecord(record) {
   symbolCustomEl('scAiResearchSummary').value = source.aiResearchSummary || '';
 
   updateSymbolCustomLiveWarning();
+  updateSymbolCustomSchemaSyncWarning(source._id ? source : null);
   renderSymbolCustomList();
   symbolCustomManagerState.optimizerRun = null;
   symbolCustomManagerState.backtestResult = null;
@@ -10270,6 +10603,21 @@ function updateSymbolCustomLiveWarning() {
   const checked = symbolCustomEl('scLiveEnabled') && symbolCustomEl('scLiveEnabled').checked === true;
   warningEl.textContent = utils.PHASE_1_LIVE_WARNING || 'SymbolCustom live execution is not supported in Phase 1. This field is saved for future use only.';
   warningEl.classList.toggle('show', utils.shouldShowLiveWarning ? utils.shouldShowLiveWarning(checked) : checked);
+}
+
+function getSymbolCustomSchemaSyncWarning(record) {
+  const utils = getSymbolCustomUtils();
+  return utils.buildSchemaSyncWarning ? utils.buildSchemaSyncWarning(record || {}) : '';
+}
+
+function updateSymbolCustomSchemaSyncWarning(record) {
+  const warningEl = symbolCustomEl('symbolCustomSchemaSyncWarning');
+  if (!warningEl) return;
+  const warning = getSymbolCustomSchemaSyncWarning(record);
+  warningEl.textContent = warning
+    ? warning + ' This adds missing parameters from the registered logic without overwriting existing values.'
+    : '';
+  warningEl.classList.toggle('show', Boolean(warning));
 }
 
 function renderSymbolCustomSymbolSummary() {
@@ -10735,6 +11083,33 @@ async function saveSymbolCustomEditor() {
     showSymbolCustomStatus(statusMessage, statusType);
   } catch (error) {
     showSymbolCustomStatus(error.message || 'Failed to save SymbolCustom', 'error');
+  }
+}
+
+async function syncSelectedSymbolCustomSchemaFromLogic() {
+  const id = symbolCustomManagerState.selectedId;
+  if (!id) {
+    showSymbolCustomStatus('Select an existing SymbolCustom before syncing parameters.', 'error');
+    return;
+  }
+
+  try {
+    showSymbolCustomStatus('Syncing missing parameters from registered logic...', 'warn');
+    const response = await api('/api/symbol-customs/' + encodeURIComponent(id) + '/sync-schema', 'POST', {});
+    if (!response.success) throw new Error(response.message || 'Failed to sync SymbolCustom schema');
+
+    const updated = response.symbolCustom || null;
+    if (updated) {
+      symbolCustomManagerState.selectedSymbol = updated.symbol || symbolCustomManagerState.selectedSymbol;
+      symbolCustomManagerState.selectedId = updated._id || id;
+      symbolCustomManagerState.selectedRecord = updated;
+    }
+    await loadSymbolCustomManager({ preserveSelection: true });
+    const added = Array.isArray(response.addedParameters) ? response.addedParameters.length : 0;
+    const addedSchema = Array.isArray(response.addedSchemaFields) ? response.addedSchemaFields.length : 0;
+    showSymbolCustomStatus('Schema sync complete. Added parameters ' + added + ', schema fields ' + addedSchema + '.', 'success');
+  } catch (error) {
+    showSymbolCustomStatus(error.message || 'Failed to sync SymbolCustom schema', 'error');
   }
 }
 

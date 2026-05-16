@@ -33,6 +33,18 @@ function sourceExcludes(source, patterns) {
   return patterns.every((pattern) => !pattern.test(source));
 }
 
+function extractFunctionSource(source, functionName) {
+  const start = source.indexOf(`function ${functionName}`);
+  if (start === -1) return '';
+  const nextFunction = source.indexOf('\nasync function ', start + 1);
+  const nextPlainFunction = source.indexOf('\nfunction ', start + 1);
+  const nextModuleExports = source.indexOf('\nmodule.exports', start + 1);
+  const candidates = [nextFunction, nextPlainFunction, nextModuleExports]
+    .filter((index) => index > start);
+  const end = candidates.length ? Math.min(...candidates) : source.length;
+  return source.slice(start, end);
+}
+
 function auditLiveExecutionNotConnected() {
   try {
     const source = readProjectFile('src/services/symbolCustomEngine.js');
@@ -759,6 +771,146 @@ function auditUsdjpyPaperLiveRemainNoneForPresetComparison() {
   }
 }
 
+function auditCandidateValidationDoesNotCallTradeExecutor() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandidateValidationService.js');
+    const safe = sourceExcludes(source, [
+      /tradeExecutor/i,
+      /\bexecuteTrade\s*\(/,
+      /placeOrder\s*\(/,
+      /preflightOrder\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('candidate validation does not call tradeExecutor', 'PASS', 'SymbolCustom candidate validation only orchestrates backtest/evaluation services.')
+      : buildCheck('candidate validation does not call tradeExecutor', 'FAIL', 'SymbolCustom candidate validation appears to reference live order execution.');
+  } catch (error) {
+    return buildCheck('candidate validation does not call tradeExecutor', 'FAIL', `Unable to inspect candidate validation tradeExecutor isolation: ${error.message}`);
+  }
+}
+
+function auditCandidateValidationDoesNotCallRiskManager() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandidateValidationService.js');
+    const safe = sourceExcludes(source, [
+      /riskManager/i,
+      /calculateLotSize\s*\(/,
+      /calculatePositionSize\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('candidate validation does not call riskManager', 'PASS', 'SymbolCustom candidate validation does not reference live risk sizing.')
+      : buildCheck('candidate validation does not call riskManager', 'FAIL', 'SymbolCustom candidate validation appears to reference riskManager.');
+  } catch (error) {
+    return buildCheck('candidate validation does not call riskManager', 'FAIL', `Unable to inspect candidate validation risk isolation: ${error.message}`);
+  }
+}
+
+function auditCandidateValidationDoesNotCallPaperTradingService() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandidateValidationService.js');
+    const safe = sourceExcludes(source, [
+      /paperTradingService/i,
+      /submitSymbolCustomSignal\s*\(/,
+      /submitExternalPaperSignal\s*\(/,
+      /_executePaperTrade\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('candidate validation does not call paperTradingService', 'PASS', 'SymbolCustom candidate validation does not submit paper signals.')
+      : buildCheck('candidate validation does not call paperTradingService', 'FAIL', 'SymbolCustom candidate validation appears to reference paper execution.');
+  } catch (error) {
+    return buildCheck('candidate validation does not call paperTradingService', 'FAIL', `Unable to inspect candidate validation paper isolation: ${error.message}`);
+  }
+}
+
+function auditCandidateValidationDoesNotCallOldBacktestEngine() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandidateValidationService.js');
+    const safe = sourceExcludes(source, [
+      /backtestEngine/,
+      /runBacktest\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('candidate validation does not call old backtestEngine', 'PASS', 'SymbolCustom candidate validation uses SymbolCustom backtest service only.')
+      : buildCheck('candidate validation does not call old backtestEngine', 'FAIL', 'SymbolCustom candidate validation appears to reference old backtestEngine.');
+  } catch (error) {
+    return buildCheck('candidate validation does not call old backtestEngine', 'FAIL', `Unable to inspect candidate validation backtest isolation: ${error.message}`);
+  }
+}
+
+function auditCandidateValidationDoesNotCallSixStrategies() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomCandidateValidationService.js');
+    const safe = sourceExcludes(source, [
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /Momentum/,
+      /MultiTimeframe/,
+      /VolumeFlowHybrid/,
+      /src\/strategies/,
+      /\.\.\/strategies/,
+    ]);
+
+    return safe
+      ? buildCheck('candidate validation does not call six strategies', 'PASS', 'SymbolCustom candidate validation does not reference six strategy classes.')
+      : buildCheck('candidate validation does not call six strategies', 'FAIL', 'SymbolCustom candidate validation appears to reference six strategy classes.');
+  } catch (error) {
+    return buildCheck('candidate validation does not call six strategies', 'FAIL', `Unable to inspect candidate validation strategy isolation: ${error.message}`);
+  }
+}
+
+function auditSchemaSyncDoesNotChangePaperLive() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomService.js');
+    const syncSource = extractFunctionSource(source, 'syncSymbolCustomSchemaFromLogic');
+    const hasSync = syncSource.includes('parameterSchema') && syncSource.includes('parameters');
+    const leavesExecutionFlags = sourceExcludes(syncSource, [
+      /paperEnabled\s*:/,
+      /liveEnabled\s*:/,
+      /allowLive\s*:/,
+      /isPrimaryLive\s*:/,
+      /status\s*:/,
+    ]);
+
+    return hasSync && leavesExecutionFlags
+      ? buildCheck('schema sync does not change paper/live/liveEnabled', 'PASS', 'Schema sync only patches parameters and parameterSchema.')
+      : buildCheck('schema sync does not change paper/live/liveEnabled', 'FAIL', 'Schema sync appears to modify execution flags or status.');
+  } catch (error) {
+    return buildCheck('schema sync does not change paper/live/liveEnabled', 'FAIL', `Unable to inspect schema sync flag safety: ${error.message}`);
+  }
+}
+
+function auditSchemaSyncDoesNotTouchTradingSystems() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomService.js');
+    const syncSource = extractFunctionSource(source, 'syncSymbolCustomSchemaFromLogic');
+    const safe = sourceExcludes(syncSource, [
+      /tradeExecutor/i,
+      /riskManager/i,
+      /backtestEngine/i,
+      /optimizerService/i,
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /MultiTimeframe/,
+      /Momentum/,
+      /VolumeFlowHybrid/,
+      /paperTradingService/i,
+      /placeOrder\s*\(/,
+      /executeTrade\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('schema sync does not touch trading systems', 'PASS', 'Schema sync is isolated to SymbolCustom configuration fields.')
+      : buildCheck('schema sync does not touch trading systems', 'FAIL', 'Schema sync appears to reference trading, risk, old backtest, optimizer, or six strategy systems.');
+  } catch (error) {
+    return buildCheck('schema sync does not touch trading systems', 'FAIL', `Unable to inspect schema sync isolation: ${error.message}`);
+  }
+}
+
 function auditPrimaryLiveUniqueness(symbolCustoms) {
   const grouped = new Map();
   symbolCustoms
@@ -845,6 +997,13 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditPresetComparisonDoesNotCallOldBacktestEngine());
   checks.push(auditPresetComparisonDoesNotCallSixStrategies());
   checks.push(auditUsdjpyPaperLiveRemainNoneForPresetComparison());
+  checks.push(auditCandidateValidationDoesNotCallTradeExecutor());
+  checks.push(auditCandidateValidationDoesNotCallRiskManager());
+  checks.push(auditCandidateValidationDoesNotCallPaperTradingService());
+  checks.push(auditCandidateValidationDoesNotCallOldBacktestEngine());
+  checks.push(auditCandidateValidationDoesNotCallSixStrategies());
+  checks.push(auditSchemaSyncDoesNotChangePaperLive());
+  checks.push(auditSchemaSyncDoesNotTouchTradingSystems());
 
   let symbolCustoms = [];
   try {

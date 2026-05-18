@@ -1,4 +1,5 @@
 const runner = require('../src/services/symbolCustomBacktestRunnerService');
+const UsdjpyJpyMacroReversalV1 = require('../src/symbolCustom/logics/UsdjpyJpyMacroReversalV1');
 
 function bar(index, overrides = {}) {
   return {
@@ -39,11 +40,50 @@ async function runWithLogic(logic, entryCandles, options = {}) {
       entry: entryCandles,
       higher: entryCandles,
     },
-    parameters: {},
+    parameters: options.parameters || {},
     costModel: options.costModel || {},
     initialBalance: options.initialBalance || 1000,
     options: options.options || {},
   });
+}
+
+function usdjpyReversalCandles({ direction = 'down', count = 48, startHourUtc = 22 } = {}) {
+  const candles = [];
+  let previousClose = direction === 'down' ? 150 : 140;
+
+  for (let index = 0; index < count; index += 1) {
+    const time = new Date(Date.UTC(2026, 0, 1, startHourUtc, index * 5)).toISOString();
+    const delta = direction === 'down' ? -0.16 : 0.16;
+    const close = previousClose + delta;
+    candles.push({
+      time,
+      open: previousClose,
+      high: Math.max(previousClose, close) + 0.08,
+      low: Math.min(previousClose, close) - 0.08,
+      close,
+      volume: 100 + index,
+    });
+    previousClose = close;
+  }
+
+  const last = candles[candles.length - 1];
+  candles[candles.length - 1] = direction === 'down'
+    ? {
+      ...last,
+      open: last.close - 0.08,
+      low: last.close - 0.2,
+      high: last.close + 0.08,
+      close: last.close,
+    }
+    : {
+      ...last,
+      open: last.close + 0.08,
+      low: last.close - 0.08,
+      high: last.close + 0.2,
+      close: last.close,
+    };
+
+  return candles;
 }
 
 describe('symbolCustomBacktestRunnerService', () => {
@@ -210,6 +250,10 @@ describe('symbolCustomBacktestRunnerService', () => {
       bar(2, { high: 111, low: 109, close: 110 }),
     ]);
 
+    expect(observed[0]).toEqual(expect.objectContaining({
+      lastClosedTrade: null,
+      barsSinceLastExit: null,
+    }));
     const afterExitContext = observed.find((context) => context.currentIndex === 2);
     expect(afterExitContext).toEqual(expect.objectContaining({
       currentUtcHour: 0,
@@ -241,6 +285,40 @@ describe('symbolCustomBacktestRunnerService', () => {
       exitIndex: 1,
       entryHourUtc: 0,
       entryDateUtc: '2026-01-01',
+    }));
+  });
+
+  test('USDJPY combined conservative cooldown guardrails produce at least one backtest trade', async () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = usdjpyReversalCandles({ direction: 'down', startHourUtc: 22 });
+
+    const result = await runWithLogic(logic, candles, {
+      symbolCustom: {
+        symbol: 'USDJPY',
+        symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+        logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+        riskConfig: { maxRiskPerTradePct: 1 },
+      },
+      initialBalance: 500,
+      parameters: {
+        allowedUtcHours: '23,0,1,7,8,9,10',
+        cooldownBarsAfterAnyExit: 6,
+        cooldownBarsAfterSL: 18,
+        maxDailyLosses: 3,
+        maxDailyTrades: 6,
+        enableBuy: true,
+        enableSell: true,
+      },
+    });
+
+    expect(result.summary.trades).toBeGreaterThan(0);
+    expect(result.trades[0]).toEqual(expect.objectContaining({
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      entryIndex: expect.any(Number),
+      exitIndex: expect.any(Number),
+      entryHourUtc: expect.any(Number),
+      entryDateUtc: expect.any(String),
+      exitReason: expect.any(String),
     }));
   });
 });

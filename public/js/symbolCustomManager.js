@@ -65,6 +65,51 @@
     return Boolean(value && value.liveEnabled === true);
   }
 
+  function getSchemaFieldKey(field) {
+    return normalizeString(field && (field.key || field.name));
+  }
+
+  function findMissingParameterSchemaFields(record = {}, logicParameterSchema = null) {
+    const syncStatus = record && record.schemaSyncStatus;
+    if (syncStatus && Array.isArray(syncStatus.missingSchemaFields)) {
+      return syncStatus.missingSchemaFields.slice();
+    }
+
+    const expectedSchema = Array.isArray(logicParameterSchema) ? logicParameterSchema : [];
+    const existingSchema = Array.isArray(record && record.parameterSchema) ? record.parameterSchema : [];
+    const existingKeys = new Set(existingSchema.map(getSchemaFieldKey).filter(Boolean));
+    return expectedSchema
+      .map(getSchemaFieldKey)
+      .filter((key) => key && !existingKeys.has(key));
+  }
+
+  function findMissingParameterKeys(record = {}, logicDefaultParameters = null) {
+    const syncStatus = record && record.schemaSyncStatus;
+    if (syncStatus && Array.isArray(syncStatus.missingParameters)) {
+      return syncStatus.missingParameters.slice();
+    }
+
+    const defaults = logicDefaultParameters && typeof logicDefaultParameters === 'object' && !Array.isArray(logicDefaultParameters)
+      ? logicDefaultParameters
+      : {};
+    const existing = record && record.parameters && typeof record.parameters === 'object' && !Array.isArray(record.parameters)
+      ? record.parameters
+      : {};
+    return Object.keys(defaults).filter((key) => !Object.prototype.hasOwnProperty.call(existing, key));
+  }
+
+  function hasMissingLogicSchema(record = {}, logicParameterSchema = null, logicDefaultParameters = null) {
+    const syncStatus = record && record.schemaSyncStatus;
+    if (syncStatus && syncStatus.hasMissing === true) return true;
+    return findMissingParameterSchemaFields(record, logicParameterSchema).length > 0
+      || findMissingParameterKeys(record, logicDefaultParameters).length > 0;
+  }
+
+  function buildSchemaSyncWarning(record = {}, logicParameterSchema = null, logicDefaultParameters = null) {
+    if (!hasMissingLogicSchema(record, logicParameterSchema, logicDefaultParameters)) return '';
+    return 'This SymbolCustom is missing parameters from its registered logic. Run Sync Parameters From Logic.';
+  }
+
   function buildSymbolCustomSymbolSummaries(records) {
     const grouped = new Map();
     (Array.isArray(records) ? records : []).forEach((record) => {
@@ -286,6 +331,10 @@
     serializeBacktestPayload,
     normalizeBacktestError,
     shouldShowLiveWarning,
+    findMissingParameterSchemaFields,
+    findMissingParameterKeys,
+    hasMissingLogicSchema,
+    buildSchemaSyncWarning,
     buildSymbolCustomSymbolSummaries,
     flattenSymbolCustomReportRow,
     buildSymbolCustomReportCsv,

@@ -50,7 +50,7 @@ function createSymbolCustomsDb(records) {
   };
 }
 
-function loadService({ records = [] } = {}) {
+function loadService({ records = [], logics = {} } = {}) {
   jest.resetModules();
 
   const symbolCustomRecords = records.map((record) => ({ ...record }));
@@ -62,12 +62,31 @@ function loadService({ records = [] } = {}) {
   jest.doMock('../src/services/tradeExecutor', () => ({
     executeTrade: jest.fn(),
   }));
+  jest.doMock('../src/services/riskManager', () => ({
+    calculateLotSize: jest.fn(),
+    calculatePositionSize: jest.fn(),
+  }));
+  jest.doMock('../src/symbolCustom/registry', () => ({
+    getSymbolCustomLogic: jest.fn((logicName) => {
+      const defaults = {
+        PLACEHOLDER_SYMBOL_CUSTOM: {
+          getDefaultParameterSchema: () => [],
+          getDefaultParameters: () => ({}),
+        },
+      };
+      return logics[logicName] || defaults[logicName] || null;
+    }),
+  }));
 
   const service = require('../src/services/symbolCustomService');
   const tradeExecutor = require('../src/services/tradeExecutor');
+  const riskManager = require('../src/services/riskManager');
+  const registry = require('../src/symbolCustom/registry');
   return {
     service,
     tradeExecutor,
+    riskManager,
+    registry,
     records: symbolCustomRecords,
   };
 }
@@ -76,6 +95,8 @@ describe('symbolCustomService CRUD', () => {
   afterEach(() => {
     jest.dontMock('../src/config/db');
     jest.dontMock('../src/services/tradeExecutor');
+    jest.dontMock('../src/services/riskManager');
+    jest.dontMock('../src/symbolCustom/registry');
   });
 
   test('creates and lists SymbolCustom records', async () => {
@@ -208,5 +229,252 @@ describe('symbolCustomService CRUD', () => {
 
     expect(rows.find((row) => row._id === second.symbolCustom._id).isPrimaryLive).toBe(true);
     expect(rows.find((row) => row._id === first.symbolCustom._id).isPrimaryLive).toBe(false);
+  });
+
+  test('sync adds missing parameters and parameterSchema fields from registered logic', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-sync',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'TEST_LOGIC',
+          status: 'draft',
+          paperEnabled: false,
+          liveEnabled: false,
+          allowLive: false,
+          isPrimaryLive: false,
+          parameterSchema: [{ key: 'lookbackBars', type: 'number' }],
+          parameters: { lookbackBars: 36 },
+        },
+      ],
+      logics: {
+        TEST_LOGIC: {
+          getDefaultParameterSchema: () => [
+            { key: 'lookbackBars', type: 'number', defaultValue: 36 },
+            { key: 'enableBuy', type: 'boolean', defaultValue: true },
+            { key: 'enableSell', type: 'boolean', defaultValue: true },
+          ],
+          getDefaultParameters: () => ({
+            lookbackBars: 36,
+            enableBuy: true,
+            enableSell: true,
+          }),
+        },
+      },
+    });
+
+    const result = await service.syncSymbolCustomSchemaFromLogic('sc-sync');
+
+    expect(result.addedParameters).toEqual(['enableBuy', 'enableSell']);
+    expect(result.keptParameters).toEqual(['lookbackBars']);
+    expect(result.addedSchemaFields).toEqual(['enableBuy', 'enableSell']);
+    expect(result.symbolCustom.parameters).toEqual({
+      lookbackBars: 36,
+      enableBuy: true,
+      enableSell: true,
+    });
+    expect(result.symbolCustom.parameterSchema.map((field) => field.key)).toEqual([
+      'lookbackBars',
+      'enableBuy',
+      'enableSell',
+    ]);
+    expect(result.symbolCustom.schemaSyncStatus.hasMissing).toBe(false);
+  });
+
+  test('sync does not overwrite existing parameter values or change execution flags', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-guardrails',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'TEST_LOGIC',
+          status: 'validated',
+          paperEnabled: true,
+          liveEnabled: true,
+          allowLive: true,
+          isPrimaryLive: true,
+          parameterSchema: [{ key: 'enableBuy', type: 'boolean' }],
+          parameters: { enableBuy: false },
+        },
+      ],
+      logics: {
+        TEST_LOGIC: {
+          getDefaultParameterSchema: () => [
+            { key: 'enableBuy', type: 'boolean', defaultValue: true },
+            { key: 'enableSell', type: 'boolean', defaultValue: true },
+          ],
+          getDefaultParameters: () => ({
+            enableBuy: true,
+            enableSell: true,
+          }),
+        },
+      },
+    });
+
+    const result = await service.syncSymbolCustomSchemaFromLogic('sc-guardrails');
+
+    expect(result.symbolCustom.parameters).toEqual({
+      enableBuy: false,
+      enableSell: true,
+    });
+    expect(result.symbolCustom).toEqual(expect.objectContaining({
+      status: 'validated',
+      paperEnabled: true,
+      liveEnabled: true,
+      allowLive: true,
+      isPrimaryLive: true,
+    }));
+  });
+
+  test('sync returns a clear error for unknown logic', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-unknown',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_UNKNOWN',
+          logicName: 'UNKNOWN_LOGIC',
+          parameterSchema: [],
+          parameters: {},
+        },
+      ],
+    });
+
+    await expect(service.syncSymbolCustomSchemaFromLogic('sc-unknown')).rejects.toEqual(expect.objectContaining({
+      message: 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED',
+      statusCode: 400,
+      reasonCode: 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED',
+    }));
+  });
+
+  test('placeholder sync works as a no-op', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-placeholder',
+          symbol: 'GBPJPY',
+          symbolCustomName: 'GBPJPY_PLACEHOLDER',
+          logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+          parameterSchema: [],
+          parameters: {},
+        },
+      ],
+    });
+
+    const result = await service.syncSymbolCustomSchemaFromLogic('sc-placeholder');
+
+    expect(result.addedParameters).toEqual([]);
+    expect(result.keptParameters).toEqual([]);
+    expect(result.addedSchemaFields).toEqual([]);
+    expect(result.symbolCustom.parameters).toEqual({});
+  });
+
+  test('apply candidate parameters updates only matching parameters and preserves other values', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-apply',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          status: 'draft',
+          paperEnabled: false,
+          liveEnabled: false,
+          allowLive: false,
+          isPrimaryLive: false,
+          parameters: {
+            lookbackBars: 36,
+            enableBuy: true,
+            enableSell: true,
+            cooldownBars: 6,
+          },
+        },
+      ],
+    });
+
+    const result = await service.applySymbolCustomCandidateParameters('sc-apply', 'buy_session_conservative', {
+      enableBuy: true,
+      enableSell: false,
+      allowedUtcHours: '23,0,1,7,8,9,10',
+      blockedUtcHours: '',
+      cooldownBarsAfterAnyExit: 6,
+      cooldownBarsAfterSL: 18,
+      maxDailyLosses: 3,
+      maxDailyTrades: 6,
+    });
+
+    expect(result.candidateName).toBe('buy_session_conservative');
+    expect(result.symbolCustom.parameters).toEqual({
+      lookbackBars: 36,
+      enableBuy: true,
+      enableSell: false,
+      cooldownBars: 6,
+      allowedUtcHours: '23,0,1,7,8,9,10',
+      blockedUtcHours: '',
+      cooldownBarsAfterAnyExit: 6,
+      cooldownBarsAfterSL: 18,
+      maxDailyLosses: 3,
+      maxDailyTrades: 6,
+    });
+    expect(result.changedParameters).toEqual(expect.objectContaining({
+      enableSell: { before: true, after: false },
+      allowedUtcHours: { before: undefined, after: '23,0,1,7,8,9,10' },
+    }));
+    expect(result.unchangedParameters).toContain('enableBuy');
+  });
+
+  test('apply candidate parameters does not change execution flags or status', async () => {
+    const { service } = loadService({
+      records: [
+        {
+          _id: 'sc-flags',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          status: 'research_only',
+          paperEnabled: false,
+          liveEnabled: false,
+          allowLive: false,
+          isPrimaryLive: false,
+          parameters: { enableSell: true },
+        },
+      ],
+    });
+
+    const result = await service.applySymbolCustomCandidateParameters('sc-flags', 'buy_session_conservative', {
+      enableSell: false,
+      maxDailyTrades: 6,
+    });
+
+    expect(result.symbolCustom).toEqual(expect.objectContaining({
+      status: 'research_only',
+      paperEnabled: false,
+      liveEnabled: false,
+      allowLive: false,
+      isPrimaryLive: false,
+    }));
+  });
+
+  test('apply candidate parameters does not touch tradeExecutor or riskManager', async () => {
+    const { service, tradeExecutor, riskManager } = loadService({
+      records: [
+        {
+          _id: 'sc-safe',
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          parameters: {},
+        },
+      ],
+    });
+
+    await service.applySymbolCustomCandidateParameters('sc-safe', 'buy_session_conservative', {
+      enableBuy: true,
+      enableSell: false,
+    });
+
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
+    expect(riskManager.calculatePositionSize).not.toHaveBeenCalled();
   });
 });

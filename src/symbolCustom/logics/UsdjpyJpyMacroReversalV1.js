@@ -206,12 +206,16 @@ function shouldBlockByGuardrails({ parameters, context, currentBar }) {
     return 'UTC hour blocked by blockedUtcHours';
   }
 
-  const barsSinceLastExit = toNumber(context.barsSinceLastExit, null);
   const lastClosedTrade = context.lastClosedTrade || null;
+  const rawBarsSinceLastExit = context.barsSinceLastExit;
+  const barsSinceLastExit = rawBarsSinceLastExit === null || rawBarsSinceLastExit === undefined
+    ? null
+    : toNumber(rawBarsSinceLastExit, null);
   if (
-    Number.isFinite(barsSinceLastExit)
+    lastClosedTrade
+    && Number.isFinite(barsSinceLastExit)
     && parameters.cooldownBarsAfterAnyExit > 0
-    && barsSinceLastExit <= parameters.cooldownBarsAfterAnyExit
+    && barsSinceLastExit < parameters.cooldownBarsAfterAnyExit
   ) {
     return 'Cooldown after any exit active';
   }
@@ -220,7 +224,7 @@ function shouldBlockByGuardrails({ parameters, context, currentBar }) {
     && lastClosedTrade.exitReason === 'SL'
     && Number.isFinite(barsSinceLastExit)
     && parameters.cooldownBarsAfterSL > 0
-    && barsSinceLastExit <= parameters.cooldownBarsAfterSL
+    && barsSinceLastExit < parameters.cooldownBarsAfterSL
   ) {
     return 'Cooldown after SL active';
   }

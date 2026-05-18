@@ -6200,6 +6200,7 @@ function renderSymbolCustomCandidateValidation(validation) {
   let html = '<div class="card-header" style="padding:0;margin-bottom:10px;gap:8px;flex-wrap:wrap">';
   html += '<span class="card-title">Candidate Validation</span>';
   html += '<div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button class="btn-outline btn-sm" onclick="applySymbolCustomCandidateToStoredParameters()">Apply Candidate To Stored Parameters</button>';
   html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomCandidateValidationExport(\'json\')">Validation JSON</button>';
   html += '<button class="btn-outline btn-sm" onclick="downloadSymbolCustomCandidateValidationExport(\'csv\')">Validation CSV</button>';
   html += '</div></div>';
@@ -6238,6 +6239,61 @@ function renderSymbolCustomCandidateValidation(validation) {
   });
   html += '</table></div>';
   target.innerHTML = html;
+}
+
+async function applySymbolCustomCandidateToStoredParameters() {
+  if (!currentSymbolCustomCandidateValidation) {
+    alert('Run candidate validation before applying parameters.');
+    return;
+  }
+  const targetInfo = getSymbolCustomPresetComparisonTarget();
+  if (!targetInfo.id) {
+    alert('Select a SymbolCustom before applying candidate parameters.');
+    return;
+  }
+  const candidateName = currentSymbolCustomCandidateValidation.candidateName || 'candidate';
+  const parameters = currentSymbolCustomCandidateValidation.candidateParameters || {};
+  if (!Object.keys(parameters).length) {
+    alert('No candidate parameters are available to apply.');
+    return;
+  }
+  const confirmed = confirm('This will update stored SymbolCustom parameters, but will not enable paper or live trading.');
+  if (!confirmed) return;
+
+  const output = document.getElementById('btSymbolCustomCandidateValidation');
+  try {
+    const utils = getBacktestPageUtils();
+    const request = utils.buildSymbolCustomApplyCandidateRequest
+      ? utils.buildSymbolCustomApplyCandidateRequest({ _id: targetInfo.id }, { candidateName, parameters })
+      : {
+        endpoint: '/api/symbol-customs/' + encodeURIComponent(targetInfo.id) + '/apply-candidate',
+        payload: { candidateName, parameters },
+      };
+    const response = await api(request.endpoint, 'POST', request.payload);
+    if (!response.success) throw new Error(response.message || 'Failed to apply candidate parameters');
+
+    const updated = response.symbolCustom || null;
+    if (updated) {
+      backtestSymbolCustomState.selectedRecord = updated;
+      backtestSymbolCustomState.selectedId = updated._id || backtestSymbolCustomState.selectedId;
+      backtestSymbolCustomState.rows = (backtestSymbolCustomState.rows || []).map((row) => (
+        row._id === updated._id ? updated : row
+      ));
+      renderBacktestSymbolCustomSummary(updated);
+    }
+
+    const message = 'Applied candidate ' + candidateName + ' to stored parameters.';
+    if (output) {
+      const notice = '<div class="bt-chart-warning" style="margin-top:10px;color:var(--green)">' + escapeHtml(message) + '</div>';
+      output.insertAdjacentHTML('afterbegin', notice);
+    }
+  } catch (error) {
+    if (output) {
+      output.insertAdjacentHTML('afterbegin', '<div class="bt-chart-warning" style="margin-top:10px;color:var(--red)">' + escapeHtml(error.message || 'Failed to apply candidate parameters') + '</div>');
+    } else {
+      alert(error.message || 'Failed to apply candidate parameters');
+    }
+  }
 }
 
 function buildSymbolCustomCandidateValidationCsv(validation) {

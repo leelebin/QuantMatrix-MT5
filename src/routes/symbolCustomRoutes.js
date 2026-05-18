@@ -24,6 +24,7 @@ const {
   evaluateBacktest,
   removeBacktest,
   syncSchema,
+  applyCandidateParameters,
   update,
   remove,
   duplicate,
@@ -47,6 +48,7 @@ router.post('/paper-runtime/scan-once', scanPaperRuntimeOnce);
 router.post('/backtests/:backtestId/evaluate', evaluateBacktest);
 router.post('/:id/analyze-paper-once', analyzePaperOnce);
 router.post('/:id/sync-schema', syncSchema);
+router.post('/:id/apply-candidate', applyCandidateParameters);
 router.post('/:id/backtest', runBacktest);
 router.post('/:id/preset-comparison', runPresetComparison);
 router.post('/:id/candidate-validation', runCandidateValidation);

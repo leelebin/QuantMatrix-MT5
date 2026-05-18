@@ -120,6 +120,16 @@
     };
   }
 
+  function buildSymbolCustomApplyCandidateRequest(symbolCustom = {}, values = {}) {
+    return {
+      endpoint: '/api/symbol-customs/' + encodeURIComponent(symbolCustom._id || '') + '/apply-candidate',
+      payload: {
+        candidateName: values.candidateName || 'candidate',
+        parameters: values.parameters || values.candidateParameters || {},
+      },
+    };
+  }
+
   function getSymbolCustomSelectionState(records = [], selectedId = null) {
     const rows = Array.isArray(records) ? records : [];
     if (rows.length === 0) {
@@ -550,6 +560,7 @@
     buildSymbolCustomBacktestRequest,
     buildSymbolCustomPresetComparisonRequest,
     buildSymbolCustomCandidateValidationRequest,
+    buildSymbolCustomApplyCandidateRequest,
     getSymbolCustomSelectionState,
     isPlaceholderSymbolCustom,
     normalizeBacktestError,

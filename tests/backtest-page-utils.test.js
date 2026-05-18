@@ -6,6 +6,7 @@ const {
   buildSymbolCustomBacktestRequest,
   buildSymbolCustomPresetComparisonRequest,
   buildSymbolCustomCandidateValidationRequest,
+  buildSymbolCustomApplyCandidateRequest,
   getSymbolCustomSelectionState,
   normalizeBacktestError,
   normalizeBacktestHistoryRow,
@@ -113,6 +114,27 @@ describe('backtestPageUtils', () => {
       windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
       initialBalance: 500,
       costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+    });
+  });
+
+  test('buildSymbolCustomApplyCandidateRequest targets apply candidate API', () => {
+    const request = buildSymbolCustomApplyCandidateRequest({
+      _id: 'sc-guardrail',
+    }, {
+      candidateName: 'buy_session_conservative',
+      parameters: {
+        enableBuy: true,
+        enableSell: false,
+      },
+    });
+
+    expect(request.endpoint).toBe('/api/symbol-customs/sc-guardrail/apply-candidate');
+    expect(request.payload).toEqual({
+      candidateName: 'buy_session_conservative',
+      parameters: {
+        enableBuy: true,
+        enableSell: false,
+      },
     });
   });
 

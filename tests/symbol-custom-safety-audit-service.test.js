@@ -214,6 +214,12 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'schema sync does not touch trading systems')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'candidate apply does not change paper/live/status')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'candidate apply does not touch trading systems')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {

@@ -270,6 +270,53 @@ async function syncSymbolCustomSchemaFromLogic(id, _options = {}) {
   };
 }
 
+async function applySymbolCustomCandidateParameters(id, candidateName, parameters = {}) {
+  const existing = await SymbolCustom.findById(id);
+  if (!existing) return null;
+
+  if (!isPlainObject(parameters)) {
+    const error = new Error('SYMBOL_CUSTOM_CANDIDATE_PARAMETERS_REQUIRED');
+    error.statusCode = 400;
+    error.reasonCode = 'SYMBOL_CUSTOM_CANDIDATE_PARAMETERS_REQUIRED';
+    error.details = [{ field: 'parameters', message: 'Candidate parameters must be an object' }];
+    throw error;
+  }
+
+  const existingParameters = isPlainObject(existing.parameters) ? cloneValue(existing.parameters) : {};
+  const appliedParameters = cloneValue(parameters);
+  const mergedParameters = {
+    ...existingParameters,
+    ...appliedParameters,
+  };
+  const changedParameters = {};
+  const unchangedParameters = [];
+
+  Object.keys(appliedParameters).forEach((key) => {
+    if (JSON.stringify(existingParameters[key]) === JSON.stringify(appliedParameters[key])) {
+      unchangedParameters.push(key);
+      return;
+    }
+    changedParameters[key] = {
+      before: cloneValue(existingParameters[key]),
+      after: cloneValue(appliedParameters[key]),
+    };
+  });
+
+  const updated = await SymbolCustom.update(id, {
+    parameters: mergedParameters,
+  });
+
+  return {
+    symbolCustom: withSchemaSyncStatus(updated),
+    candidateName: String(candidateName || '').trim() || 'candidate',
+    appliedParameters,
+    changedParameters,
+    unchangedParameters,
+    beforeParameters: existingParameters,
+    afterParameters: mergedParameters,
+  };
+}
+
 module.exports = {
   SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
   DEFAULT_ALLOW_MULTIPLE_LIVE_SYMBOL_CUSTOMS_PER_SYMBOL,
@@ -281,5 +328,6 @@ module.exports = {
   deleteSymbolCustom,
   duplicateSymbolCustom,
   syncSymbolCustomSchemaFromLogic,
+  applySymbolCustomCandidateParameters,
   buildSchemaSyncStatus,
 };

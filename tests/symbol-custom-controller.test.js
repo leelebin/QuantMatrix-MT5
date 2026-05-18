@@ -7,6 +7,7 @@ jest.mock('../src/services/symbolCustomService', () => ({
   deleteSymbolCustom: jest.fn(),
   duplicateSymbolCustom: jest.fn(),
   syncSymbolCustomSchemaFromLogic: jest.fn(),
+  applySymbolCustomCandidateParameters: jest.fn(),
 }));
 
 jest.mock('../src/services/symbolCustomSeedService', () => ({
@@ -209,6 +210,65 @@ describe('symbolCustomController', () => {
 
     const res = createRes();
     await controller.syncSchema({ params: { id: 'missing' }, body: {} }, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.payload).toEqual({ success: false, message: 'SymbolCustom not found' });
+  });
+
+  test('applyCandidateParameters returns diff and updated SymbolCustom', async () => {
+    symbolCustomService.applySymbolCustomCandidateParameters.mockResolvedValue({
+      symbolCustom: {
+        _id: 'sc-1',
+        parameters: { enableBuy: true, enableSell: false },
+        paperEnabled: false,
+        liveEnabled: false,
+        status: 'draft',
+      },
+      candidateName: 'buy_session_conservative',
+      appliedParameters: { enableBuy: true, enableSell: false },
+      changedParameters: { enableSell: { before: true, after: false } },
+      unchangedParameters: ['enableBuy'],
+      beforeParameters: { enableBuy: true, enableSell: true },
+      afterParameters: { enableBuy: true, enableSell: false },
+    });
+
+    const res = createRes();
+    await controller.applyCandidateParameters({
+      params: { id: 'sc-1' },
+      body: {
+        candidateName: 'buy_session_conservative',
+        parameters: { enableBuy: true, enableSell: false },
+      },
+    }, res);
+
+    expect(symbolCustomService.applySymbolCustomCandidateParameters).toHaveBeenCalledWith(
+      'sc-1',
+      'buy_session_conservative',
+      { enableBuy: true, enableSell: false }
+    );
+    expect(res.payload).toEqual({
+      success: true,
+      symbolCustom: {
+        _id: 'sc-1',
+        parameters: { enableBuy: true, enableSell: false },
+        paperEnabled: false,
+        liveEnabled: false,
+        status: 'draft',
+      },
+      candidateName: 'buy_session_conservative',
+      appliedParameters: { enableBuy: true, enableSell: false },
+      changedParameters: { enableSell: { before: true, after: false } },
+      unchangedParameters: ['enableBuy'],
+      beforeParameters: { enableBuy: true, enableSell: true },
+      afterParameters: { enableBuy: true, enableSell: false },
+    });
+  });
+
+  test('applyCandidateParameters returns 404 for missing records', async () => {
+    symbolCustomService.applySymbolCustomCandidateParameters.mockResolvedValue(null);
+
+    const res = createRes();
+    await controller.applyCandidateParameters({ params: { id: 'missing' }, body: {} }, res);
 
     expect(res.statusCode).toBe(404);
     expect(res.payload).toEqual({ success: false, message: 'SymbolCustom not found' });

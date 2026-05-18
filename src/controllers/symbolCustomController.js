@@ -218,6 +218,31 @@ exports.syncSchema = async (req, res) => {
   }
 };
 
+exports.applyCandidateParameters = async (req, res) => {
+  try {
+    const result = await symbolCustomService.applySymbolCustomCandidateParameters(
+      req.params.id,
+      req.body?.candidateName,
+      req.body?.parameters || req.body?.candidateParameters || {}
+    );
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'SymbolCustom not found' });
+    }
+    return res.json({
+      success: true,
+      symbolCustom: result.symbolCustom,
+      candidateName: result.candidateName,
+      appliedParameters: result.appliedParameters,
+      changedParameters: result.changedParameters,
+      unchangedParameters: result.unchangedParameters,
+      beforeParameters: result.beforeParameters,
+      afterParameters: result.afterParameters,
+    });
+  } catch (error) {
+    return handleError(res, error, 'Failed to apply SymbolCustom candidate parameters');
+  }
+};
+
 exports.createOptimizerRun = async (req, res) => {
   try {
     const optimizerRun = await symbolCustomOptimizerService.createOptimizerRun({

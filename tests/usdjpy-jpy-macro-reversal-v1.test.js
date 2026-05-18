@@ -101,6 +101,23 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
     }));
   });
 
+  test('buy_session_conservative applied parameters still return NONE for paper and live scope', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const parameters = {
+      enableBuy: true,
+      enableSell: false,
+      allowedUtcHours: '23,0,1,7,8,9,10',
+      blockedUtcHours: '',
+      cooldownBarsAfterAnyExit: 6,
+      cooldownBarsAfterSL: 18,
+      maxDailyLosses: 3,
+      maxDailyTrades: 6,
+    };
+
+    expect(logic.analyze({ scope: 'paper', symbol: 'USDJPY', parameters }).signal).toBe('NONE');
+    expect(logic.analyze({ scope: 'live', symbol: 'USDJPY', parameters }).signal).toBe('NONE');
+  });
+
   test('backtest with insufficient candles returns NONE', () => {
     const logic = new UsdjpyJpyMacroReversalV1();
     const candles = buildCandles({ direction: 'down', count: 10 });

@@ -14,6 +14,7 @@ jest.mock('../src/services/symbolCustomService', () => ({
   deleteSymbolCustom: jest.fn(),
   duplicateSymbolCustom: jest.fn(),
   syncSymbolCustomSchemaFromLogic: jest.fn(),
+  applySymbolCustomCandidateParameters: jest.fn(),
 }));
 
 jest.mock('../src/services/symbolCustomSeedService', () => ({
@@ -432,6 +433,41 @@ describe('symbolCustomRoutes', () => {
       keptParameters: [],
       addedSchemaFields: ['enableBuy'],
     });
+  });
+
+  test('POST /api/symbol-customs/:id/apply-candidate works before generic id route', async () => {
+    symbolCustomService.applySymbolCustomCandidateParameters.mockResolvedValue({
+      symbolCustom: {
+        _id: 'sc-1',
+        parameters: { enableBuy: true, enableSell: false },
+      },
+      candidateName: 'buy_session_conservative',
+      appliedParameters: { enableBuy: true, enableSell: false },
+      changedParameters: { enableSell: { before: true, after: false } },
+      unchangedParameters: ['enableBuy'],
+      beforeParameters: { enableBuy: true, enableSell: true },
+      afterParameters: { enableBuy: true, enableSell: false },
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-1/apply-candidate')
+      .send({
+        candidateName: 'buy_session_conservative',
+        parameters: { enableBuy: true, enableSell: false },
+      });
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomService.applySymbolCustomCandidateParameters).toHaveBeenCalledWith(
+      'sc-1',
+      'buy_session_conservative',
+      { enableBuy: true, enableSell: false }
+    );
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      candidateName: 'buy_session_conservative',
+      changedParameters: { enableSell: { before: true, after: false } },
+      afterParameters: { enableBuy: true, enableSell: false },
+    }));
   });
 
   test('SymbolCustom optimizer stub routes are mounted before generic id route', async () => {

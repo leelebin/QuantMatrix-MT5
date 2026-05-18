@@ -911,6 +911,55 @@ function auditSchemaSyncDoesNotTouchTradingSystems() {
   }
 }
 
+function auditApplyCandidateDoesNotChangeExecutionFlags() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomService.js');
+    const applySource = extractFunctionSource(source, 'applySymbolCustomCandidateParameters');
+    const hasApply = applySource.includes('parameters') && applySource.includes('SymbolCustom.update');
+    const leavesExecutionFlags = sourceExcludes(applySource, [
+      /paperEnabled\s*:/,
+      /liveEnabled\s*:/,
+      /allowLive\s*:/,
+      /isPrimaryLive\s*:/,
+      /status\s*:/,
+    ]);
+
+    return hasApply && leavesExecutionFlags
+      ? buildCheck('candidate apply does not change paper/live/status', 'PASS', 'Candidate apply only patches stored parameters.')
+      : buildCheck('candidate apply does not change paper/live/status', 'FAIL', 'Candidate apply appears to modify execution flags or status.');
+  } catch (error) {
+    return buildCheck('candidate apply does not change paper/live/status', 'FAIL', `Unable to inspect candidate apply flag safety: ${error.message}`);
+  }
+}
+
+function auditApplyCandidateDoesNotTouchTradingSystems() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomService.js');
+    const applySource = extractFunctionSource(source, 'applySymbolCustomCandidateParameters');
+    const safe = sourceExcludes(applySource, [
+      /tradeExecutor/i,
+      /riskManager/i,
+      /backtestEngine/i,
+      /optimizerService/i,
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /MultiTimeframe/,
+      /Momentum/,
+      /VolumeFlowHybrid/,
+      /paperTradingService/i,
+      /placeOrder\s*\(/,
+      /executeTrade\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('candidate apply does not touch trading systems', 'PASS', 'Candidate apply is isolated to SymbolCustom parameters.')
+      : buildCheck('candidate apply does not touch trading systems', 'FAIL', 'Candidate apply appears to reference trading, risk, old backtest, optimizer, or six strategy systems.');
+  } catch (error) {
+    return buildCheck('candidate apply does not touch trading systems', 'FAIL', `Unable to inspect candidate apply isolation: ${error.message}`);
+  }
+}
+
 function auditPrimaryLiveUniqueness(symbolCustoms) {
   const grouped = new Map();
   symbolCustoms
@@ -1004,6 +1053,8 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditCandidateValidationDoesNotCallSixStrategies());
   checks.push(auditSchemaSyncDoesNotChangePaperLive());
   checks.push(auditSchemaSyncDoesNotTouchTradingSystems());
+  checks.push(auditApplyCandidateDoesNotChangeExecutionFlags());
+  checks.push(auditApplyCandidateDoesNotTouchTradingSystems());
 
   let symbolCustoms = [];
   try {

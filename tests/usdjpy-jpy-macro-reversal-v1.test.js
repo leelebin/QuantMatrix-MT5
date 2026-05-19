@@ -83,26 +83,59 @@ function buildContext(candles, overrides = {}) {
 }
 
 describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
-  test('scope paper returns NONE', () => {
+  test('scope paper can produce BUY with validated candidate metadata', () => {
     const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      scope: 'paper',
+      currentUtcHour: 0,
+      parameters: {
+        ...buildContext(candles).parameters,
+        enableBuy: true,
+        enableSell: false,
+        allowedUtcHours: '23,0,1,7,8,9,10',
+        blockedUtcHours: '',
+        cooldownBarsAfterAnyExit: 6,
+        cooldownBarsAfterSL: 18,
+        maxDailyLosses: 3,
+        maxDailyTrades: 6,
+      },
+    }));
 
-    expect(logic.analyze({ scope: 'paper', symbol: 'USDJPY' })).toEqual(expect.objectContaining({
-      signal: 'NONE',
-      reason: UsdjpyJpyMacroReversalV1.BACKTEST_ONLY_REASON,
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'BUY',
+      metadata: expect.objectContaining({
+        source: 'symbolCustom',
+        symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+        logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+        candidatePreset: 'buy_session_conservative',
+        strategyType: 'SymbolCustom',
+        setupType: 'jpy_macro_reversal',
+        scope: 'paper',
+        enableBuy: true,
+        enableSell: false,
+        allowedUtcHours: '23,0,1,7,8,9,10',
+        cooldownBarsAfterAnyExit: 6,
+        cooldownBarsAfterSL: 18,
+        maxDailyLosses: 3,
+        maxDailyTrades: 6,
+      }),
     }));
   });
 
-  test('scope live returns NONE', () => {
+  test('scope live returns NONE/BLOCKED', () => {
     const logic = new UsdjpyJpyMacroReversalV1();
 
     expect(logic.analyze({ scope: 'live', symbol: 'USDJPY' })).toEqual(expect.objectContaining({
       signal: 'NONE',
-      reason: UsdjpyJpyMacroReversalV1.BACKTEST_ONLY_REASON,
+      status: 'BLOCKED',
+      reason: UsdjpyJpyMacroReversalV1.LIVE_BLOCKED_REASON,
     }));
   });
 
-  test('buy_session_conservative applied parameters still return NONE for paper and live scope', () => {
+  test('buy_session_conservative applied parameters allow paper but keep live blocked', () => {
     const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
     const parameters = {
       enableBuy: true,
       enableSell: false,
@@ -114,7 +147,14 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       maxDailyTrades: 6,
     };
 
-    expect(logic.analyze({ scope: 'paper', symbol: 'USDJPY', parameters }).signal).toBe('NONE');
+    expect(logic.analyze(buildContext(candles, {
+      scope: 'paper',
+      currentUtcHour: 0,
+      parameters: {
+        ...buildContext(candles).parameters,
+        ...parameters,
+      },
+    })).signal).toBe('BUY');
     expect(logic.analyze({ scope: 'live', symbol: 'USDJPY', parameters }).signal).toBe('NONE');
   });
 
@@ -220,7 +260,7 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       enableSell: true,
       allowedUtcHours: '',
     }));
-    expect(UsdjpyJpyMacroReversalV1.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION).toBe(3);
+    expect(UsdjpyJpyMacroReversalV1.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION).toBe(4);
   });
 
   test('enableBuy=false blocks BUY setup', () => {

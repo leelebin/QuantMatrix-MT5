@@ -64,6 +64,23 @@ function isCryptoSymbol(symbol) {
   return /^(BTC|ETH|LTC|XRP|BCH|SOL|ADA|DOGE).*(USD|USDT)/.test(normalized);
 }
 
+function buildSymbolCustomPaperTradeFields(signal = {}) {
+  if (signal.source !== 'symbolCustom') return {};
+  const metadata = signal.metadata && typeof signal.metadata === 'object' ? signal.metadata : {};
+  return {
+    source: 'symbolCustom',
+    symbolCustomId: signal.symbolCustomId || metadata.symbolCustomId || null,
+    symbolCustomName: signal.symbolCustomName || metadata.symbolCustomName || null,
+    logicName: signal.logicName || metadata.logicName || null,
+    candidatePreset: signal.candidatePreset || metadata.candidatePreset || null,
+    setupType: signal.setupType || metadata.setupType || 'symbol_custom',
+    scope: 'paper',
+    parameterSnapshot: signal.parameterSnapshot || metadata.parameterSnapshot || signal.parameters || {},
+    strategyType: signal.strategyType || metadata.strategyType || 'SymbolCustom',
+    symbolCustomMetadata: metadata,
+  };
+}
+
 function toEpochMs(value) {
   if (value == null) return null;
 
@@ -1015,13 +1032,28 @@ class PaperTradingService {
    * Keeps SymbolCustom integration on the existing paper execution path.
    */
   async submitSymbolCustomSignal(signal) {
+    const metadata = {
+      ...(signal?.metadata || {}),
+      source: 'symbolCustom',
+      symbolCustomId: signal?.symbolCustomId || signal?.metadata?.symbolCustomId || null,
+      symbolCustomName: signal?.symbolCustomName || signal?.metadata?.symbolCustomName || null,
+      logicName: signal?.logicName || signal?.metadata?.logicName || null,
+      candidatePreset: signal?.candidatePreset || signal?.metadata?.candidatePreset || null,
+      setupType: signal?.setupType || signal?.metadata?.setupType || 'symbol_custom',
+      scope: 'paper',
+      parameterSnapshot: signal?.parameterSnapshot || signal?.metadata?.parameterSnapshot || signal?.parameters || {},
+      strategyType: 'SymbolCustom',
+    };
     const payload = {
       ...(signal || {}),
       scope: 'paper',
       source: 'symbolCustom',
-      setupType: signal?.setupType || 'symbol_custom',
+      setupType: metadata.setupType,
       strategy: signal?.strategy || signal?.symbolCustomName,
       strategyType: signal?.strategyType || 'SymbolCustom',
+      candidatePreset: metadata.candidatePreset,
+      parameterSnapshot: metadata.parameterSnapshot,
+      metadata,
     };
 
     return this._executePaperTrade(payload);
@@ -1164,6 +1196,7 @@ class PaperTradingService {
       });
       const openCapture = buildOpenTradeCapture(signal, managedPositionState);
       const playbookTradeFields = buildSignalPlaybookTradeFields(signal);
+      const symbolCustomTradeFields = buildSymbolCustomPaperTradeFields(signal);
       const spreadAtEntry = Number.isFinite(Number(priceData.ask)) && Number.isFinite(Number(priceData.bid))
         ? Math.abs(Number(priceData.ask) - Number(priceData.bid))
         : null;
@@ -1192,6 +1225,7 @@ class PaperTradingService {
         ...managedPositionState,
         ...openCapture,
         ...playbookTradeFields,
+        ...symbolCustomTradeFields,
         requestedEntryPrice: quotedEntryPrice,
         spreadAtEntry,
         slippageEstimate,
@@ -1238,6 +1272,7 @@ class PaperTradingService {
         setupCandleTime: managedPositionState.setupCandleTime,
         entryCandleTime: managedPositionState.entryCandleTime,
         ...playbookTradeFields,
+        ...symbolCustomTradeFields,
         initialSl: openCapture.initialSl,
         initialTp: openCapture.initialTp,
         finalSl: openCapture.finalSl,

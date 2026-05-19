@@ -1,10 +1,15 @@
 const symbolCustomEngine = require('./symbolCustomEngine');
 const { PLACEHOLDER_SYMBOL_CUSTOM } = require('../symbolCustom/logics/PlaceholderSymbolCustom');
+const {
+  USDJPY_JPY_MACRO_REVERSAL_V1,
+} = require('../symbolCustom/logics/UsdjpyJpyMacroReversalV1');
 
 const SYMBOL_CUSTOM_PAPER_ENABLED_ENV = 'SYMBOL_CUSTOM_PAPER_ENABLED';
 const SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED = 'SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED';
 const SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE = 'SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE';
 const SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED = 'SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED';
+const SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED = 'SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED';
+const SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED = 'SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED';
 const DEFAULT_SCAN_INTERVAL_MS = 60 * 1000;
 const MAX_LAST_SIGNALS = 20;
 
@@ -35,7 +40,7 @@ function buildHttpError(message, statusCode, details = []) {
 }
 
 function isPaperTradeSignal(signal = {}) {
-  return signal.signal === 'BUY' || signal.signal === 'SELL';
+  return signal.signal === 'BUY' || signal.signal === 'SELL' || signal.signal === 'CLOSE';
 }
 
 function getLogicName(symbolCustom = {}) {
@@ -51,29 +56,105 @@ function isPlaceholderSymbolCustom(symbolCustom = {}) {
   return getLogicName(symbolCustom) === PLACEHOLDER_SYMBOL_CUSTOM;
 }
 
+function buildIgnoredPaperSignal(symbolCustom = {}, reasonCode, reason) {
+  const logicName = getLogicName(symbolCustom);
+  return symbolCustomEngine.buildSymbolCustomSignal(
+    symbolCustom,
+    {
+      signal: 'NONE',
+      status: 'IGNORED',
+      reason,
+      reasonCode,
+    },
+    {
+      scope: 'paper',
+      logicName,
+      timestamp: new Date(),
+    }
+  );
+}
+
+function getPaperRuntimeGate(symbolCustom = {}) {
+  const logicName = getLogicName(symbolCustom);
+  if (symbolCustom.paperEnabled !== true) {
+    return {
+      allowed: false,
+      reasonCode: 'SYMBOL_CUSTOM_PAPER_NOT_ENABLED',
+      reason: 'SymbolCustom paperEnabled is not true',
+    };
+  }
+
+  if (symbolCustom.liveEnabled === true) {
+    return {
+      allowed: false,
+      reasonCode: SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED,
+      reason: 'SymbolCustom paper runtime rejects records with liveEnabled=true',
+    };
+  }
+
+  if (logicName !== USDJPY_JPY_MACRO_REVERSAL_V1) {
+    return {
+      allowed: false,
+      reasonCode: SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED,
+      reason: 'Only USDJPY_JPY_MACRO_REVERSAL_V1 is paper-trial allowed',
+    };
+  }
+
+  return { allowed: true, reasonCode: null, reason: null };
+}
+
+function applyPaperRuntimeSafetyGate(symbolCustoms = []) {
+  const allowed = [];
+  const ignoredSignals = [];
+  (Array.isArray(symbolCustoms) ? symbolCustoms : []).forEach((symbolCustom) => {
+    const gate = getPaperRuntimeGate(symbolCustom);
+    if (gate.allowed) {
+      allowed.push(symbolCustom);
+      return;
+    }
+    ignoredSignals.push(buildIgnoredPaperSignal(symbolCustom, gate.reasonCode, gate.reason));
+  });
+
+  return { allowed, ignoredSignals };
+}
+
 function rememberSignal(signal) {
   lastSignals = [cloneValue(signal), ...lastSignals].slice(0, MAX_LAST_SIGNALS);
 }
 
 function buildPaperSignalPayload(signal = {}) {
+  const rawMetadata = cloneValue(signal.metadata || {});
+  const setupType = signal.setupType || rawMetadata.setupType || rawMetadata.setup || 'symbol_custom';
+  const candidatePreset = signal.candidatePreset || rawMetadata.candidatePreset || null;
+  const parameterSnapshot = cloneValue(
+    signal.parameterSnapshot
+      || rawMetadata.parameterSnapshot
+      || signal.parameters
+      || {}
+  );
   const metadata = {
-    ...(cloneValue(signal.metadata || {})),
+    ...rawMetadata,
     source: 'symbolCustom',
     symbolCustomId: signal.symbolCustomId || null,
     symbolCustomName: signal.symbolCustomName,
     logicName: signal.logicName,
-    setupType: 'symbol_custom',
+    setupType,
     strategy: signal.symbolCustomName,
     strategyType: 'SymbolCustom',
+    candidatePreset,
+    scope: 'paper',
+    parameterSnapshot,
   };
 
   return {
     ...cloneValue(signal),
     scope: 'paper',
     source: 'symbolCustom',
-    setupType: 'symbol_custom',
+    setupType,
     strategy: signal.symbolCustomName,
     strategyType: 'SymbolCustom',
+    candidatePreset,
+    parameterSnapshot,
     symbolCustomId: signal.symbolCustomId || null,
     symbolCustomName: signal.symbolCustomName,
     logicName: signal.logicName,
@@ -193,16 +274,18 @@ async function runPaperScan({ getCandlesFn, activeProfile, force = false } = {})
     const effectiveGetCandlesFn = getCandlesFn || runtimeGetCandlesFn;
     const activeSymbolCustoms = await symbolCustomEngine.listActivePaperSymbolCustoms();
     activePaperCustoms = activeSymbolCustoms.length;
-    assertCandleProviderAvailable(activeSymbolCustoms, effectiveGetCandlesFn);
+    const gated = applyPaperRuntimeSafetyGate(activeSymbolCustoms);
+    assertCandleProviderAvailable(gated.allowed, effectiveGetCandlesFn);
 
-    const signals = await symbolCustomEngine.analyzeAllPaperSymbolCustoms(
+    const analyzedSignals = await symbolCustomEngine.analyzeAllPaperSymbolCustoms(
       effectiveGetCandlesFn,
       {
         scope: 'paper',
         activeProfile: activeProfile || runtimeActiveProfile,
-        symbolCustoms: activeSymbolCustoms,
+        symbolCustoms: gated.allowed,
       }
     );
+    const signals = [...gated.ignoredSignals, ...analyzedSignals];
 
     lastSignalCount = signals.length;
     lastScanAt = new Date();
@@ -316,6 +399,8 @@ module.exports = {
   SYMBOL_CUSTOM_PAPER_RUNTIME_DISABLED,
   SYMBOL_CUSTOM_PAPER_SIGNAL_HANDLER_NOT_AVAILABLE,
   SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED,
+  SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED,
+  SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED,
   isEnabled,
   runPaperScan,
   handleSymbolCustomPaperSignal,

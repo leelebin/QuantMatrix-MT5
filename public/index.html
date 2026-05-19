@@ -118,6 +118,13 @@ tr:hover{background:var(--bg3)}
 .symbol-custom-table-wrap{overflow-x:auto}
 .symbol-custom-table tbody tr{cursor:pointer}
 .symbol-custom-table tbody tr.selected{background:rgba(59,130,246,.14)}
+.symbol-custom-json-preview{max-width:min(980px,calc(100vw - 96px));border:1px solid var(--border);border-radius:8px;background:var(--bg);overflow:hidden}
+.symbol-custom-json-preview summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;cursor:pointer;color:var(--text);font-size:12px;line-height:1.4;list-style:none}
+.symbol-custom-json-preview summary::-webkit-details-marker{display:none}
+.symbol-custom-json-preview summary::after{content:'Expand';flex-shrink:0;color:var(--blue);font-weight:600}
+.symbol-custom-json-preview[open] summary::after{content:'Collapse'}
+.symbol-custom-json-preview .json-preview-meta{color:var(--text2);font-size:11px;margin-left:6px}
+.symbol-custom-json-preview pre{margin:0;padding:10px;border-top:1px solid var(--border);max-height:520px;overflow:auto;white-space:pre-wrap;font-size:12px;line-height:1.5;color:var(--text)}
 .symbol-custom-status{display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;line-height:1.5}
 .symbol-custom-status.show{display:block}
 .symbol-custom-status.error{border-color:rgba(239,68,68,.45);background:rgba(239,68,68,.1);color:var(--red)}
@@ -782,6 +789,7 @@ tr:hover{background:var(--bg3)}
       SymbolCustom live execution is not supported in Phase 1. This field is saved for future use only.
     </div>
     <div id="symbolCustomSchemaSyncWarning" class="symbol-custom-warning"></div>
+    <div id="symbolCustomPaperReadiness" class="symbol-custom-table-wrap" style="margin-bottom:12px"></div>
 
     <div class="symbol-custom-editor-grid">
       <div class="form-group">
@@ -1908,6 +1916,7 @@ let riskSettingsState = { profiles: [], activeProfile: null, activeProfileId: nu
 let maintenanceCacheState = null;
 let maintenanceCacheBusy = false;
 let symbolCustomManagerState = { all: [], selectedSymbol: null, selectedRecords: [], selectedId: null, selectedRecord: null, reportRows: [], optimizerRun: null, backtestResult: null };
+let symbolCustomPaperRuntimeStatus = { enabled: false, running: false, loaded: false };
 let parametersLibraryState = { rows: [], visibleRows: [], activeRiskProfile: null, count: 0 };
 let parametersLibraryDetailState = null;
 let editingRiskProfileId = null;
@@ -5141,6 +5150,7 @@ function renderBacktestSymbolCustomSummary(record) {
   html += jsonBlock('sessionFilter', record.sessionFilter || {});
   html += jsonBlock('newsFilter', record.newsFilter || {});
   html += '</table>';
+  html += renderSymbolCustomPaperReadinessHtml(record);
   if (schemaWarning) {
     html += '<div class="bt-chart-warning" style="margin-top:10px">'
       + escapeHtml(schemaWarning)
@@ -5199,6 +5209,7 @@ async function loadBacktestSymbolCustoms(preferredId = null) {
   if (statusEl) statusEl.textContent = 'Loading SymbolCustom records for ' + symbol + '...';
   updateBacktestRunButtonAvailability(true);
   try {
+    await refreshSymbolCustomPaperRuntimeStatus();
     const response = await api('/api/symbol-customs/by-symbol/' + encodeURIComponent(symbol));
     if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustom records');
     backtestSymbolCustomState.rows = Array.isArray(response.symbolCustoms) ? response.symbolCustoms : [];
@@ -10533,6 +10544,54 @@ function getSymbolCustomUtils() {
   return window.SymbolCustomManagerUtils || {};
 }
 
+async function refreshSymbolCustomPaperRuntimeStatus() {
+  try {
+    const response = await api('/api/symbol-customs/paper-runtime/status');
+    if (response && response.success) {
+      symbolCustomPaperRuntimeStatus = {
+        enabled: response.enabled === true,
+        running: response.running === true,
+        loaded: true,
+      };
+    }
+  } catch (error) {
+    symbolCustomPaperRuntimeStatus = { enabled: false, running: false, loaded: false };
+  }
+}
+
+function formatYesNo(value) {
+  return value ? 'yes' : 'no';
+}
+
+function renderSymbolCustomPaperReadinessHtml(record) {
+  if (!record || !record._id) return '<div class="empty">No SymbolCustom selected</div>';
+  const utils = getSymbolCustomUtils();
+  const readiness = utils.buildPaperReadiness
+    ? utils.buildPaperReadiness(record, symbolCustomPaperRuntimeStatus)
+    : {
+      backtestValidated: false,
+      candidatePresetApplied: false,
+      paperAllowedByLogic: false,
+      paperEnabled: record.paperEnabled === true,
+      envEnabled: symbolCustomPaperRuntimeStatus.enabled === true,
+      envLoaded: symbolCustomPaperRuntimeStatus.loaded === true,
+      liveEnabled: record.liveEnabled === true,
+      note: 'To start paper trial, manually enable paperEnabled and set SYMBOL_CUSTOM_PAPER_ENABLED=true. Live remains blocked.',
+    };
+  const envText = readiness.envLoaded === false ? 'unknown' : formatYesNo(readiness.envEnabled);
+  let html = '<div class="readonly-note" style="margin:10px 0"><strong>Paper Readiness</strong></div>';
+  html += '<table>';
+  html += '<tr><td style="color:var(--text2)">Backtest validated</td><td>' + formatYesNo(readiness.backtestValidated) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Candidate preset applied</td><td>' + formatYesNo(readiness.candidatePresetApplied) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Paper allowed by logic</td><td>' + formatYesNo(readiness.paperAllowedByLogic) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">paperEnabled</td><td>' + formatYesNo(readiness.paperEnabled) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">SYMBOL_CUSTOM_PAPER_ENABLED</td><td>' + envText + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">liveEnabled</td><td>' + (readiness.liveEnabled ? '<span style="color:var(--red)">true</span>' : 'false') + '</td></tr>';
+  html += '</table>';
+  html += '<div class="bt-chart-warning" style="margin-top:10px">' + escapeHtml(readiness.note) + '</div>';
+  return html;
+}
+
 function symbolCustomEl(id) {
   return document.getElementById(id);
 }
@@ -10616,6 +10675,10 @@ function setSymbolCustomEditorRecord(record) {
 
   updateSymbolCustomLiveWarning();
   updateSymbolCustomSchemaSyncWarning(source._id ? source : null);
+  const readinessEl = symbolCustomEl('symbolCustomPaperReadiness');
+  if (readinessEl) {
+    readinessEl.innerHTML = renderSymbolCustomPaperReadinessHtml(source._id ? source : null);
+  }
   renderSymbolCustomList();
   symbolCustomManagerState.optimizerRun = null;
   symbolCustomManagerState.backtestResult = null;
@@ -10764,6 +10827,19 @@ function renderSymbolCustomReport(rows) {
   target.innerHTML = html;
 }
 
+function renderSymbolCustomJsonPreview(label, value) {
+  const json = JSON.stringify(value === undefined ? null : value, null, 2);
+  const meta = Array.isArray(value)
+    ? value.length + ' items'
+    : (value && typeof value === 'object' ? Object.keys(value).length + ' keys' : 'value');
+
+  return '<details class="symbol-custom-json-preview">'
+    + '<summary><span><strong>' + escapeHtml(label) + '</strong>'
+    + '<span class="json-preview-meta">' + escapeHtml(meta) + '</span></span></summary>'
+    + '<pre>' + escapeHtml(json) + '</pre>'
+    + '</details>';
+}
+
 function renderSymbolCustomOptimizerStub(record, optimizerRun) {
   const target = symbolCustomEl('symbolCustomOptimizerStub');
   if (!target) return;
@@ -10777,14 +10853,14 @@ function renderSymbolCustomOptimizerStub(record, optimizerRun) {
   let html = '<table class="symbol-custom-table"><tr><th>Field</th><th>Value</th></tr>';
   html += '<tr><td>symbolCustomName</td><td>' + escapeHtml(record.symbolCustomName || '--') + '</td></tr>';
   html += '<tr><td>logicName</td><td>' + escapeHtml(record.logicName || '--') + '</td></tr>';
-  html += '<tr><td>parameterSchema</td><td><pre style="white-space:pre-wrap;font-size:12px;line-height:1.5">' + escapeHtml(JSON.stringify(schema, null, 2)) + '</pre></td></tr>';
+  html += '<tr><td>parameterSchema</td><td>' + renderSymbolCustomJsonPreview('parameterSchema', schema) + '</td></tr>';
 
   if (optimizerRun) {
     html += '<tr><td>status</td><td><span class="tag tag-blue">' + escapeHtml(optimizerRun.status || '--') + '</span></td></tr>';
     html += '<tr><td>totalCombinations</td><td>' + escapeHtml(optimizerRun.totalCombinations == null ? '--' : optimizerRun.totalCombinations) + '</td></tr>';
     html += '<tr><td>maxCombinations</td><td>' + escapeHtml(optimizerRun.maxCombinations == null ? '--' : optimizerRun.maxCombinations) + '</td></tr>';
     html += '<tr><td>message</td><td>' + escapeHtml(optimizerRun.message || '--') + '</td></tr>';
-    html += '<tr><td>parameterGridPreview</td><td><pre style="white-space:pre-wrap;font-size:12px;line-height:1.5">' + escapeHtml(JSON.stringify(optimizerRun.parameterGridPreview || [], null, 2)) + '</pre></td></tr>';
+    html += '<tr><td>parameterGridPreview</td><td>' + renderSymbolCustomJsonPreview('parameterGridPreview', optimizerRun.parameterGridPreview || []) + '</td></tr>';
   } else {
     html += '<tr><td>totalCombinations</td><td>Run stub to calculate preview</td></tr>';
     html += '<tr><td>parameterGridPreview</td><td>Run stub to calculate preview</td></tr>';
@@ -11031,6 +11107,7 @@ function exportSymbolCustomReportCsv() {
 async function loadSymbolCustomManager(options = {}) {
   try {
     showSymbolCustomStatus('Loading SymbolCustoms...', 'warn');
+    await refreshSymbolCustomPaperRuntimeStatus();
     const response = await api('/api/symbol-customs');
     if (!response.success) throw new Error(response.message || 'Failed to load SymbolCustoms');
     symbolCustomManagerState.all = Array.isArray(response.symbolCustoms) ? response.symbolCustoms : [];

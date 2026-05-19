@@ -1,4 +1,5 @@
 const ORIGINAL_SYMBOL_CUSTOM_PAPER_ENABLED = process.env.SYMBOL_CUSTOM_PAPER_ENABLED;
+const USDJPY_LOGIC = 'USDJPY_JPY_MACRO_REVERSAL_V1';
 
 function loadRuntime({
   symbolCustoms = [],
@@ -18,6 +19,9 @@ function loadRuntime({
 
   const tradeExecutor = {
     executeTrade: jest.fn(),
+  };
+  const riskManager = {
+    calculateLotSize: jest.fn(),
   };
 
   const placeholderAnalyze = jest.fn(async () => ({
@@ -45,6 +49,7 @@ function loadRuntime({
   jest.doMock('../src/models/SymbolCustom', () => SymbolCustom);
   jest.doMock('../src/services/paperTradingService', () => paperTradingService);
   jest.doMock('../src/services/tradeExecutor', () => tradeExecutor);
+  jest.doMock('../src/services/riskManager', () => riskManager);
   jest.doMock('../src/symbolCustom/registry', () => ({
     getSymbolCustomLogic,
   }));
@@ -55,6 +60,7 @@ function loadRuntime({
     SymbolCustom,
     paperTradingService,
     tradeExecutor,
+    riskManager,
     getSymbolCustomLogic,
     placeholderAnalyze,
   };
@@ -70,6 +76,7 @@ describe('symbolCustomPaperRuntimeService', () => {
     jest.dontMock('../src/models/SymbolCustom');
     jest.dontMock('../src/services/paperTradingService');
     jest.dontMock('../src/services/tradeExecutor');
+    jest.dontMock('../src/services/riskManager');
     jest.dontMock('../src/symbolCustom/registry');
   });
 
@@ -155,7 +162,35 @@ describe('symbolCustomPaperRuntimeService', () => {
     expect(result.signals).toEqual([]);
   });
 
-  test('paperEnabled=true placeholder is scanned and returns NONE without opening paper trade', async () => {
+  test('liveEnabled=true SymbolCustom is rejected by paper runtime safety gate', async () => {
+    const { runtime, paperTradingService } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-live-flag',
+          symbol: 'USDJPY',
+          symbolCustomName: USDJPY_LOGIC,
+          logicName: USDJPY_LOGIC,
+          paperEnabled: true,
+          liveEnabled: true,
+        },
+      ],
+    });
+
+    const result = await runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 147.5 }] })),
+    });
+
+    expect(result.submitted).toBe(0);
+    expect(result.ignored).toBe(1);
+    expect(result.signals[0]).toEqual(expect.objectContaining({
+      status: 'IGNORED',
+      reasonCode: runtime.SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED,
+    }));
+    expect(paperTradingService.submitSymbolCustomSignal).not.toHaveBeenCalled();
+  });
+
+  test('paperEnabled=true placeholder is ignored without opening paper trade', async () => {
     const { runtime, paperTradingService } = loadRuntime({
       symbolCustoms: [
         {
@@ -180,6 +215,8 @@ describe('symbolCustomPaperRuntimeService', () => {
       source: 'symbolCustom',
       scope: 'paper',
       signal: 'NONE',
+      status: 'IGNORED',
+      reasonCode: runtime.SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED,
       symbolCustomId: 'sc-placeholder',
       symbolCustomName: 'USDJPY_PLACEHOLDER',
     }));
@@ -187,24 +224,31 @@ describe('symbolCustomPaperRuntimeService', () => {
     expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
   });
 
-  test('BUY and SELL mock logic submits only to paperTradingService with SymbolCustom metadata', async () => {
-    const { runtime, paperTradingService, tradeExecutor } = loadRuntime({
+  test('USDJPY paper logic submits only to paperTradingService with SymbolCustom metadata', async () => {
+    const { runtime, paperTradingService, tradeExecutor, riskManager } = loadRuntime({
       symbolCustoms: [
         {
           _id: 'sc-buy',
-          symbol: 'GBPJPY',
-          symbolCustomName: 'GBPJPY_BUY_MOCK',
-          logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
+          symbol: 'USDJPY',
+          symbolCustomName: USDJPY_LOGIC,
+          logicName: USDJPY_LOGIC,
           paperEnabled: true,
-          parameters: { lookbackBars: 20 },
+          liveEnabled: false,
+          parameters: { lookbackBars: 20, enableBuy: true, enableSell: false },
         },
       ],
       logicResults: {
-        BUY_MOCK_SYMBOL_CUSTOM: {
+        [USDJPY_LOGIC]: {
           signal: 'BUY',
           reason: 'mock buy signal',
-          sl: 190.1,
-          tp: 191.2,
+          sl: 147.1,
+          tp: 148.2,
+          metadata: {
+            source: 'symbolCustom',
+            setupType: 'jpy_macro_reversal',
+            candidatePreset: 'buy_session_conservative',
+            scope: 'paper',
+          },
         },
       },
     });
@@ -219,27 +263,32 @@ describe('symbolCustomPaperRuntimeService', () => {
     expect(paperTradingService.submitSymbolCustomSignal).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'paper',
       source: 'symbolCustom',
-      symbol: 'GBPJPY',
+      symbol: 'USDJPY',
       symbolCustomId: 'sc-buy',
-      symbolCustomName: 'GBPJPY_BUY_MOCK',
-      logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
-      setupType: 'symbol_custom',
-      strategy: 'GBPJPY_BUY_MOCK',
+      symbolCustomName: USDJPY_LOGIC,
+      logicName: USDJPY_LOGIC,
+      setupType: 'jpy_macro_reversal',
+      strategy: USDJPY_LOGIC,
       strategyType: 'SymbolCustom',
       signal: 'BUY',
+      candidatePreset: 'buy_session_conservative',
+      parameterSnapshot: expect.objectContaining({ lookbackBars: 20 }),
       metadata: expect.objectContaining({
         source: 'symbolCustom',
         symbolCustomId: 'sc-buy',
-        symbolCustomName: 'GBPJPY_BUY_MOCK',
-        logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
-        setupType: 'symbol_custom',
-        strategy: 'GBPJPY_BUY_MOCK',
+        symbolCustomName: USDJPY_LOGIC,
+        logicName: USDJPY_LOGIC,
+        setupType: 'jpy_macro_reversal',
+        strategy: USDJPY_LOGIC,
         strategyType: 'SymbolCustom',
+        candidatePreset: 'buy_session_conservative',
+        parameterSnapshot: expect.objectContaining({ lookbackBars: 20 }),
       }),
     }));
     expect(paperTradingService.submitExternalPaperSignal).not.toHaveBeenCalled();
     expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
     expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
   });
 
   test('runtime can call submitExternalPaperSignal public wrapper when submitSymbolCustomSignal is unavailable', async () => {
@@ -247,14 +296,15 @@ describe('symbolCustomPaperRuntimeService', () => {
       symbolCustoms: [
         {
           _id: 'sc-sell',
-          symbol: 'AUDUSD',
-          symbolCustomName: 'AUDUSD_SELL_MOCK',
-          logicName: 'SELL_MOCK_SYMBOL_CUSTOM',
+          symbol: 'USDJPY',
+          symbolCustomName: USDJPY_LOGIC,
+          logicName: USDJPY_LOGIC,
           paperEnabled: true,
+          liveEnabled: false,
         },
       ],
       logicResults: {
-        SELL_MOCK_SYMBOL_CUSTOM: {
+        [USDJPY_LOGIC]: {
           signal: 'SELL',
           reason: 'mock sell signal',
         },
@@ -283,14 +333,15 @@ describe('symbolCustomPaperRuntimeService', () => {
       symbolCustoms: [
         {
           _id: 'sc-no-wrapper',
-          symbol: 'GBPJPY',
-          symbolCustomName: 'GBPJPY_NO_WRAPPER',
-          logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
+          symbol: 'USDJPY',
+          symbolCustomName: USDJPY_LOGIC,
+          logicName: USDJPY_LOGIC,
           paperEnabled: true,
+          liveEnabled: false,
         },
       ],
       logicResults: {
-        BUY_MOCK_SYMBOL_CUSTOM: {
+        [USDJPY_LOGIC]: {
           signal: 'BUY',
           reason: 'mock buy signal',
         },
@@ -328,8 +379,8 @@ describe('symbolCustomPaperRuntimeService', () => {
     }));
   });
 
-  test('unknown logic returns a clear error during paper scan', async () => {
-    const { runtime } = loadRuntime({
+  test('unknown logic is ignored by paper runtime safety gate', async () => {
+    const { runtime, paperTradingService } = loadRuntime({
       symbolCustoms: [
         {
           _id: 'sc-unknown',
@@ -341,13 +392,19 @@ describe('symbolCustomPaperRuntimeService', () => {
       ],
     });
 
-    await expect(runtime.runPaperScan({
+    const result = await runtime.runPaperScan({
       force: true,
       getCandlesFn: jest.fn(async () => ({ entry: [] })),
-    })).rejects.toMatchObject({
-      statusCode: 400,
-      message: 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED',
     });
+
+    expect(result.submitted).toBe(0);
+    expect(result.ignored).toBe(1);
+    expect(result.signals[0]).toEqual(expect.objectContaining({
+      status: 'IGNORED',
+      signal: 'NONE',
+      reasonCode: runtime.SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED,
+    }));
+    expect(paperTradingService.submitSymbolCustomSignal).not.toHaveBeenCalled();
   });
 
   test('missing candle provider for non-placeholder logic returns a clear error', async () => {
@@ -355,14 +412,15 @@ describe('symbolCustomPaperRuntimeService', () => {
       symbolCustoms: [
         {
           _id: 'sc-buy-no-candles',
-          symbol: 'GBPJPY',
-          symbolCustomName: 'GBPJPY_BUY_MOCK',
-          logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
+          symbol: 'USDJPY',
+          symbolCustomName: USDJPY_LOGIC,
+          logicName: USDJPY_LOGIC,
           paperEnabled: true,
+          liveEnabled: false,
         },
       ],
       logicResults: {
-        BUY_MOCK_SYMBOL_CUSTOM: {
+        [USDJPY_LOGIC]: {
           signal: 'BUY',
           reason: 'mock buy signal',
         },
@@ -374,7 +432,7 @@ describe('symbolCustomPaperRuntimeService', () => {
       message: runtime.SYMBOL_CUSTOM_CANDLE_PROVIDER_REQUIRED,
       details: [expect.objectContaining({
         symbolCustomId: 'sc-buy-no-candles',
-        logicName: 'BUY_MOCK_SYMBOL_CUSTOM',
+        logicName: USDJPY_LOGIC,
       })],
     });
   });
@@ -429,5 +487,11 @@ describe('symbolCustomPaperRuntimeService', () => {
     expect(result.success).toBe(true);
     expect(result.signals[0].signal).toBe('NONE');
     expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+  });
+
+  test('paper runtime source does not reference six strategy classes', () => {
+    const fs = require('fs');
+    const source = fs.readFileSync(require('path').join(__dirname, '..', 'src/services/symbolCustomPaperRuntimeService.js'), 'utf8');
+    expect(source).not.toMatch(/TrendFollowing|MeanReversion|Breakout|Momentum|MultiTimeframe|VolumeFlowHybrid|src\/strategies|\.\.\/strategies/);
   });
 });

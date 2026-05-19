@@ -50,6 +50,8 @@ function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}
   const timeframes = getTimeframes(symbolCustom);
   const timestamp = context.timestamp || new Date();
   const signal = rawResult.signal || 'NONE';
+  const stopLoss = rawResult.stopLoss ?? rawResult.sl ?? null;
+  const takeProfit = rawResult.takeProfit ?? rawResult.tp ?? null;
 
   return {
     scope: context.scope || 'paper',
@@ -62,6 +64,10 @@ function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}
     status: rawResult.status || (signal === 'NONE' ? 'NO_SIGNAL' : 'SIGNAL'),
     reason: rawResult.reason || null,
     reasonCode: rawResult.reasonCode,
+    sl: rawResult.sl ?? rawResult.stopLoss ?? null,
+    tp: rawResult.tp ?? rawResult.takeProfit ?? null,
+    stopLoss,
+    takeProfit,
     setupTimeframe: timeframes.setupTimeframe || null,
     entryTimeframe: timeframes.entryTimeframe || null,
     higherTimeframe: timeframes.higherTimeframe || null,
@@ -72,6 +78,7 @@ function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}
     beConfig: getConfigObject(symbolCustom, 'beConfig'),
     entryConfig: getConfigObject(symbolCustom, 'entryConfig'),
     exitConfig: getConfigObject(symbolCustom, 'exitConfig'),
+    metadata: cloneValue(rawResult.metadata || {}),
     timestamp,
   };
 }

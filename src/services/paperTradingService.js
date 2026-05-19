@@ -11,7 +11,7 @@ const mt5Service = typeof mt5Module.getScopedService === 'function'
 const strategyEngine = require('./strategyEngine');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
-const notificationService = require('./notificationService');
+const notificationHubService = require('./notificationHubService');
 const tradeNotificationService = require('./tradeNotificationService');
 const trailingStopService = require('./trailingStopService');
 const breakevenService = require('./breakevenService');
@@ -903,12 +903,17 @@ class PaperTradingService {
       this._startTradingLoop();
 
       // Notify via Telegram
-      await notificationService.notifySystem('start',
-        `Paper Trading started\n`
-        + `Account: ${accountInfo.login}\n`
-        + `Balance: ${accountInfo.balance} ${accountInfo.currency}\n`
-        + `Leverage: 1:${accountInfo.leverage}`
-      );
+      await notificationHubService.enqueueTelegram({
+        type: 'system',
+        scope: 'paper',
+        priority: 6,
+        title: 'Paper trading started',
+        message: `<b>System: START</b>\n\nPaper Trading started\n`
+          + `Account: ${accountInfo.login}\n`
+          + `Balance: ${accountInfo.balance} ${accountInfo.currency}\n`
+          + `Leverage: 1:${accountInfo.leverage}`,
+        immediate: true,
+      });
 
       // Broadcast via WebSocket
       websocketService.broadcast('status', 'paper_trading_started', {
@@ -969,7 +974,14 @@ class PaperTradingService {
     const runtime = this.startedAt ? TradeLog.formatHoldingTime(Date.now() - this.startedAt.getTime()) : 'N/A';
     this.startedAt = null;
 
-    await notificationService.notifySystem('stop', `Paper Trading stopped\nRuntime: ${runtime}`);
+    await notificationHubService.enqueueTelegram({
+      type: 'system',
+      scope: 'paper',
+      priority: 6,
+      title: 'Paper trading stopped',
+      message: `<b>System: STOP</b>\n\nPaper Trading stopped\nRuntime: ${runtime}`,
+      immediate: true,
+    });
 
     websocketService.broadcast('status', 'paper_trading_stopped', { runtime });
 
@@ -1230,6 +1242,13 @@ class PaperTradingService {
         spreadAtEntry,
         slippageEstimate,
         brokerRetcodeOpen: result.retcode ?? null,
+        source: signal.source || null,
+        symbolCustomName: signal.symbolCustomName || null,
+        logicName: signal.logicName || null,
+        candidatePreset: signal.candidatePreset || null,
+        parameterSnapshot: signal.parameterSnapshot || null,
+        setupType: signal.setupType || null,
+        scope: 'paper',
         indicatorsSnapshot: openCapture.indicatorsSnapshot,
         openedAt,
         status: 'OPEN',
@@ -1281,6 +1300,13 @@ class PaperTradingService {
         spreadAtEntry,
         slippageEstimate,
         brokerRetcodeOpen: result.retcode ?? null,
+        source: signal.source || null,
+        symbolCustomName: signal.symbolCustomName || null,
+        logicName: signal.logicName || null,
+        candidatePreset: signal.candidatePreset || null,
+        parameterSnapshot: signal.parameterSnapshot || null,
+        setupType: signal.setupType || null,
+        scope: 'paper',
         openedAt,
       });
 
@@ -1333,7 +1359,13 @@ class PaperTradingService {
         openedAt: position.openedAt || openedAt,
         mt5OrderId: position.mt5OrderId || mt5OrderId,
         mt5PositionId: position.mt5PositionId || mt5PositionId,
-      }, { immediate: true });
+        source: position.source || signal.source,
+        symbolCustomName: position.symbolCustomName || signal.symbolCustomName,
+        logicName: position.logicName || signal.logicName,
+        candidatePreset: position.candidatePreset || signal.candidatePreset,
+        parameterSnapshot: position.parameterSnapshot || signal.parameterSnapshot,
+        setupType: position.setupType || signal.setupType,
+      });
 
       try {
         await this.syncMonitorNow('forced_sync');
@@ -1808,7 +1840,10 @@ class PaperTradingService {
     });
 
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
-    await notificationService.notifyTradeClosed(closedTrade);
+    await tradeNotificationService.notifyTradeClosed({
+      scope: 'paper',
+      ...closedTrade,
+    });
     await this.syncMonitorNow('forced_sync');
   }
 
@@ -1946,7 +1981,10 @@ class PaperTradingService {
     });
 
     websocketService.broadcast('trades', 'paper_trade_closed', closedTrade);
-    await notificationService.notifyTradeClosed(closedTrade);
+    await tradeNotificationService.notifyTradeClosed({
+      scope: 'paper',
+      ...closedTrade,
+    });
     await this.syncMonitorNow('forced_sync');
 
     return {

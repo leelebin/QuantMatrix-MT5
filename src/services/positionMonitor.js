@@ -9,7 +9,7 @@ const trailingStopService = require('./trailingStopService');
 const riskManager = require('./riskManager');
 const strategyDailyStopService = require('./strategyDailyStopService');
 const websocketService = require('./websocketService');
-const notificationService = require('./notificationService');
+const tradeNotificationService = require('./tradeNotificationService');
 const breakevenService = require('./breakevenService');
 const economicCalendarService = require('./economicCalendarService');
 const { positionsDb, tradesDb } = require('../config/db');
@@ -1156,7 +1156,10 @@ class PositionMonitor {
 
     websocketService.broadcast('trades', 'trade_closed', closedTrade);
     websocketService.broadcast('positions', 'position_update', { action: 'closed', position: closedTrade });
-    await notificationService.notifyTradeClosed(closedTrade);
+    await tradeNotificationService.notifyTradeClosed({
+      scope: 'live',
+      ...closedTrade,
+    });
   }
 
   getStatus() {

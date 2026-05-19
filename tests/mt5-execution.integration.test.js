@@ -83,11 +83,17 @@ jest.mock('../src/services/notificationService', () => ({
   notifyTradeClosed: jest.fn(),
 }));
 
+jest.mock('../src/services/tradeNotificationService', () => ({
+  notifyTradeOpened: jest.fn(),
+  notifyTradeClosed: jest.fn(),
+}));
+
 const { positionsDb, tradesDb, executionAuditDb, riskProfilesDb, strategiesDb } = require('../src/config/db');
 const mt5Service = require('../src/services/mt5Service');
 const riskManager = require('../src/services/riskManager');
 const websocketService = require('../src/services/websocketService');
 const notificationService = require('../src/services/notificationService');
+const tradeNotificationService = require('../src/services/tradeNotificationService');
 const tradeExecutor = require('../src/services/tradeExecutor');
 const positionMonitor = require('../src/services/positionMonitor');
 
@@ -200,6 +206,8 @@ describe('MT5 mock integration flows', () => {
     websocketService.broadcast.mockImplementation(() => {});
     notificationService.notifyTradeOpened.mockResolvedValue();
     notificationService.notifyTradeClosed.mockResolvedValue();
+    tradeNotificationService.notifyTradeOpened.mockResolvedValue();
+    tradeNotificationService.notifyTradeClosed.mockResolvedValue();
   });
 
   test('uses the broker fill price and entry deal metadata when opening a trade', async () => {
@@ -241,6 +249,11 @@ describe('MT5 mock integration flows', () => {
       mt5Comment: 'QM|TrendFollowing|BUY|0.88',
       comment: expect.stringContaining('Reason=Trend breakout'),
     }));
+    expect(tradeNotificationService.notifyTradeOpened).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'live',
+    }));
+    expect(tradeNotificationService.notifyTradeOpened.mock.calls[0][1]).toBeUndefined();
+    expect(mt5Service.placeOrder).toHaveBeenCalledTimes(1);
   });
 
   test('stores setup and symbol playbook metadata on live position and trade open records', async () => {

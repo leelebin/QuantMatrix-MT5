@@ -63,6 +63,7 @@ const {
   economicCalendarService,
   resourceMonitorService,
   dataSyncSchedulerService,
+  runtimeHeartbeatService,
   symbolCustomPaperRuntimeService,
   symbolCustomPaperCandleProviderService
 } = bootProfiler.measure('runtime:load', () => ({
@@ -76,6 +77,7 @@ const {
   economicCalendarService: require('./services/economicCalendarService'),
   resourceMonitorService: require('./services/resourceMonitorService'),
   dataSyncSchedulerService: require('./services/dataSyncSchedulerService'),
+  runtimeHeartbeatService: require('./services/runtimeHeartbeatService'),
   symbolCustomPaperRuntimeService: require('./services/symbolCustomPaperRuntimeService'),
   symbolCustomPaperCandleProviderService: require('./services/symbolCustomPaperCandleProviderService')
 }));
@@ -287,6 +289,13 @@ async function startServer() {
           console.log('[SymbolCustom] Paper runtime disabled');
         }
       });
+      bootProfiler.measure('heartbeat:init', () => {
+        try {
+          runtimeHeartbeatService.start();
+        } catch (error) {
+          console.error(`[Heartbeat] Failed to start: ${error.message}`);
+        }
+      });
       bootProfiler.mark('boot:complete');
     });
 
@@ -300,9 +309,14 @@ async function startServer() {
 
 startServer();
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('[Server] SIGTERM received, shutting down...');
+async function shutdown(signal) {
+  console.log(`[Server] ${signal} received, shutting down...`);
+  try {
+    await runtimeHeartbeatService.notifyServerStopping(signal);
+  } catch (error) {
+    console.warn(`[Heartbeat] Failed to send server stopping alert: ${error.message}`);
+  }
+  runtimeHeartbeatService.stop();
   dataSyncSchedulerService.stop();
   symbolCustomPaperRuntimeService.stop();
   websocketService.shutdown();
@@ -311,18 +325,15 @@ process.on('SIGTERM', () => {
     return;
   }
   server.close(() => process.exit(0));
+}
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  shutdown('SIGTERM');
 });
 
 process.on('SIGINT', () => {
-  console.log('[Server] SIGINT received, shutting down...');
-  dataSyncSchedulerService.stop();
-  symbolCustomPaperRuntimeService.stop();
-  websocketService.shutdown();
-  if (!server) {
-    process.exit(0);
-    return;
-  }
-  server.close(() => process.exit(0));
+  shutdown('SIGINT');
 });
 
 module.exports = {

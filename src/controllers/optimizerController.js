@@ -1,7 +1,7 @@
 const optimizerService = require('../services/optimizerService');
 const mt5Service = require('../services/mt5Service');
 const websocketService = require('../services/websocketService');
-const notificationService = require('../services/notificationService');
+const notificationHubService = require('../services/notificationHubService');
 const Strategy = require('../models/Strategy');
 const OptimizerRun = require('../models/OptimizerRun');
 const RiskProfile = require('../models/RiskProfile');
@@ -273,7 +273,17 @@ exports.runOptimizer = async (req, res) => {
         websocketService.broadcast('status', 'optimizer_stopped', payload);
       } else {
         websocketService.broadcast('status', 'optimizer_complete', payload);
-        await notificationService.notifyOptimizerComplete(payload);
+        if (payload.bestResult) {
+          await notificationHubService.enqueueTelegram({
+            type: 'optimizer',
+            scope: 'system',
+            priority: 3,
+            title: 'Optimizer complete',
+            message: buildOptimizerNotification(payload),
+            dedupeKey: `optimizer:${payload.symbol}:${payload.strategy}:${payload.historyId || Date.now()}`,
+            immediate: true,
+          });
+        }
       }
     } catch (err) {
       console.error('[Optimizer] Error:', err.message);
@@ -283,6 +293,34 @@ exports.runOptimizer = async (req, res) => {
     res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 };
+
+function buildOptimizerNotification(result) {
+  const best = result.bestResult || {};
+  const summary = best.summary || {};
+  const parameters = best.parameters || {};
+  return [
+    `<b>Optimizer Complete</b>`,
+    '',
+    `<b>Symbol:</b> ${result.symbol}`,
+    `<b>Strategy:</b> ${result.strategy}`,
+    `<b>Combinations:</b> ${result.totalCombinations}`,
+    `<b>Best Parameters:</b>`,
+    Object.entries(parameters).map(([key, value]) => `  ${key}: ${value}`).join('\n'),
+    '',
+    `<b>Results:</b>`,
+    `  Win Rate: ${formatPercent(summary.winRate)}`,
+    `  Profit Factor: ${summary.profitFactor ?? '-'}`,
+    `  Return: ${summary.returnPercent ?? '-'}%`,
+    `  Sharpe: ${summary.sharpeRatio ?? '-'}`,
+    `  Max DD: ${summary.maxDrawdownPercent ?? '-'}%`,
+  ].filter((line) => line !== undefined && line !== null).join('\n');
+}
+
+function formatPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '-';
+  return `${(numeric * 100).toFixed(1)}%`;
+}
 
 // @desc    Request optimizer stop
 // @route   POST /api/optimizer/stop

@@ -6,7 +6,6 @@
 const mt5Service = require('./mt5Service');
 const riskManager = require('./riskManager');
 const websocketService = require('./websocketService');
-const notificationService = require('./notificationService');
 const tradeNotificationService = require('./tradeNotificationService');
 const breakevenService = require('./breakevenService');
 const positionMonitor = require('./positionMonitor');
@@ -357,7 +356,7 @@ class TradeExecutor {
         openedAt: position.openedAt || openedAt,
         mt5OrderId: position.mt5OrderId || result.orderId || null,
         mt5PositionId: position.mt5PositionId || mt5PositionId,
-      }, { immediate: true });
+      });
       await positionMonitor.syncNow('forced_sync');
 
       return { success: true, message: 'Trade executed', trade: position };
@@ -550,7 +549,10 @@ class TradeExecutor {
       websocketService.broadcast('positions', 'position_update', { action: 'closed', position: closedTrade });
 
       // Send Telegram notification
-      await notificationService.notifyTradeClosed(closedTrade);
+      await tradeNotificationService.notifyTradeClosed({
+        scope: 'live',
+        ...closedTrade,
+      });
       await positionMonitor.syncNow('forced_sync');
 
       return {

@@ -70,6 +70,7 @@ const decisionAuditDb = createDatastore('decision_audit.db', 'history');
 const optimizerRunsDb = createDatastore('optimizer_runs.db', 'history');
 const strategyInstancesDb = createDatastore('strategyInstances.db', 'config');
 const strategyDailyStopsDb = createDatastore('strategy_daily_stops.db', 'trading');
+const notificationDeliveriesDb = createDatastore('notification_deliveries.db', 'history');
 const symbolCustomsDb = createDatastore('symbol_customs.db', 'trading');
 const symbolCustomBacktestsDb = createDatastore('symbol_custom_backtests.db', 'trading');
 const symbolCustomOptimizerRunsDb = createDatastore('symbol_custom_optimizer_runs.db', 'trading');
@@ -99,6 +100,7 @@ const DATABASES = Object.freeze({
   optimizerRuns: dbEntry('history', 'optimizer_runs.db', optimizerRunsDb),
   strategyInstances: dbEntry('config', 'strategyInstances.db', strategyInstancesDb),
   strategyDailyStops: dbEntry('trading', 'strategy_daily_stops.db', strategyDailyStopsDb),
+  notificationDeliveries: dbEntry('history', 'notification_deliveries.db', notificationDeliveriesDb),
   symbolCustoms: dbEntry('trading', 'symbol_customs.db', symbolCustomsDb),
   symbolCustomBacktests: dbEntry('trading', 'symbol_custom_backtests.db', symbolCustomBacktestsDb),
   symbolCustomOptimizerRuns: dbEntry('trading', 'symbol_custom_optimizer_runs.db', symbolCustomOptimizerRunsDb),
@@ -139,6 +141,13 @@ strategyInstancesDb.ensureIndex({ fieldName: '_id', unique: true });
 strategyDailyStopsDb.ensureIndex({ fieldName: 'key' });
 strategyDailyStopsDb.ensureIndex({ fieldName: 'tradingDay' });
 strategyDailyStopsDb.ensureIndex({ fieldName: 'stopped' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'status' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'type' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'scope' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'priority' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'dedupeKey' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'createdAt' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'sentAt' });
 symbolCustomsDb.ensureIndex({ fieldName: 'symbol' });
 symbolCustomsDb.ensureIndex({ fieldName: 'symbolCustomName' });
 symbolCustomsDb.ensureIndex({ fieldName: 'status' });
@@ -174,6 +183,7 @@ const connectDB = async () => {
     await optimizerRunsDb.count({});
     await strategyInstancesDb.count({});
     await strategyDailyStopsDb.count({});
+    await notificationDeliveriesDb.count({});
     await symbolCustomsDb.count({});
     await symbolCustomBacktestsDb.count({});
     await symbolCustomOptimizerRunsDb.count({});
@@ -208,6 +218,7 @@ module.exports.batchBacktestJobsDb = batchBacktestJobsDb;
 module.exports.optimizerRunsDb = optimizerRunsDb;
 module.exports.strategyInstancesDb = strategyInstancesDb;
 module.exports.strategyDailyStopsDb = strategyDailyStopsDb;
+module.exports.notificationDeliveriesDb = notificationDeliveriesDb;
 module.exports.symbolCustomsDb = symbolCustomsDb;
 module.exports.symbolCustomBacktestsDb = symbolCustomBacktestsDb;
 module.exports.symbolCustomOptimizerRunsDb = symbolCustomOptimizerRunsDb;

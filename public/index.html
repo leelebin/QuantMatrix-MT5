@@ -1547,6 +1547,18 @@ tr:hover{background:var(--bg3)}
         <button class="btn-outline btn-sm" onclick="document.getElementById('notifyCustomMessage').value=''">Clear</button>
       </div>
       <div id="notifySendResult" style="margin-top:8px;font-size:13px"></div>
+      <div class="section-subtitle" style="margin-top:16px">Runtime Heartbeat</div>
+      <div id="heartbeatStatus" style="font-size:13px;color:var(--text2);margin-bottom:10px">
+        <span class="empty">Open Settings to load heartbeat status.</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn-outline btn-sm" onclick="sendTestHeartbeat()" id="heartbeatTestBtn">Send Test Heartbeat</button>
+      </div>
+      <div id="heartbeatTestResult" style="font-size:13px;margin-bottom:12px"></div>
+      <div class="section-subtitle">Recent Delivery Logs</div>
+      <div id="notificationDeliveryLog" class="log-container" style="max-height:220px">
+        <div class="empty">No delivery log loaded yet.</div>
+      </div>
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">WebSocket Connection Log</span></div>
@@ -9883,11 +9895,13 @@ async function loadNotifyStatus() {
   try {
     const r = await api('/api/notifications/status');
     const el = document.getElementById('notifyStatus');
-    if (r.data.enabled) {
+    if (r.data.telegramConfigured || r.data.enabled) {
       el.innerHTML = '<span style="color:var(--green)">Telegram: Connected</span>';
     } else {
       el.innerHTML = '<span style="color:var(--text2)">Telegram: Not configured (set TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in .env)</span>';
     }
+    renderHeartbeatStatus(r.data.heartbeat || null);
+    loadNotificationDeliveries();
   } catch (e) {}
 }
 
@@ -9898,6 +9912,76 @@ async function testNotification() {
       ? '<span style="color:var(--green)">Test notification sent!</span>'
       : '<span style="color:var(--red)">' + r.message + '</span>';
   } catch (e) { document.getElementById('notifyResult').innerHTML = '<span style="color:var(--red)">' + e.message + '</span>'; }
+}
+
+function renderHeartbeatStatus(status) {
+  const el = document.getElementById('heartbeatStatus');
+  if (!el) return;
+  if (!status) {
+    el.innerHTML = '<span style="color:var(--text2)">Heartbeat status unavailable</span>';
+    return;
+  }
+
+  const alerts = Array.isArray(status.activeAlerts) ? status.activeAlerts : [];
+  let html = '';
+  html += '<div>Enabled: <strong style="color:' + (status.enabled ? 'var(--green)' : 'var(--text2)') + '">' + (status.enabled ? 'Yes' : 'No') + '</strong>'
+    + ' | Running: <strong style="color:' + (status.running ? 'var(--green)' : 'var(--text2)') + '">' + (status.running ? 'Yes' : 'No') + '</strong></div>';
+  html += '<div>Last heartbeat: ' + escapeHtml(fmtTime(status.lastHeartbeatAt)) + ' | Summary every ' + escapeHtml(status.summaryIntervalMinutes || '--') + 'm</div>';
+  html += '<div>Active alerts: <strong style="color:' + (alerts.length ? 'var(--red)' : 'var(--green)') + '">' + alerts.length + '</strong></div>';
+  if (alerts.length) {
+    html += '<div style="margin-top:6px">';
+    alerts.slice(0, 6).forEach((alert) => {
+      html += '<div style="color:var(--red)">' + escapeHtml(alert.code || alert.title || 'ALERT')
+        + ' <span style="color:var(--text2)">since ' + escapeHtml(fmtTime(alert.startedAt)) + '</span></div>';
+    });
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+async function loadNotificationDeliveries() {
+  const el = document.getElementById('notificationDeliveryLog');
+  if (!el) return;
+  try {
+    const r = await api('/api/notifications/deliveries?limit=10');
+    const rows = Array.isArray(r.data) ? r.data : [];
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty">No recent delivery logs.</div>';
+      return;
+    }
+    el.innerHTML = rows.map((row) => {
+      const cls = row.status === 'FAILED' ? 'error' : row.status === 'SENT' ? 'success' : row.status === 'SKIPPED' ? 'warn' : '';
+      return '<div class="log-entry ' + cls + '">'
+        + escapeHtml(fmtTime(row.sentAt || row.createdAt))
+        + ' [' + escapeHtml(row.status || '-') + '] '
+        + escapeHtml(row.type || '-') + '/' + escapeHtml(row.scope || '-')
+        + ' - ' + escapeHtml(row.title || row.lastError || '')
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="log-entry error">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function sendTestHeartbeat() {
+  const btn = document.getElementById('heartbeatTestBtn');
+  const resultEl = document.getElementById('heartbeatTestResult');
+  if (!btn) return;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  if (resultEl) resultEl.innerHTML = '';
+  try {
+    const r = await api('/api/notifications/heartbeat/test', 'POST');
+    if (!r.success) throw new Error(r.message || 'Failed to send heartbeat');
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--green)">Test heartbeat queued</span>';
+    loadNotifyStatus();
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--red)">' + escapeHtml(e.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
 
 async function loadAccountInfo() {

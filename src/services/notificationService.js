@@ -4,7 +4,6 @@
  */
 
 const https = require('https');
-const http = require('http');
 
 class NotificationService {
   constructor() {
@@ -21,6 +20,7 @@ class NotificationService {
   init() {
     this.telegramToken = process.env.TELEGRAM_TOKEN;
     this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
+    this.enabled = false;
 
     if (this.telegramToken && this.telegramChatId) {
       this.enabled = true;
@@ -34,7 +34,7 @@ class NotificationService {
    * Send a Telegram message
    * @param {string} text - Message text (supports HTML)
    */
-  async sendTelegram(text) {
+  async sendTelegramRaw(text) {
     if (!this.enabled) return;
 
     const url = `https://api.telegram.org/bot${this.telegramToken}/sendMessage`;
@@ -56,11 +56,22 @@ class NotificationService {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
+          let parsed = null;
+          try {
+            parsed = data ? JSON.parse(data) : null;
+          } catch (_) {
+            parsed = null;
+          }
+
           if (res.statusCode === 200) {
-            resolve(JSON.parse(data));
+            resolve(parsed || { ok: true });
           } else {
             console.error(`[Notify] Telegram API error: ${res.statusCode} ${data}`);
-            reject(new Error(`Telegram API error: ${res.statusCode}`));
+            const error = new Error(`Telegram API error: ${res.statusCode}`);
+            error.statusCode = res.statusCode;
+            error.responseBody = data;
+            error.retryAfter = parsed?.parameters?.retry_after || null;
+            reject(error);
           }
         });
       });
@@ -73,6 +84,10 @@ class NotificationService {
       req.write(body);
       req.end();
     });
+  }
+
+  async sendTelegram(text) {
+    return await this.sendTelegramRaw(text);
   }
 
   /**

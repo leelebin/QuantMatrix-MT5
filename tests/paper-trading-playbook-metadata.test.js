@@ -287,7 +287,7 @@ describe('paperTradingService playbook metadata persistence', () => {
     expect(tradeLogDb.insert).toHaveBeenCalledWith(expect.objectContaining(expectedMetadata));
   });
 
-  test('paper open notification is still sent immediately when the monitor sync fails', async () => {
+  test('paper open notification is queued before monitor sync failures are reported', async () => {
     paperTradingService.syncMonitorNow.mockRejectedValue(new Error('MT5 positions lagged after open'));
 
     await expect(paperTradingService._executePaperTrade({
@@ -305,7 +305,8 @@ describe('paperTradingService playbook metadata persistence', () => {
     expect(tradeNotificationService.notifyTradeOpened).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'paper',
       _id: 'paper-pos-1',
-    }), { immediate: true });
+    }));
+    expect(tradeNotificationService.notifyTradeOpened.mock.calls[0][1]).toBeUndefined();
   });
 
   test('legacy trade log records without playbook metadata remain readable', async () => {

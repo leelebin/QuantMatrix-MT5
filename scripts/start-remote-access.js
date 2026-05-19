@@ -11,6 +11,7 @@ const projectDir = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(projectDir, '.env') });
 
 const notificationService = require('../src/services/notificationService');
+const notificationHubService = require('../src/services/notificationHubService');
 const remoteAccessService = require('../src/services/remoteAccessService');
 
 const NGROK_DOWNLOAD_URL = 'https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip';
@@ -287,9 +288,15 @@ async function maybeNotifyTelegram(publicUrl, basicAuth, previousState) {
     return false;
   }
 
-  await notificationService.sendTelegram(
-    buildTelegramMessage(publicUrl, basicAuth, publicUrl !== previousUrl, previousUrl)
-  );
+  await notificationHubService.enqueueTelegram({
+    type: 'remote_access',
+    scope: 'system',
+    priority: 8,
+    title: 'Remote access URL',
+    message: buildTelegramMessage(publicUrl, basicAuth, publicUrl !== previousUrl, previousUrl),
+    dedupeKey: `remote_access:${publicUrl}:${basicAuth.username}:${basicAuth.password}`,
+    immediate: true,
+  });
 
   remoteAccessService.updateRemoteAccessState({
     lastNotifiedUrl: publicUrl,

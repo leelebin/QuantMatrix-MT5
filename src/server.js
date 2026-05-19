@@ -29,6 +29,7 @@ const strategyEngine = require('./services/strategyEngine');
 const economicCalendarService = require('./services/economicCalendarService');
 const resourceMonitorService = require('./services/resourceMonitorService');
 const dataSyncSchedulerService = require('./services/dataSyncSchedulerService');
+const runtimeHeartbeatService = require('./services/runtimeHeartbeatService');
 
 // Install persistent file logging (console.log/warn/error -> logs/system.log,
 // logs/error.log). Console output is preserved.
@@ -209,6 +210,11 @@ async function startServer() {
       } catch (error) {
         console.error(`[DataSync] Scheduler failed to start: ${error.message}`);
       }
+      try {
+        runtimeHeartbeatService.start();
+      } catch (error) {
+        console.error(`[Heartbeat] Failed to start: ${error.message}`);
+      }
     });
 
     server.on('error', handleServerError);
@@ -221,9 +227,14 @@ async function startServer() {
 
 startServer();
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('[Server] SIGTERM received, shutting down...');
+async function shutdown(signal) {
+  console.log(`[Server] ${signal} received, shutting down...`);
+  try {
+    await runtimeHeartbeatService.notifyServerStopping(signal);
+  } catch (error) {
+    console.warn(`[Heartbeat] Failed to send server stopping alert: ${error.message}`);
+  }
+  runtimeHeartbeatService.stop();
   dataSyncSchedulerService.stop();
   websocketService.shutdown();
   if (!server) {
@@ -231,17 +242,15 @@ process.on('SIGTERM', () => {
     return;
   }
   server.close(() => process.exit(0));
+}
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  shutdown('SIGTERM');
 });
 
 process.on('SIGINT', () => {
-  console.log('[Server] SIGINT received, shutting down...');
-  dataSyncSchedulerService.stop();
-  websocketService.shutdown();
-  if (!server) {
-    process.exit(0);
-    return;
-  }
-  server.close(() => process.exit(0));
+  shutdown('SIGINT');
 });
 
 module.exports = {

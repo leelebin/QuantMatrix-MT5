@@ -1,9 +1,12 @@
 jest.mock('../src/services/notificationService', () => ({
   enabled: true,
-  sendTelegram: jest.fn(() => Promise.resolve({ ok: true })),
+  getStatus: jest.fn(() => ({ telegramConfigured: true })),
+  sendTelegramRaw: jest.fn(() => Promise.resolve({ ok: true, result: { message_id: 1 } })),
+  sendTelegram: jest.fn(() => Promise.resolve({ ok: true, result: { message_id: 1 } })),
 }));
 
 const notificationService = require('../src/services/notificationService');
+const notificationHubService = require('../src/services/notificationHubService');
 const tradeNotificationService = require('../src/services/tradeNotificationService');
 
 const baseOpenedAt = '2026-05-06T10:00:00.000Z';
@@ -32,32 +35,40 @@ async function advanceMergeWindow() {
 }
 
 describe('tradeNotificationService', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.useFakeTimers();
     process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS = '10000';
+    process.env.NOTIFICATION_SEND_INTERVAL_MS = '0';
     notificationService.enabled = true;
+    notificationService.getStatus.mockReturnValue({ telegramConfigured: true });
+    notificationService.sendTelegramRaw.mockClear();
     notificationService.sendTelegram.mockClear();
+    notificationHubService._resetForTests();
+    await notificationHubService._clearDeliveriesForTests();
     tradeNotificationService._resetForTests();
   });
 
   afterEach(() => {
     tradeNotificationService._resetForTests();
+    notificationHubService._resetForTests();
     jest.useRealTimers();
     delete process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS;
+    delete process.env.NOTIFICATION_SEND_INTERVAL_MS;
+    delete process.env.TELEGRAM_TRADE_OPEN_IMMEDIATE;
   });
 
   test('paper open only sends PAPER OPEN after merge window', async () => {
     await tradeNotificationService.notifyTradeOpened(openEvent());
 
-    expect(notificationService.sendTelegram).not.toHaveBeenCalled();
+    expect(notificationService.sendTelegramRaw).not.toHaveBeenCalled();
     await advanceMergeWindow();
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
-    const message = notificationService.sendTelegram.mock.calls[0][0];
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    const message = notificationService.sendTelegramRaw.mock.calls[0][0];
     expect(message).toContain('[PAPER OPEN]');
     expect(message).toContain('EURUSD BUY | Momentum | 1h');
-    expect(message).toContain('Entry 1.0842 | SL 1.0818 | TP 1.0914');
-    expect(message).toContain('Vol 0.03 | Risk 0.25% | Q 3/3');
+    expect(message).toContain('Entry 1.0842 | SL 1.0818 | TP 1.0914 | Vol 0.03');
+    expect(message).toContain('Risk 0.25% | Q 3/3');
     expect(message).toContain('Reason: momentum confirmed');
   });
 
@@ -72,8 +83,8 @@ describe('tradeNotificationService', () => {
 
     await advanceMergeWindow();
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
-    const message = notificationService.sendTelegram.mock.calls[0][0];
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    const message = notificationService.sendTelegramRaw.mock.calls[0][0];
     expect(message).toContain('[LIVE/PAPER OPEN]');
     expect(message).toContain('Entry 1.08421');
     expect(message).toContain('Vol 0.04');
@@ -89,8 +100,8 @@ describe('tradeNotificationService', () => {
 
     await advanceMergeWindow();
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(2);
-    const messages = notificationService.sendTelegram.mock.calls.map((call) => call[0]).join('\n---\n');
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(2);
+    const messages = notificationService.sendTelegramRaw.mock.calls.map((call) => call[0]).join('\n---\n');
     expect(messages).toContain('EURUSD BUY | Momentum | 15m');
     expect(messages).toContain('EURUSD BUY | Momentum | 1h');
   });
@@ -100,8 +111,8 @@ describe('tradeNotificationService', () => {
 
     await advanceMergeWindow();
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
-    expect(notificationService.sendTelegram.mock.calls[0][0]).toContain('[LIVE OPEN]');
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    expect(notificationService.sendTelegramRaw.mock.calls[0][0]).toContain('[LIVE OPEN]');
   });
 
   test('different symbols do not merge', async () => {
@@ -110,8 +121,8 @@ describe('tradeNotificationService', () => {
 
     await advanceMergeWindow();
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(2);
-    const messages = notificationService.sendTelegram.mock.calls.map((call) => call[0]).join('\n---\n');
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(2);
+    const messages = notificationService.sendTelegramRaw.mock.calls.map((call) => call[0]).join('\n---\n');
     expect(messages).toContain('EURUSD BUY');
     expect(messages).toContain('XAUUSD BUY');
   });
@@ -122,10 +133,61 @@ describe('tradeNotificationService', () => {
 
     await advanceMergeWindow();
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(2);
-    const messages = notificationService.sendTelegram.mock.calls.map((call) => call[0]).join('\n---\n');
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(2);
+    const messages = notificationService.sendTelegramRaw.mock.calls.map((call) => call[0]).join('\n---\n');
     expect(messages).toContain('EURUSD BUY');
     expect(messages).toContain('EURUSD SELL');
+  });
+
+  test('immediate=false respects TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS', async () => {
+    process.env.TELEGRAM_TRADE_OPEN_IMMEDIATE = 'false';
+
+    await tradeNotificationService.notifyTradeOpened(openEvent({ immediate: true }));
+
+    expect(notificationService.sendTelegramRaw).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(9999);
+    expect(notificationService.sendTelegramRaw).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+  });
+
+  test('symbolCustom paper open includes custom metadata', async () => {
+    await tradeNotificationService.notifyTradeOpened(openEvent({
+      source: 'symbolCustom',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      logicName: 'JPY_MACRO_REVERSAL',
+      candidatePreset: 'trial-ready',
+    }));
+
+    await advanceMergeWindow();
+
+    const message = notificationService.sendTelegramRaw.mock.calls[0][0];
+    expect(message).toContain('[SYMBOLCUSTOM PAPER OPEN]');
+    expect(message).toContain('SymbolCustom USDJPY_JPY_MACRO_REVERSAL_V1');
+    expect(message).toContain('Preset trial-ready');
+  });
+
+  test('close notification includes P/L and exitReason', async () => {
+    await tradeNotificationService.notifyTradeClosed({
+      scope: 'paper',
+      symbol: 'EURUSD',
+      type: 'BUY',
+      entryPrice: 1.08,
+      exitPrice: 1.09,
+      profitLoss: 12.34,
+      profitPips: 100,
+      realizedRMultiple: 1.5,
+      exitReason: 'TP_HIT',
+      holdingTime: '2h 10m',
+      strategy: 'Momentum',
+    });
+
+    const message = notificationService.sendTelegramRaw.mock.calls[0][0];
+    expect(message).toContain('[PAPER CLOSE]');
+    expect(message).toContain('P/L +12.34');
+    expect(message).toContain('Pips +100');
+    expect(message).toContain('R +1.5');
+    expect(message).toContain('Reason TP_HIT');
   });
 
   test('data sync success sends compact DATA SYNC notification', async () => {
@@ -136,8 +198,8 @@ describe('tradeNotificationService', () => {
       remotePath: 'quantmatrix-drive:QuantMatrix/backups/2026-05-06/',
     });
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
-    const message = notificationService.sendTelegram.mock.calls[0][0];
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    const message = notificationService.sendTelegramRaw.mock.calls[0][0];
     expect(message).toContain('[DATA SYNC');
     expect(message).toContain('Files 128 | Size 24.6 MB');
     expect(message).toContain('Remote: QuantMatrix/backups/2026-05-06');
@@ -149,8 +211,8 @@ describe('tradeNotificationService', () => {
       error: { code: 'RCLONE_VERSION_FAILED' },
     });
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
-    const message = notificationService.sendTelegram.mock.calls[0][0];
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    const message = notificationService.sendTelegramRaw.mock.calls[0][0];
     expect(message).toContain('[DATA SYNC');
     expect(message).toContain('Error: UPLOAD_FAILED');
   });
@@ -164,8 +226,8 @@ describe('tradeNotificationService', () => {
       totalBytes: 503633083,
     });
 
-    expect(notificationService.sendTelegram).toHaveBeenCalledTimes(1);
-    const message = notificationService.sendTelegram.mock.calls[0][0];
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    const message = notificationService.sendTelegramRaw.mock.calls[0][0];
     expect(message).toContain('[DATA SYNC');
     expect(message).toContain('Local snapshot created');
     expect(message).toContain('Cloud upload: disabled');
@@ -175,6 +237,7 @@ describe('tradeNotificationService', () => {
 
   test('Telegram disabled does not throw', async () => {
     notificationService.enabled = false;
+    notificationService.getStatus.mockReturnValue({ telegramConfigured: false });
 
     await expect(tradeNotificationService.notifyTradeOpened(openEvent())).resolves.toEqual(expect.objectContaining({
       queued: true,
@@ -184,6 +247,6 @@ describe('tradeNotificationService', () => {
       sent: false,
     }));
 
-    expect(notificationService.sendTelegram).not.toHaveBeenCalled();
+    expect(notificationService.sendTelegramRaw).not.toHaveBeenCalled();
   });
 });

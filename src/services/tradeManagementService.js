@@ -24,7 +24,7 @@
  */
 
 const websocketService = require('./websocketService');
-const notificationService = require('./notificationService');
+const notificationHubService = require('./notificationHubService');
 const breakevenService = require('./breakevenService');
 const economicCalendarService = require('./economicCalendarService');
 const tradeManagementConfig = require('./tradeManagementConfig');
@@ -135,7 +135,7 @@ class TradeManagementService {
     this.EVENT = EVENT;
     this._writer = null; // injected by positionMonitor; falls back to positionsDb
     this._broadcaster = websocketService;
-    this._notifier = notificationService;
+    this._notifier = notificationHubService;
   }
 
   /**
@@ -662,7 +662,7 @@ class TradeManagementService {
   }
 
   async _sendTelegram(event) {
-    if (!this._notifier || typeof this._notifier.sendTelegram !== 'function') return;
+    if (!this._notifier || typeof this._notifier.enqueueTelegram !== 'function') return;
     const lines = [
       `<b>Trade Management:</b> ${event.type}`,
       `<b>Symbol:</b> ${event.symbol}`,
@@ -673,7 +673,15 @@ class TradeManagementService {
       `<b>Status:</b> ${event.status}`,
     ];
     try {
-      await this._notifier.sendTelegram(lines.join('\n'));
+      await this._notifier.enqueueTelegram({
+        type: 'trade_management',
+        scope: 'live',
+        priority: 8,
+        title: event.type,
+        message: lines.join('\n'),
+        dedupeKey: `trade_management:${event.type}:${event.positionDbId || event.mt5PositionId || event.symbol}:${event.createdAt}`,
+        immediate: true,
+      });
     } catch (_err) {
       // swallow
     }

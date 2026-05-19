@@ -1,8 +1,11 @@
 const BaseSymbolCustom = require('../BaseSymbolCustom');
 
 const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
-const USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = 3;
-const BACKTEST_ONLY_REASON = 'USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only in Phase 2D';
+const USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = 4;
+const CANDIDATE_PRESET = 'buy_session_conservative';
+const PAPER_AND_BACKTEST_ONLY_REASON = 'USDJPY_JPY_MACRO_REVERSAL_V1 supports paper/backtest only in Phase 2 trial';
+const LIVE_BLOCKED_REASON = 'USDJPY_JPY_MACRO_REVERSAL_V1 live execution is blocked';
+const BACKTEST_ONLY_REASON = PAPER_AND_BACKTEST_ONLY_REASON;
 
 const DEFAULT_PARAMETER_SCHEMA = Object.freeze([
   { key: 'lookbackBars', label: 'Lookback Bars', type: 'number', defaultValue: 36, min: 24, max: 72, step: 6 },
@@ -158,6 +161,34 @@ function mergeParameters(overrides = {}) {
   };
 }
 
+function buildSignalMetadata({ parameters, scope, atr = null, rsi = null, recentMove = null, extra = {} }) {
+  return {
+    source: 'symbolCustom',
+    symbolCustomName: USDJPY_JPY_MACRO_REVERSAL_V1,
+    logicName: USDJPY_JPY_MACRO_REVERSAL_V1,
+    strategyType: 'SymbolCustom',
+    setup: 'jpy_macro_reversal',
+    setupType: 'jpy_macro_reversal',
+    candidatePreset: CANDIDATE_PRESET,
+    scope,
+    enableBuy: parameters.enableBuy,
+    enableSell: parameters.enableSell,
+    allowedUtcHours: parameters.allowedUtcHours,
+    blockedUtcHours: parameters.blockedUtcHours,
+    cooldownBarsAfterAnyExit: parameters.cooldownBarsAfterAnyExit,
+    cooldownBarsAfterSL: parameters.cooldownBarsAfterSL,
+    maxDailyLosses: parameters.maxDailyLosses,
+    maxDailyTrades: parameters.maxDailyTrades,
+    atr,
+    rsi,
+    recentMove,
+    impulseAtrMultiplier: parameters.impulseAtrMultiplier,
+    slAtrMultiplier: parameters.slAtrMultiplier,
+    tpAtrMultiplier: parameters.tpAtrMultiplier,
+    ...extra,
+  };
+}
+
 function hasBullishRejection(candle = {}) {
   const open = toNumber(candle.open, null);
   const close = toNumber(candle.close, null);
@@ -263,16 +294,30 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
   analyze(context = {}) {
     const scope = context.scope || 'paper';
     const symbol = context.symbol || this.symbol;
-    if (scope !== 'backtest') {
+    const parameters = mergeParameters(context.parameters || {});
+
+    if (scope === 'live') {
       return {
         signal: 'NONE',
-        reason: BACKTEST_ONLY_REASON,
+        status: 'BLOCKED',
+        reason: LIVE_BLOCKED_REASON,
+        reasonCode: 'SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2',
         symbolCustomName: this.name,
         symbol,
+        metadata: buildSignalMetadata({ parameters, scope }),
       };
     }
 
-    const parameters = mergeParameters(context.parameters || {});
+    if (scope !== 'backtest' && scope !== 'paper') {
+      return {
+        signal: 'NONE',
+        reason: PAPER_AND_BACKTEST_ONLY_REASON,
+        symbolCustomName: this.name,
+        symbol,
+        metadata: buildSignalMetadata({ parameters, scope }),
+      };
+    }
+
     const entryCandles = Array.isArray(context.candles?.entry) ? context.candles.entry : [];
 
     if (context.openPosition) {
@@ -283,13 +328,14 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
           reason: 'Max bars in trade reached',
           symbolCustomName: this.name,
           symbol,
-          metadata: {
-            symbolCustomName: this.name,
-            setup: 'jpy_macro_reversal',
-            barsInTrade,
-            maxBarsInTrade: parameters.maxBarsInTrade,
+          metadata: buildSignalMetadata({
+            parameters,
             scope,
-          },
+            extra: {
+              barsInTrade,
+              maxBarsInTrade: parameters.maxBarsInTrade,
+            },
+          }),
         };
       }
 
@@ -353,17 +399,13 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
     const hasBullishConfirm = confirmBars.some(hasBullishRejection);
     const hasBearishConfirm = confirmBars.some(hasBearishRejection);
     const impulseThreshold = parameters.impulseAtrMultiplier * atr;
-    const metadata = {
-      symbolCustomName: this.name,
-      setup: 'jpy_macro_reversal',
+    const metadata = buildSignalMetadata({
+      parameters,
+      scope,
       atr,
       rsi,
       recentMove,
-      impulseAtrMultiplier: parameters.impulseAtrMultiplier,
-      slAtrMultiplier: parameters.slAtrMultiplier,
-      tpAtrMultiplier: parameters.tpAtrMultiplier,
-      scope,
-    };
+    });
 
     if (
       recentMove < -impulseThreshold
@@ -435,11 +477,15 @@ module.exports = UsdjpyJpyMacroReversalV1;
 module.exports.USDJPY_JPY_MACRO_REVERSAL_V1 = USDJPY_JPY_MACRO_REVERSAL_V1;
 module.exports.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = USDJPY_JPY_MACRO_REVERSAL_V1_VERSION;
 module.exports.BACKTEST_ONLY_REASON = BACKTEST_ONLY_REASON;
+module.exports.PAPER_AND_BACKTEST_ONLY_REASON = PAPER_AND_BACKTEST_ONLY_REASON;
+module.exports.LIVE_BLOCKED_REASON = LIVE_BLOCKED_REASON;
+module.exports.CANDIDATE_PRESET = CANDIDATE_PRESET;
 module.exports.DEFAULT_PARAMETER_SCHEMA = DEFAULT_PARAMETER_SCHEMA;
 module.exports._internals = {
   calculateATR,
   calculatePriceRange,
   calculateRSI,
   calculateSMA,
+  buildSignalMetadata,
   parseUtcHours,
 };

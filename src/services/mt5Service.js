@@ -554,6 +554,16 @@ class MT5Service {
     return new Promise((resolve, reject) => {
       const bridgePath = path.resolve(process.cwd(), 'mt5_bridge.py');
       const pythonCmd = process.env.PYTHON_PATH || 'python';
+      let startupSettled = false;
+      let stderrOutput = '';
+      let startupTimer = null;
+
+      const settleStartup = (handler, value) => {
+        if (startupSettled) return;
+        startupSettled = true;
+        if (startupTimer) clearTimeout(startupTimer);
+        handler(value);
+      };
 
       this.process = spawn(pythonCmd, [bridgePath], {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -569,7 +579,14 @@ class MT5Service {
           // Handle ready signal
           if (response.id === 'ready') {
             this.ready = true;
-            resolve();
+            settleStartup(resolve);
+            return;
+          }
+
+          if (!this.ready && response.success === false) {
+            const error = this._createBridgeError('startup', response);
+            error.code = error.code || 'MT5_BRIDGE_STARTUP_FAILED';
+            settleStartup(reject, error);
             return;
           }
 
@@ -584,13 +601,15 @@ class MT5Service {
             }
           }
         } catch (e) {
-        console.error(`${this._logPrefix()} Bridge failed to parse response:`, line);
+          console.error(`${this._logPrefix()} Bridge failed to parse response:`, line);
         }
       });
 
       // Log stderr from Python bridge
       this.process.stderr.on('data', (data) => {
-        console.error(`${this._logPrefix()} Bridge`, data.toString().trim());
+        const text = data.toString().trim();
+        stderrOutput += text ? `${text}\n` : '';
+        console.error(`${this._logPrefix()} Bridge`, text);
       });
 
       this.process.on('error', (err) => {
@@ -598,16 +617,23 @@ class MT5Service {
         this.connected = false;
         this.ready = false;
         this.connecting = false;
-        if (!this.ready) {
-          reject(new Error(`Failed to start MT5 ${this.scope} bridge: ${err.message}`));
+        if (!this.ready && !startupSettled) {
+          settleStartup(reject, new Error(`Failed to start MT5 ${this.scope} bridge: ${err.message}`));
         }
       });
 
       this.process.on('exit', (code) => {
         console.log(`${this._logPrefix()} Bridge process exited with code ${code}`);
+        const wasReady = this.ready;
         this.connected = false;
         this.ready = false;
         this.connecting = false;
+
+        if (!wasReady && !startupSettled) {
+          const stderrMessage = stderrOutput.trim();
+          const suffix = stderrMessage ? ` ${stderrMessage}` : '';
+          settleStartup(reject, new Error(`MT5 ${this.scope} bridge exited before ready with code ${code}.${suffix}`));
+        }
 
         // Reject all pending requests
         for (const [id, pending] of this._pendingRequests) {
@@ -617,9 +643,9 @@ class MT5Service {
       });
 
       // Timeout for bridge startup
-      setTimeout(() => {
+      startupTimer = setTimeout(() => {
         if (!this.ready) {
-          reject(new Error(`MT5 ${this.scope} bridge startup timeout. Ensure Python and MetaTrader5 package are installed.`));
+          settleStartup(reject, new Error(`MT5 ${this.scope} bridge startup timeout. Ensure Python and MetaTrader5 package are installed.`));
         }
       }, 15000);
     });

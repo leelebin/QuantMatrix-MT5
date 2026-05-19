@@ -145,7 +145,7 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 is registered')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
-    expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only')).toEqual(expect.objectContaining({
+    expect(getCheck(audit, 'USDJPY paper scope enabled live blocked')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
     expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference six strategies')).toEqual(expect.objectContaining({
@@ -160,10 +160,10 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'USDJPY_JPY_MACRO_REVERSAL_V1 does not reference old backtestEngine')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
-    expect(getCheck(audit, 'USDJPY guardrails are backtest-only')).toEqual(expect.objectContaining({
+    expect(getCheck(audit, 'USDJPY guardrails are paper/backtest-only')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
-    expect(getCheck(audit, 'USDJPY paper/live still return NONE after guardrail changes')).toEqual(expect.objectContaining({
+    expect(getCheck(audit, 'USDJPY live remains blocked after guardrail changes')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
     expect(getCheck(audit, 'evaluation service does not call tradeExecutor')).toEqual(expect.objectContaining({
@@ -190,7 +190,7 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'preset comparison does not call six strategies')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
-    expect(getCheck(audit, 'USDJPY paper/live remains NONE for preset comparison')).toEqual(expect.objectContaining({
+    expect(getCheck(audit, 'USDJPY live remains blocked for preset comparison')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
     expect(getCheck(audit, 'candidate validation does not call tradeExecutor')).toEqual(expect.objectContaining({
@@ -297,5 +297,9 @@ describe('symbolCustomSafetyAuditService', () => {
     const audit = await service.runSymbolCustomPhase1SafetyAudit();
 
     expect(getCheck(audit, 'paper runtime marks source symbolCustom').status).toBe('PASS');
+    expect(getCheck(audit, 'paper runtime requires paperEnabled true').status).toBe('PASS');
+    expect(getCheck(audit, 'paper runtime rejects liveEnabled true').status).toBe('PASS');
+    expect(getCheck(audit, 'paper runtime allows only USDJPY paper logic').status).toBe('PASS');
+    expect(getCheck(audit, 'symbolCustom paper trades include metadata').status).toBe('PASS');
   });
 });

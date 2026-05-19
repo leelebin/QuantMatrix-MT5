@@ -65,6 +65,10 @@ describe('symbolCustomEngine', () => {
       status: 'NO_SIGNAL',
       reason: 'Placeholder SymbolCustom has no active trading logic',
       reasonCode: undefined,
+      sl: null,
+      tp: null,
+      stopLoss: null,
+      takeProfit: null,
       setupTimeframe: '15m',
       entryTimeframe: '5m',
       higherTimeframe: '1h',
@@ -75,6 +79,7 @@ describe('symbolCustomEngine', () => {
       beConfig: { enabled: false },
       entryConfig: { confirmation: 'stub' },
       exitConfig: { style: 'stub' },
+      metadata: {},
       timestamp,
     });
     expect(getCandlesFn).toHaveBeenCalledWith(expect.objectContaining({

@@ -1,74 +1,121 @@
+const bootProfiler = require('./utils/bootProfiler');
+bootProfiler.mark('boot:start');
+
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db');
+const path = require('path');
+const fs = require('fs');
+
+const connectDB = bootProfiler.measure('db:module-load', () => require('./config/db'));
 const { protect } = require('./middleware/auth');
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const tradingRoutes = require('./routes/tradingRoutes');
-const positionRoutes = require('./routes/positionRoutes');
-const tradeRoutes = require('./routes/tradeRoutes');
-const strategyRoutes = require('./routes/strategyRoutes');
-const strategyInstanceRoutes = require('./routes/strategyInstanceRoutes');
-const symbolPlaybookRoutes = require('./routes/symbolPlaybookRoutes');
-const symbolCustomRoutes = require('./routes/symbolCustomRoutes');
-const backtestRoutes = require('./routes/backtestRoutes');
-const optimizerRoutes = require('./routes/optimizerRoutes');
-const notificationRoutes = require('./routes/notificationRoutes');
-const paperTradingRoutes = require('./routes/paperTradingRoutes');
-const riskSettingsRoutes = require('./routes/riskSettingsRoutes');
-const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
-const maintenanceRoutes = require('./routes/maintenanceRoutes');
-const dataSyncRoutes = require('./routes/dataSyncRoutes');
-const Strategy = require('./models/Strategy');
-const StrategyInstance = require('./models/StrategyInstance');
-const websocketService = require('./services/websocketService');
-const notificationService = require('./services/notificationService');
-const fileLogger = require('./services/fileLogger');
-const remoteAccessService = require('./services/remoteAccessService');
-const strategyEngine = require('./services/strategyEngine');
-const economicCalendarService = require('./services/economicCalendarService');
-const resourceMonitorService = require('./services/resourceMonitorService');
-const dataSyncSchedulerService = require('./services/dataSyncSchedulerService');
-const symbolCustomPaperRuntimeService = require('./services/symbolCustomPaperRuntimeService');
+bootProfiler.measure('mt5:init', () => require('./services/mt5Service'));
+
+const {
+  authRoutes,
+  userRoutes,
+  tradingRoutes,
+  positionRoutes,
+  tradeRoutes,
+  strategyRoutes,
+  strategyInstanceRoutes,
+  symbolPlaybookRoutes,
+  symbolCustomRoutes,
+  backtestRoutes,
+  optimizerRoutes,
+  notificationRoutes,
+  paperTradingRoutes,
+  riskSettingsRoutes,
+  diagnosticsRoutes,
+  maintenanceRoutes,
+  dataSyncRoutes,
+  systemRoutes
+} = bootProfiler.measure('routes:load', () => ({
+  authRoutes: require('./routes/authRoutes'),
+  userRoutes: require('./routes/userRoutes'),
+  tradingRoutes: require('./routes/tradingRoutes'),
+  positionRoutes: require('./routes/positionRoutes'),
+  tradeRoutes: require('./routes/tradeRoutes'),
+  strategyRoutes: require('./routes/strategyRoutes'),
+  strategyInstanceRoutes: require('./routes/strategyInstanceRoutes'),
+  symbolPlaybookRoutes: require('./routes/symbolPlaybookRoutes'),
+  symbolCustomRoutes: require('./routes/symbolCustomRoutes'),
+  backtestRoutes: require('./routes/backtestRoutes'),
+  optimizerRoutes: require('./routes/optimizerRoutes'),
+  notificationRoutes: require('./routes/notificationRoutes'),
+  paperTradingRoutes: require('./routes/paperTradingRoutes'),
+  riskSettingsRoutes: require('./routes/riskSettingsRoutes'),
+  diagnosticsRoutes: require('./routes/diagnosticsRoutes'),
+  maintenanceRoutes: require('./routes/maintenanceRoutes'),
+  dataSyncRoutes: require('./routes/dataSyncRoutes'),
+  systemRoutes: require('./routes/systemRoutes')
+}));
+
+const {
+  Strategy,
+  StrategyInstance,
+  websocketService,
+  notificationService,
+  fileLogger,
+  remoteAccessService,
+  strategyEngine,
+  economicCalendarService,
+  resourceMonitorService,
+  dataSyncSchedulerService,
+  symbolCustomPaperRuntimeService,
+  symbolCustomPaperCandleProviderService
+} = bootProfiler.measure('runtime:load', () => ({
+  Strategy: require('./models/Strategy'),
+  StrategyInstance: require('./models/StrategyInstance'),
+  websocketService: require('./services/websocketService'),
+  notificationService: require('./services/notificationService'),
+  fileLogger: require('./services/fileLogger'),
+  remoteAccessService: require('./services/remoteAccessService'),
+  strategyEngine: require('./services/strategyEngine'),
+  economicCalendarService: require('./services/economicCalendarService'),
+  resourceMonitorService: require('./services/resourceMonitorService'),
+  dataSyncSchedulerService: require('./services/dataSyncSchedulerService'),
+  symbolCustomPaperRuntimeService: require('./services/symbolCustomPaperRuntimeService'),
+  symbolCustomPaperCandleProviderService: require('./services/symbolCustomPaperCandleProviderService')
+}));
 
 // Install persistent file logging (console.log/warn/error -> logs/system.log,
 // logs/error.log). Console output is preserved.
-fileLogger.install();
+bootProfiler.measure('logging:init', () => fileLogger.install());
 
 // Load env vars
-const path = require('path');
-const fs = require('fs');
-const envPath = path.resolve(process.cwd(), '.env');
-const envExamplePath = path.resolve(process.cwd(), '.env.example');
+bootProfiler.measure('env:load', () => {
+  const envPath = path.resolve(process.cwd(), '.env');
+  const envExamplePath = path.resolve(process.cwd(), '.env.example');
 
-if (!fs.existsSync(envPath)) {
-  console.warn('[WARNING] .env file not found.');
-  if (fs.existsSync(envExamplePath)) {
-    fs.copyFileSync(envExamplePath, envPath);
-    console.log('[INFO] Created .env from .env.example. Please edit it with your actual settings.');
-  } else {
-    console.warn('[WARNING] .env.example not found either. Using default values.');
+  if (!fs.existsSync(envPath)) {
+    console.warn('[WARNING] .env file not found.');
+    if (fs.existsSync(envExamplePath)) {
+      fs.copyFileSync(envExamplePath, envPath);
+      console.log('[INFO] Created .env from .env.example. Please edit it with your actual settings.');
+    } else {
+      console.warn('[WARNING] .env.example not found either. Using default values.');
+    }
   }
-}
 
-dotenv.config();
+  dotenv.config();
 
-// Set default JWT secrets if not provided (for first-time startup)
-if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secret-jwt-key-change-this') {
-  const crypto = require('crypto');
-  process.env.JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
-  console.warn('[WARNING] Using default/generated JWT_SECRET. Please set a proper one in .env file.');
-}
-if (!process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET === 'your-refresh-secret-key-change-this') {
-  const crypto = require('crypto');
-  process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(32).toString('hex');
-  console.warn('[WARNING] Using default/generated JWT_REFRESH_SECRET. Please set a proper one in .env file.');
-}
+  // Set default JWT secrets if not provided (for first-time startup)
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secret-jwt-key-change-this') {
+    const crypto = require('crypto');
+    process.env.JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+    console.warn('[WARNING] Using default/generated JWT_SECRET. Please set a proper one in .env file.');
+  }
+  if (!process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET === 'your-refresh-secret-key-change-this') {
+    const crypto = require('crypto');
+    process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(32).toString('hex');
+    console.warn('[WARNING] Using default/generated JWT_REFRESH_SECRET. Please set a proper one in .env file.');
+  }
+});
 
 // Initialize notification service
-notificationService.init();
+bootProfiler.measure('notification:init', () => notificationService.init());
 
 const app = express();
 const trustProxy = remoteAccessService.getTrustProxySetting();
@@ -95,11 +142,14 @@ app.use((req, res, next) => {
 });
 
 // Serve frontend static files
-const publicPath = path.resolve(process.cwd(), 'public');
-if (!fs.existsSync(publicPath)) {
-  fs.mkdirSync(publicPath, { recursive: true });
-}
-app.use(express.static(publicPath));
+const publicPath = bootProfiler.measure('static:init', () => {
+  const resolvedPublicPath = path.resolve(process.cwd(), 'public');
+  if (!fs.existsSync(resolvedPublicPath)) {
+    fs.mkdirSync(resolvedPublicPath, { recursive: true });
+  }
+  app.use(express.static(resolvedPublicPath));
+  return resolvedPublicPath;
+});
 
 // Rate limiting
 const authLimiter = rateLimit({
@@ -111,46 +161,49 @@ const authLimiter = rateLimit({
   },
 });
 
-// Routes
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/trading', tradingRoutes);
-app.use('/api/positions', positionRoutes);
-app.use('/api/trades', tradeRoutes);
-app.use('/api/strategies', strategyRoutes);
-app.use('/api/strategy-instances', strategyInstanceRoutes);
-app.use('/api/symbol-playbooks', symbolPlaybookRoutes);
-app.use('/api/symbol-customs', symbolCustomRoutes);
-app.use('/api/backtest', backtestRoutes);
-app.use('/api/optimizer', optimizerRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/paper-trading', paperTradingRoutes);
-app.use('/api/risk-settings', riskSettingsRoutes);
-app.use('/api/diagnostics', diagnosticsRoutes);
-app.use('/api/maintenance', maintenanceRoutes);
-app.use('/api/data-sync', dataSyncRoutes);
+bootProfiler.measure('routes:init', () => {
+  // Routes
+  app.use('/api/auth', authLimiter, authRoutes);
+  app.use('/api/users', userRoutes);
+  app.use('/api/trading', tradingRoutes);
+  app.use('/api/positions', positionRoutes);
+  app.use('/api/trades', tradeRoutes);
+  app.use('/api/strategies', strategyRoutes);
+  app.use('/api/strategy-instances', strategyInstanceRoutes);
+  app.use('/api/symbol-playbooks', symbolPlaybookRoutes);
+  app.use('/api/symbol-customs', symbolCustomRoutes);
+  app.use('/api/backtest', backtestRoutes);
+  app.use('/api/optimizer', optimizerRoutes);
+  app.use('/api/notifications', notificationRoutes);
+  app.use('/api/paper-trading', paperTradingRoutes);
+  app.use('/api/risk-settings', riskSettingsRoutes);
+  app.use('/api/diagnostics', diagnosticsRoutes);
+  app.use('/api/maintenance', maintenanceRoutes);
+  app.use('/api/data-sync', dataSyncRoutes);
+  app.use('/api/system', systemRoutes);
 
-// WebSocket status endpoint
-app.get('/api/ws/status', protect, (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      clients: websocketService.getClientCount(),
-      clientsInfo: websocketService.getClientsInfo(),
-    },
+  // WebSocket status endpoint
+  app.get('/api/ws/status', protect, (req, res) => {
+    res.json({
+      success: true,
+      data: {
+        clients: websocketService.getClientCount(),
+        clientsInfo: websocketService.getClientsInfo(),
+      },
+    });
   });
-});
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Server is running',
-    wsClients: websocketService.getClientCount(),
-    notifications: notificationService.getStatus(),
-    resources: {
-      memory: resourceMonitorService.getProcessMemory(),
-    },
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({
+      success: true,
+      message: 'Server is running',
+      wsClients: websocketService.getClientCount(),
+      notifications: notificationService.getStatus(),
+      resources: {
+        memory: resourceMonitorService.getProcessMemory(),
+      },
+    });
   });
 });
 
@@ -193,38 +246,48 @@ async function startServer() {
   }
 
   try {
-    await connectDB();
-    await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
-    await StrategyInstance.migrateFromLegacy();
-    await StrategyInstance.migrateScopedEnabledDefaults();
-    try {
-      await economicCalendarService.ensureCalendar();
-    } catch (e) {
-      console.warn('[EconCalendar] initial fetch failed:', e.message);
-    }
-    economicCalendarService.scheduleDaily();
+    await bootProfiler.measureAsync('db:init', async () => connectDB());
+    await bootProfiler.measureAsync('runtime:init', async () => {
+      await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
+      await StrategyInstance.migrateFromLegacy();
+      await StrategyInstance.migrateScopedEnabledDefaults();
+      try {
+        await economicCalendarService.ensureCalendar();
+      } catch (e) {
+        console.warn('[EconCalendar] initial fetch failed:', e.message);
+      }
+      economicCalendarService.scheduleDaily();
+    });
 
     server = app.listen(PORT, () => {
+      bootProfiler.mark('server:listening');
       console.log(`Server running on port ${PORT}`);
       console.log(`Dashboard: http://localhost:${PORT}`);
 
-      websocketService.init(server);
-      try {
-        dataSyncSchedulerService.start();
-      } catch (error) {
-        console.error(`[DataSync] Scheduler failed to start: ${error.message}`);
-      }
-
-      if (process.env.SYMBOL_CUSTOM_PAPER_ENABLED === 'true') {
+      bootProfiler.measure('websocket:init', () => websocketService.init(server));
+      bootProfiler.measure('dataSync:init', () => {
         try {
-          symbolCustomPaperRuntimeService.start();
-          console.log('[SymbolCustom] Paper runtime started');
+          dataSyncSchedulerService.start();
         } catch (error) {
-          console.error(`[SymbolCustom] Paper runtime failed to start: ${error.message}`);
+          console.error(`[DataSync] Scheduler failed to start: ${error.message}`);
         }
-      } else {
-        console.log('[SymbolCustom] Paper runtime disabled');
-      }
+      });
+
+      bootProfiler.measure('symbolCustom:init', () => {
+        if (process.env.SYMBOL_CUSTOM_PAPER_ENABLED === 'true') {
+          try {
+            symbolCustomPaperRuntimeService.start({
+              getCandlesFn: symbolCustomPaperCandleProviderService.getSymbolCustomPaperCandles,
+            });
+            console.log('[SymbolCustom] Paper runtime started');
+          } catch (error) {
+            console.error(`[SymbolCustom] Paper runtime failed to start: ${error.message}`);
+          }
+        } else {
+          console.log('[SymbolCustom] Paper runtime disabled');
+        }
+      });
+      bootProfiler.mark('boot:complete');
     });
 
     server.on('error', handleServerError);

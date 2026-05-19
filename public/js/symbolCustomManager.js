@@ -10,6 +10,18 @@
   const SYMBOL_CUSTOM_MT5_NOT_CONNECTED = 'SYMBOL_CUSTOM_MT5_NOT_CONNECTED';
   const SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE = 'MT5 is not connected. Please connect MT5 first before running historical SymbolCustom backtest.';
   const SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT = 'Go to Dashboard/Diagnostics and connect MT5, then retry.';
+  const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
+  const PAPER_TRIAL_CANDIDATE_PRESET = 'buy_session_conservative';
+  const PAPER_TRIAL_PARAMETERS = Object.freeze({
+    enableBuy: true,
+    enableSell: false,
+    allowedUtcHours: '23,0,1,7,8,9,10',
+    blockedUtcHours: '',
+    cooldownBarsAfterAnyExit: 6,
+    cooldownBarsAfterSL: 18,
+    maxDailyLosses: 3,
+    maxDailyTrades: 6,
+  });
 
   const JSON_FIELD_DEFAULTS = Object.freeze({
     parameterSchema: [],
@@ -36,6 +48,10 @@
 
   function normalizeString(value) {
     return String(value == null ? '' : value).trim();
+  }
+
+  function getLogicName(record = {}) {
+    return normalizeString(record.logicName || record.registryLogicName || record.symbolCustomName);
   }
 
   function parseJsonField(rawValue, fieldName, fallbackValue) {
@@ -108,6 +124,38 @@
   function buildSchemaSyncWarning(record = {}, logicParameterSchema = null, logicDefaultParameters = null) {
     if (!hasMissingLogicSchema(record, logicParameterSchema, logicDefaultParameters)) return '';
     return 'This SymbolCustom is missing parameters from its registered logic. Run Sync Parameters From Logic.';
+  }
+
+  function valuesEqual(left, right) {
+    if (typeof right === 'number') return Number(left) === right;
+    if (typeof right === 'boolean') return left === right;
+    return String(left == null ? '' : left) === String(right);
+  }
+
+  function hasPaperTrialCandidateParameters(record = {}) {
+    const params = record.parameters && typeof record.parameters === 'object' && !Array.isArray(record.parameters)
+      ? record.parameters
+      : {};
+    return Object.entries(PAPER_TRIAL_PARAMETERS).every(([key, value]) => valuesEqual(params[key], value));
+  }
+
+  function buildPaperReadiness(record = {}, runtimeStatus = {}) {
+    const logicName = getLogicName(record);
+    const isUsdjpyPaperLogic = logicName === USDJPY_JPY_MACRO_REVERSAL_V1;
+    const candidatePresetApplied = isUsdjpyPaperLogic && hasPaperTrialCandidateParameters(record);
+    return {
+      backtestValidated: candidatePresetApplied,
+      candidatePresetApplied,
+      candidatePreset: candidatePresetApplied ? PAPER_TRIAL_CANDIDATE_PRESET : '',
+      paperAllowedByLogic: isUsdjpyPaperLogic,
+      paperEnabled: record.paperEnabled === true,
+      envEnabled: runtimeStatus.enabled === true,
+      envLoaded: runtimeStatus.loaded === true
+        || (!Object.prototype.hasOwnProperty.call(runtimeStatus, 'loaded')
+          && Object.prototype.hasOwnProperty.call(runtimeStatus, 'enabled')),
+      liveEnabled: record.liveEnabled === true,
+      note: 'To start paper trial, manually enable paperEnabled and set SYMBOL_CUSTOM_PAPER_ENABLED=true. Live remains blocked.',
+    };
   }
 
   function buildSymbolCustomSymbolSummaries(records) {
@@ -323,6 +371,9 @@
     SYMBOL_CUSTOM_MT5_NOT_CONNECTED,
     SYMBOL_CUSTOM_MT5_NOT_CONNECTED_MESSAGE,
     SYMBOL_CUSTOM_MT5_NOT_CONNECTED_HINT,
+    USDJPY_JPY_MACRO_REVERSAL_V1,
+    PAPER_TRIAL_CANDIDATE_PRESET,
+    PAPER_TRIAL_PARAMETERS,
     JSON_FIELD_DEFAULTS,
     DEFAULT_PARAMETER_SCHEMA,
     parseJsonField,
@@ -335,6 +386,7 @@
     findMissingParameterKeys,
     hasMissingLogicSchema,
     buildSchemaSyncWarning,
+    buildPaperReadiness,
     buildSymbolCustomSymbolSummaries,
     flattenSymbolCustomReportRow,
     buildSymbolCustomReportCsv,

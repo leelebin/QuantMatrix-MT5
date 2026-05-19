@@ -10,6 +10,28 @@ const symbolCustomBacktestService = require('./symbolCustomBacktestService');
 const PHASE_1_LIVE_WARNING = 'Phase 1 does not support live execution';
 const SYMBOL_CUSTOM_PAPER_ENABLED_ENV = 'SYMBOL_CUSTOM_PAPER_ENABLED';
 const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
+const USDJPY_PAPER_CANDIDATE_PARAMETERS = Object.freeze({
+  lookbackBars: 36,
+  impulseAtrMultiplier: 1.2,
+  reversalConfirmBars: 2,
+  rsiPeriod: 14,
+  rsiOverbought: 68,
+  rsiOversold: 32,
+  atrPeriod: 14,
+  slAtrMultiplier: 1.2,
+  tpAtrMultiplier: 1.8,
+  maxBarsInTrade: 18,
+  minAtr: 0,
+  cooldownBars: 6,
+  enableBuy: true,
+  enableSell: false,
+  allowedUtcHours: '23,0,1,7,8,9,10',
+  blockedUtcHours: '',
+  cooldownBarsAfterAnyExit: 6,
+  cooldownBarsAfterSL: 18,
+  maxDailyLosses: 3,
+  maxDailyTrades: 6,
+});
 
 function buildCheck(name, status, message) {
   return { name, status, message };
@@ -43,6 +65,34 @@ function extractFunctionSource(source, functionName) {
     .filter((index) => index > start);
   const end = candidates.length ? Math.min(...candidates) : source.length;
   return source.slice(start, end);
+}
+
+function buildUsdjpyAuditCandles(count = 48) {
+  const candles = [];
+  let previousClose = 150;
+  for (let index = 0; index < count; index += 1) {
+    const time = new Date(Date.UTC(2026, 0, 1, 0, index * 5)).toISOString();
+    const close = previousClose - 0.16;
+    candles.push({
+      time,
+      open: previousClose,
+      high: Math.max(previousClose, close) + 0.08,
+      low: Math.min(previousClose, close) - 0.08,
+      close,
+      volume: 100 + index,
+    });
+    previousClose = close;
+  }
+
+  const last = candles[candles.length - 1];
+  candles[candles.length - 1] = {
+    ...last,
+    open: last.close - 0.08,
+    low: last.close - 0.2,
+    high: last.close + 0.08,
+    close: last.close,
+  };
+  return candles;
 }
 
 function auditLiveExecutionNotConnected() {
@@ -311,10 +361,8 @@ function auditSymbolCustomLiveRuntimeNotConnected() {
     const liveBlocked = /scope\s*===\s*'live'/.test(engineSource)
       && /BLOCKED/.test(engineSource)
       && /SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2/.test(engineSource);
-    const runtimeDoesNotStartLive = sourceExcludes(runtimeSource, [
-      /scope:\s*'live'/,
-      /liveEnabled/,
-    ]);
+    const runtimeDoesNotStartLive = !/scope:\s*'live'/.test(runtimeSource)
+      && runtimeSource.includes('SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED');
 
     return liveBlocked && runtimeDoesNotStartLive
       ? buildCheck('symbolCustom live runtime not connected', 'PASS', 'SymbolCustom live scope is blocked and the paper runtime has no live runtime path.')
@@ -348,14 +396,78 @@ function auditPaperRuntimeMarksSymbolCustomSource() {
     const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
     const marksSource = /source:\s*'symbolCustom'/.test(source)
       && /scope:\s*'paper'/.test(source)
-      && /setupType:\s*'symbol_custom'/.test(source)
-      && /strategyType:\s*'SymbolCustom'/.test(source);
+      && /setupType/.test(source)
+      && /'symbol_custom'/.test(source)
+      && /strategyType:\s*'SymbolCustom'/.test(source)
+      && /candidatePreset/.test(source)
+      && /parameterSnapshot/.test(source);
 
     return marksSource
       ? buildCheck('paper runtime marks source symbolCustom', 'PASS', 'SymbolCustom paper payloads include source, scope, setupType, and strategyType metadata.')
       : buildCheck('paper runtime marks source symbolCustom', 'FAIL', 'SymbolCustom paper payload metadata is incomplete.');
   } catch (error) {
     return buildCheck('paper runtime marks source symbolCustom', 'FAIL', `Unable to inspect paper payload metadata: ${error.message}`);
+  }
+}
+
+function auditPaperRuntimeRequiresPaperEnabled() {
+  try {
+    const engineSource = readProjectFile('src/services/symbolCustomEngine.js');
+    const runtimeSource = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const ok = /findAll\(\{\s*paperEnabled:\s*true\s*\}\)/.test(engineSource)
+      && /symbolCustom\.paperEnabled\s*!==\s*true/.test(runtimeSource);
+
+    return ok
+      ? buildCheck('paper runtime requires paperEnabled true', 'PASS', 'SymbolCustom paper runtime only scans records with paperEnabled=true.')
+      : buildCheck('paper runtime requires paperEnabled true', 'FAIL', 'SymbolCustom paper runtime may scan records without paperEnabled=true.');
+  } catch (error) {
+    return buildCheck('paper runtime requires paperEnabled true', 'FAIL', `Unable to inspect paperEnabled gate: ${error.message}`);
+  }
+}
+
+function auditPaperRuntimeRejectsLiveEnabled() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const ok = /symbolCustom\.liveEnabled\s*===\s*true/.test(source)
+      && source.includes('SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED');
+
+    return ok
+      ? buildCheck('paper runtime rejects liveEnabled true', 'PASS', 'SymbolCustom paper runtime rejects records with liveEnabled=true.')
+      : buildCheck('paper runtime rejects liveEnabled true', 'FAIL', 'SymbolCustom paper runtime may accept liveEnabled records.');
+  } catch (error) {
+    return buildCheck('paper runtime rejects liveEnabled true', 'FAIL', `Unable to inspect liveEnabled paper gate: ${error.message}`);
+  }
+}
+
+function auditPaperRuntimeAllowsOnlyUsdjpyLogic() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const ok = source.includes(USDJPY_JPY_MACRO_REVERSAL_V1)
+      && source.includes('SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED');
+
+    return ok
+      ? buildCheck('paper runtime allows only USDJPY paper logic', 'PASS', 'SymbolCustom paper runtime is restricted to USDJPY_JPY_MACRO_REVERSAL_V1.')
+      : buildCheck('paper runtime allows only USDJPY paper logic', 'FAIL', 'SymbolCustom paper runtime logic allow-list is not clear.');
+  } catch (error) {
+    return buildCheck('paper runtime allows only USDJPY paper logic', 'FAIL', `Unable to inspect paper logic allow-list: ${error.message}`);
+  }
+}
+
+function auditSymbolCustomPaperTradesIncludeMetadata() {
+  try {
+    const runtimeSource = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const paperSource = readProjectFile('src/services/paperTradingService.js');
+    const runtimePayloadOk = ['symbolCustomId', 'symbolCustomName', 'logicName', 'candidatePreset', 'setupType', 'parameterSnapshot']
+      .every((token) => runtimeSource.includes(token));
+    const paperRecordOk = /buildSymbolCustomPaperTradeFields/.test(paperSource)
+      && ['symbolCustomId', 'symbolCustomName', 'logicName', 'candidatePreset', 'parameterSnapshot', 'symbolCustomMetadata']
+        .every((token) => paperSource.includes(token));
+
+    return runtimePayloadOk && paperRecordOk
+      ? buildCheck('symbolCustom paper trades include metadata', 'PASS', 'SymbolCustom paper payloads and records include identifying metadata.')
+      : buildCheck('symbolCustom paper trades include metadata', 'FAIL', 'SymbolCustom paper metadata fields are incomplete.');
+  } catch (error) {
+    return buildCheck('symbolCustom paper trades include metadata', 'FAIL', `Unable to inspect SymbolCustom paper metadata: ${error.message}`);
   }
 }
 
@@ -464,23 +576,34 @@ function auditUsdjpyMacroReversalRegistered() {
   }
 }
 
-function auditUsdjpyMacroReversalBacktestOnly() {
+function auditUsdjpyPaperScopeEnabledLiveBlocked() {
   try {
     const { getSymbolCustomLogic } = require('../symbolCustom/registry');
     const logic = getSymbolCustomLogic(USDJPY_JPY_MACRO_REVERSAL_V1);
-    const paper = logic ? logic.analyze({ scope: 'paper', symbol: 'USDJPY' }) : null;
+    const candles = buildUsdjpyAuditCandles();
+    const paper = logic ? logic.analyze({
+      scope: 'paper',
+      symbol: 'USDJPY',
+      parameters: USDJPY_PAPER_CANDIDATE_PARAMETERS,
+      candles: { setup: candles, entry: candles, higher: candles },
+      currentBar: candles[candles.length - 1],
+      currentIndex: candles.length - 1,
+      currentUtcHour: 0,
+    }) : null;
     const live = logic ? logic.analyze({ scope: 'live', symbol: 'USDJPY' }) : null;
     const source = readProjectFile('src/symbolCustom/logics/UsdjpyJpyMacroReversalV1.js');
-    const backtestOnly = paper?.signal === 'NONE'
+    const paperEnabled = paper?.signal === 'BUY'
+      && paper?.metadata?.candidatePreset === 'buy_session_conservative'
       && live?.signal === 'NONE'
-      && source.includes("scope !== 'backtest'")
-      && source.includes('backtest-only in Phase 2D');
+      && live?.status === 'BLOCKED'
+      && source.includes("scope !== 'backtest' && scope !== 'paper'")
+      && source.includes('LIVE_BLOCKED_REASON');
 
-    return backtestOnly
-      ? buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only', 'PASS', 'USDJPY macro reversal returns NONE outside backtest scope.')
-      : buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only', 'FAIL', 'USDJPY macro reversal may emit tradable signals outside backtest scope.');
+    return paperEnabled
+      ? buildCheck('USDJPY paper scope enabled live blocked', 'PASS', 'USDJPY macro reversal can emit paper trial signals while live remains blocked.')
+      : buildCheck('USDJPY paper scope enabled live blocked', 'FAIL', 'USDJPY paper scope or live block behavior is not configured as expected.');
   } catch (error) {
-    return buildCheck('USDJPY_JPY_MACRO_REVERSAL_V1 is backtest-only', 'FAIL', `Unable to inspect USDJPY macro reversal scope gating: ${error.message}`);
+    return buildCheck('USDJPY paper scope enabled live blocked', 'FAIL', `Unable to inspect USDJPY macro reversal scope gating: ${error.message}`);
   }
 }
 
@@ -556,7 +679,7 @@ function auditUsdjpyMacroReversalDoesNotReferenceOldBacktestEngine() {
   }
 }
 
-function auditUsdjpyGuardrailsBacktestOnly() {
+function auditUsdjpyGuardrailsPaperBacktestOnly() {
   try {
     const source = readProjectFile('src/symbolCustom/logics/UsdjpyJpyMacroReversalV1.js');
     const hasGuardrails = source.includes('enableBuy')
@@ -565,38 +688,33 @@ function auditUsdjpyGuardrailsBacktestOnly() {
       && source.includes('maxDailyLosses');
     const guardedCallIndex = source.indexOf('const guardrailReason = shouldBlockByGuardrails');
     const gated = guardedCallIndex > -1
-      && source.indexOf("scope !== 'backtest'") < guardedCallIndex
-      && source.includes('backtest-only in Phase 2D');
+      && source.indexOf("scope !== 'backtest' && scope !== 'paper'") < guardedCallIndex
+      && source.includes("scope === 'live'");
 
     return hasGuardrails && gated
-      ? buildCheck('USDJPY guardrails are backtest-only', 'PASS', 'USDJPY guardrails are evaluated only after backtest scope gating.')
-      : buildCheck('USDJPY guardrails are backtest-only', 'FAIL', 'USDJPY guardrail scope gating is not clear.');
+      ? buildCheck('USDJPY guardrails are paper/backtest-only', 'PASS', 'USDJPY guardrails are evaluated only after paper/backtest scope gating.')
+      : buildCheck('USDJPY guardrails are paper/backtest-only', 'FAIL', 'USDJPY guardrail scope gating is not clear.');
   } catch (error) {
-    return buildCheck('USDJPY guardrails are backtest-only', 'FAIL', `Unable to inspect USDJPY guardrails: ${error.message}`);
+    return buildCheck('USDJPY guardrails are paper/backtest-only', 'FAIL', `Unable to inspect USDJPY guardrails: ${error.message}`);
   }
 }
 
-function auditUsdjpyPaperLiveStillNoneAfterGuardrails() {
+function auditUsdjpyLiveStillBlockedAfterGuardrails() {
   try {
     const { getSymbolCustomLogic } = require('../symbolCustom/registry');
     const logic = getSymbolCustomLogic(USDJPY_JPY_MACRO_REVERSAL_V1);
-    const paper = logic.analyze({
-      scope: 'paper',
-      parameters: { enableBuy: true, enableSell: true },
-      currentUtcHour: 0,
-    });
     const live = logic.analyze({
       scope: 'live',
       parameters: { enableBuy: true, enableSell: true },
       currentUtcHour: 0,
     });
-    const safe = paper?.signal === 'NONE' && live?.signal === 'NONE';
+    const safe = live?.signal === 'NONE' && live?.status === 'BLOCKED';
 
     return safe
-      ? buildCheck('USDJPY paper/live still return NONE after guardrail changes', 'PASS', 'USDJPY guardrails do not enable paper/live signals.')
-      : buildCheck('USDJPY paper/live still return NONE after guardrail changes', 'FAIL', 'USDJPY emitted a tradable paper/live signal.');
+      ? buildCheck('USDJPY live remains blocked after guardrail changes', 'PASS', 'USDJPY guardrails do not enable live signals.')
+      : buildCheck('USDJPY live remains blocked after guardrail changes', 'FAIL', 'USDJPY emitted a tradable live signal.');
   } catch (error) {
-    return buildCheck('USDJPY paper/live still return NONE after guardrail changes', 'FAIL', `Unable to test USDJPY paper/live scope: ${error.message}`);
+    return buildCheck('USDJPY live remains blocked after guardrail changes', 'FAIL', `Unable to test USDJPY live scope: ${error.message}`);
   }
 }
 
@@ -746,7 +864,7 @@ function auditPresetComparisonDoesNotCallSixStrategies() {
   }
 }
 
-function auditUsdjpyPaperLiveRemainNoneForPresetComparison() {
+function auditUsdjpyLiveRemainsBlockedForPresetComparison() {
   try {
     const { getSymbolCustomLogic } = require('../symbolCustom/registry');
     const logic = getSymbolCustomLogic(USDJPY_JPY_MACRO_REVERSAL_V1);
@@ -759,15 +877,14 @@ function auditUsdjpyPaperLiveRemainNoneForPresetComparison() {
       maxDailyLosses: 3,
       maxDailyTrades: 6,
     };
-    const paper = logic.analyze({ scope: 'paper', parameters, currentUtcHour: 0 });
     const live = logic.analyze({ scope: 'live', parameters, currentUtcHour: 0 });
-    const safe = paper?.signal === 'NONE' && live?.signal === 'NONE';
+    const safe = live?.signal === 'NONE' && live?.status === 'BLOCKED';
 
     return safe
-      ? buildCheck('USDJPY paper/live remains NONE for preset comparison', 'PASS', 'Guardrail presets do not enable USDJPY paper/live signals.')
-      : buildCheck('USDJPY paper/live remains NONE for preset comparison', 'FAIL', 'USDJPY emitted a tradable paper/live signal under preset parameters.');
+      ? buildCheck('USDJPY live remains blocked for preset comparison', 'PASS', 'Guardrail presets do not enable USDJPY live signals.')
+      : buildCheck('USDJPY live remains blocked for preset comparison', 'FAIL', 'USDJPY emitted a tradable live signal under preset parameters.');
   } catch (error) {
-    return buildCheck('USDJPY paper/live remains NONE for preset comparison', 'FAIL', `Unable to test USDJPY preset paper/live safety: ${error.message}`);
+    return buildCheck('USDJPY live remains blocked for preset comparison', 'FAIL', `Unable to test USDJPY preset live safety: ${error.message}`);
   }
 }
 
@@ -1023,6 +1140,10 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditSymbolCustomLiveRuntimeNotConnected());
   checks.push(auditPaperRuntimeNeverCallsTradeExecutor());
   checks.push(auditPaperRuntimeMarksSymbolCustomSource());
+  checks.push(auditPaperRuntimeRequiresPaperEnabled());
+  checks.push(auditPaperRuntimeRejectsLiveEnabled());
+  checks.push(auditPaperRuntimeAllowsOnlyUsdjpyLogic());
+  checks.push(auditSymbolCustomPaperTradesIncludeMetadata());
   checks.push(auditPaperRuntimeRequiresEnvForSchedulerStart());
   checks.push(auditScanOnceRespectsEnvGateUnlessForced());
   checks.push(auditPaperRuntimeDoesNotCallPrivatePaperExecution());
@@ -1030,13 +1151,13 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditMissingCandleProviderDetected());
   checks.push(auditBacktestScopeAllowedLiveBlocked());
   checks.push(auditUsdjpyMacroReversalRegistered());
-  checks.push(auditUsdjpyMacroReversalBacktestOnly());
+  checks.push(auditUsdjpyPaperScopeEnabledLiveBlocked());
   checks.push(auditUsdjpyMacroReversalDoesNotReferenceSixStrategies());
   checks.push(auditUsdjpyMacroReversalDoesNotReferenceTradeExecutor());
   checks.push(auditUsdjpyMacroReversalDoesNotReferenceRiskManager());
   checks.push(auditUsdjpyMacroReversalDoesNotReferenceOldBacktestEngine());
-  checks.push(auditUsdjpyGuardrailsBacktestOnly());
-  checks.push(auditUsdjpyPaperLiveStillNoneAfterGuardrails());
+  checks.push(auditUsdjpyGuardrailsPaperBacktestOnly());
+  checks.push(auditUsdjpyLiveStillBlockedAfterGuardrails());
   checks.push(auditEvaluationServiceDoesNotCallTradeExecutor());
   checks.push(auditEvaluationServiceDoesNotCallRiskManager());
   checks.push(auditEvaluationServiceDoesNotCallOldBacktestEngine());
@@ -1045,7 +1166,7 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditPresetComparisonDoesNotCallPaperTradingService());
   checks.push(auditPresetComparisonDoesNotCallOldBacktestEngine());
   checks.push(auditPresetComparisonDoesNotCallSixStrategies());
-  checks.push(auditUsdjpyPaperLiveRemainNoneForPresetComparison());
+  checks.push(auditUsdjpyLiveRemainsBlockedForPresetComparison());
   checks.push(auditCandidateValidationDoesNotCallTradeExecutor());
   checks.push(auditCandidateValidationDoesNotCallRiskManager());
   checks.push(auditCandidateValidationDoesNotCallPaperTradingService());

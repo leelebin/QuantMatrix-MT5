@@ -24,6 +24,9 @@ const strategyController = require('../src/controllers/strategyController');
 const Strategy = require('../src/models/Strategy');
 const RiskProfile = require('../src/models/RiskProfile');
 const StrategyInstance = require('../src/models/StrategyInstance');
+const originalAllowLegacyAssignmentWrite = process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE;
+const legacyDeprecatedMessage = 'This endpoint is deprecated. Use strategy runtime matrix / strategy instances instead.';
+const legacyWarning = 'Legacy assignment write used. This may affect live and paper assignment universe.';
 
 function createRes() {
   return {
@@ -41,8 +44,12 @@ function createRes() {
 }
 
 describe('strategy controller breakeven support', () => {
+  let warnSpy;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE;
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     StrategyInstance.findByStrategyName.mockResolvedValue([]);
     StrategyInstance.upsert.mockResolvedValue({});
     RiskProfile.getActive.mockResolvedValue({
@@ -59,6 +66,15 @@ describe('strategy controller breakeven support', () => {
         },
       },
     });
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    if (originalAllowLegacyAssignmentWrite === undefined) {
+      delete process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE;
+    } else {
+      process.env.ALLOW_LEGACY_ASSIGNMENT_WRITE = originalAllowLegacyAssignmentWrite;
+    }
   });
 
   test('getStrategies returns effective breakeven merged from active profile and strategy override', async () => {
@@ -189,7 +205,35 @@ describe('strategy controller breakeven support', () => {
     expect(res.payload.message).toContain('/api/strategy-instances/:strategyName/:symbol');
   });
 
-  test('updateStrategy still supports symbol assignment changes and seeds instances', async () => {
+  test('updateStrategy rejects legacy symbol assignment writes by default', async () => {
+    Strategy.findById.mockResolvedValue({
+      _id: 'strat-1',
+      name: 'TrendFollowing',
+      displayName: 'Trend Following',
+      enabled: true,
+      symbols: ['EURUSD'],
+      parameters: {},
+      tradeManagement: null,
+    });
+
+    const updateRes = createRes();
+    await strategyController.updateStrategy({
+      params: { id: 'strat-1' },
+      body: { symbols: ['EURUSD', 'GBPUSD'] },
+    }, updateRes);
+
+    expect(updateRes.statusCode).toBe(409);
+    expect(updateRes.payload).toEqual({
+      success: false,
+      message: legacyDeprecatedMessage,
+      deprecated: true,
+    });
+    expect(Strategy.update).not.toHaveBeenCalled();
+    expect(StrategyInstance.upsert).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  test('updateStrategy allows confirmed legacy symbol assignment writes and seeds instances', async () => {
     Strategy.findById.mockResolvedValue({
       _id: 'strat-1',
       name: 'TrendFollowing',
@@ -212,16 +256,25 @@ describe('strategy controller breakeven support', () => {
     const updateRes = createRes();
     await strategyController.updateStrategy({
       params: { id: 'strat-1' },
-      body: { symbols: ['EURUSD', 'GBPUSD'] },
+      body: {
+        symbols: ['EURUSD', 'GBPUSD'],
+        confirmLegacyAssignmentUpdate: true,
+      },
     }, updateRes);
 
     expect(updateRes.statusCode).toBe(200);
+    expect(updateRes.payload).toEqual(expect.objectContaining({
+      success: true,
+      deprecated: true,
+      warning: legacyWarning,
+    }));
     expect(Strategy.update).toHaveBeenCalledWith('strat-1', {
       symbols: ['EURUSD', 'GBPUSD'],
     });
     expect(StrategyInstance.upsert).toHaveBeenCalledTimes(2);
     expect(StrategyInstance.upsert).toHaveBeenCalledWith('TrendFollowing', 'EURUSD', {});
     expect(StrategyInstance.upsert).toHaveBeenCalledWith('TrendFollowing', 'GBPUSD', {});
+    expect(warnSpy).toHaveBeenCalledWith(legacyWarning);
   });
 
   test('toggleStrategy rejects legacy global toggles in favor of assignment instances', async () => {

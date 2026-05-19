@@ -17,7 +17,7 @@ const { buildClosedTradeSnapshot } = require('../utils/mt5Reconciliation');
 const { buildPositionExportSnapshot } = require('../utils/tradeDataCapture');
 const auditService = require('./auditService');
 const { getStrategyInstance } = require('./strategyInstanceService');
-const { getInstrument } = require('../config/instruments');
+const { getInstrument, INSTRUMENT_CATEGORIES } = require('../config/instruments');
 const RiskProfile = require('../models/RiskProfile');
 const indicatorService = require('./indicatorService');
 const strategyEngine = require('./strategyEngine');
@@ -33,6 +33,99 @@ const {
 
 const BASE_MONITOR_TICK_MS = 15 * 1000;
 const JUST_OPENED_WINDOW_MS = 5 * 60 * 1000;
+const MARKET_STOP_STALE_TICK_MS = 30 * 60 * 1000;
+const MARKET_STOP_UNTRADEABLE_MODES = new Set(['DISABLED', 'CLOSEONLY']);
+
+function isCryptoSymbol(symbol) {
+  const instrument = getInstrument(symbol);
+  if (instrument?.category === (INSTRUMENT_CATEGORIES?.CRYPTO || 'crypto')) {
+    return true;
+  }
+
+  const normalized = String(symbol || '').toUpperCase();
+  return /^(BTC|ETH|LTC|XRP|BCH|SOL|ADA|DOGE).*(USD|USDT)/.test(normalized);
+}
+
+function toEpochMs(value) {
+  if (value == null) return null;
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value > 1e12 ? value : value * 1000;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getPriceTickEpochMs(priceData = {}) {
+  const candidates = [
+    priceData.timeMsc,
+    priceData.time_msc,
+    priceData.tick?.timeMsc,
+    priceData.tick?.time_msc,
+    priceData.time,
+    priceData.tick?.time,
+  ];
+
+  for (const candidate of candidates) {
+    const timestamp = toEpochMs(candidate);
+    if (timestamp) return timestamp;
+  }
+  return null;
+}
+
+function getTradeModeName(source = {}) {
+  return String(
+    source.tradeModeName
+    || source.symbolInfo?.tradeModeName
+    || source.info?.tradeModeName
+    || source.tick?.tradeModeName
+    || ''
+  ).toUpperCase();
+}
+
+function getMarketStopReasonFromError(err) {
+  const retcodeName = String(
+    err?.retcodeName
+    || err?.codeName
+    || err?.details?.retcodeName
+    || err?.details?.codeName
+    || ''
+  ).toUpperCase();
+  const numericCode = Number(
+    err?.retcode
+    ?? err?.code
+    ?? err?.details?.retcode
+    ?? err?.details?.code
+  );
+  const message = String(err?.message || err?.error || '').toLowerCase();
+
+  if (retcodeName.includes('MARKET_CLOSED') || numericCode === 10018 || message.includes('market closed')) {
+    return 'MARKET_CLOSED';
+  }
+  if (retcodeName.includes('TRADE_DISABLED') || numericCode === 10017 || message.includes('trade disabled')) {
+    return 'TRADE_DISABLED';
+  }
+  return null;
+}
+
+function valuesEqualForSnapshot(left, right) {
+  if (left == null && right == null) return true;
+
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return Math.abs(leftNumber - rightNumber) <= 1e-10;
+  }
+
+  return left === right;
+}
 
 class PositionMonitor {
   constructor() {
@@ -57,6 +150,7 @@ class PositionMonitor {
       lightDuePositions: [],
       heavyDuePositions: [],
       fastModePositions: [],
+      marketStoppedPositions: [],
       lastScanAt: null,
       lastForcedSyncAt: null,
     };
@@ -94,6 +188,14 @@ class PositionMonitor {
     return false;
   }
 
+  _isMarketStoppedPosition(position) {
+    return position?.marketStop?.active === true;
+  }
+
+  _hasSnapshotChanges(position, patch) {
+    return Object.entries(patch).some(([key, value]) => !valuesEqualForSnapshot(position?.[key], value));
+  }
+
   _isPositionProtected(position, instrument) {
     if (!instrument) return false;
 
@@ -118,6 +220,150 @@ class PositionMonitor {
     return currentSl >= threshold;
   }
 
+  async _resolveMarketStopState(position, mt5Position, now = new Date()) {
+    const symbol = position?.symbol || mt5Position?.symbol;
+    if (!symbol) {
+      return { active: false, reason: 'NO_SYMBOL' };
+    }
+
+    const crypto = isCryptoSymbol(symbol);
+
+    try {
+      const priceData = await mt5Service.getPrice(symbol);
+      const tradeModeName = getTradeModeName(priceData);
+      if (MARKET_STOP_UNTRADEABLE_MODES.has(tradeModeName)) {
+        return {
+          active: true,
+          reason: `TRADE_MODE_${tradeModeName}`,
+          details: { symbol, tradeModeName, crypto },
+        };
+      }
+
+      const side = String(position?.type || '').toUpperCase();
+      const quote = side === 'SELL' ? Number(priceData.ask) : Number(priceData.bid);
+      const fallbackQuote = Number(mt5Position?.currentPrice ?? position?.currentPrice);
+      if (!crypto && !Number.isFinite(quote) && !Number.isFinite(fallbackQuote)) {
+        return {
+          active: true,
+          reason: 'PRICE_UNAVAILABLE',
+          details: { symbol, crypto },
+        };
+      }
+
+      const tickEpochMs = getPriceTickEpochMs(priceData);
+      if (!crypto && tickEpochMs) {
+        const tickAgeMs = now.getTime() - tickEpochMs;
+        if (tickAgeMs > MARKET_STOP_STALE_TICK_MS) {
+          return {
+            active: true,
+            reason: 'STALE_TICK',
+            details: {
+              symbol,
+              crypto,
+              tickTime: new Date(tickEpochMs).toISOString(),
+              tickAgeSeconds: Math.round(tickAgeMs / 1000),
+            },
+          };
+        }
+      }
+
+      return { active: false, reason: 'MARKET_OPEN', details: { symbol, crypto } };
+    } catch (err) {
+      const explicitReason = getMarketStopReasonFromError(err);
+      if (explicitReason) {
+        return {
+          active: true,
+          reason: explicitReason,
+          details: {
+            symbol,
+            crypto,
+            message: err.message,
+          },
+        };
+      }
+
+      if (!crypto) {
+        return {
+          active: true,
+          reason: 'PRICE_UNAVAILABLE',
+          details: {
+            symbol,
+            crypto,
+            message: err.message,
+          },
+        };
+      }
+
+      return {
+        active: false,
+        reason: 'CRYPTO_PRICE_UNAVAILABLE_IGNORED',
+        details: {
+          symbol,
+          crypto,
+          message: err.message,
+        },
+      };
+    }
+  }
+
+  async _applyMarketStopState(position, marketState, now = new Date()) {
+    const existing = position?.marketStop || null;
+    const active = marketState?.active === true;
+    const existingActive = existing?.active === true;
+    const nowDate = now instanceof Date ? now : new Date(now);
+
+    if (active) {
+      const nextMarketStop = {
+        active: true,
+        startedAt: existingActive && existing?.startedAt ? existing.startedAt : nowDate,
+        endedAt: null,
+        reason: marketState.reason || 'MARKET_STOP',
+        detectedAt: existingActive && existing?.detectedAt ? existing.detectedAt : nowDate,
+        updatedAt: nowDate,
+        details: marketState.details || null,
+      };
+
+      const reasonChanged = existingActive && existing?.reason !== nextMarketStop.reason;
+      if (existingActive && !reasonChanged) {
+        return { active: true, changed: false, position };
+      }
+
+      await positionsDb.update(
+        { _id: position._id },
+        { $set: { marketStop: nextMarketStop } }
+      );
+
+      return {
+        active: true,
+        changed: true,
+        position: { ...position, marketStop: nextMarketStop },
+      };
+    }
+
+    if (existingActive) {
+      const nextMarketStop = {
+        ...existing,
+        active: false,
+        endedAt: nowDate,
+        resolvedAt: nowDate,
+        resolvedReason: marketState?.reason || 'MARKET_OPEN',
+      };
+
+      await positionsDb.update(
+        { _id: position._id },
+        { $set: { marketStop: nextMarketStop } }
+      );
+
+      return {
+        active: false,
+        changed: true,
+        position: { ...position, marketStop: nextMarketStop },
+      };
+    }
+
+    return { active: false, changed: false, position };
+  }
+
   async _buildPositionContexts(positions, now, forcedSyncReason = null) {
     const contexts = [];
     const strategyInstanceCache = new Map();
@@ -139,6 +385,27 @@ class PositionMonitor {
       const key = this._getPositionKey(position);
       const instrument = getInstrument(position.symbol);
       const categoryContext = resolveCategoryContext(position.symbol, instrument?.category, { warnSource: 'position_monitor' });
+
+      if (this._isMarketStoppedPosition(position)) {
+        const cadenceProfile = getPositionCadenceProfile(categoryContext.category, 'normal');
+        contexts.push({
+          key,
+          position,
+          category: categoryContext.category,
+          rawCategory: categoryContext.rawCategory,
+          categoryFallback: categoryContext.categoryFallback,
+          state: 'market_stopped',
+          blackoutEvent: null,
+          marketStop: position.marketStop,
+          lightCadenceMs: cadenceProfile.lightCadenceMs,
+          heavyCadenceMs: cadenceProfile.heavyCadenceMs,
+          dueLight: false,
+          dueHeavy: false,
+          scanReason: 'market_stopped',
+        });
+        continue;
+      }
+
       const strategyInstance = await getCachedStrategyInstance(position);
       const newsConfig = strategyInstance?.newsBlackout || null;
 
@@ -200,6 +467,7 @@ class PositionMonitor {
     const lightDuePositions = [];
     const heavyDuePositions = [];
     const fastModePositions = [];
+    const marketStoppedPositions = [];
     const lightCadenceMs = contexts.length > 0
       ? Math.min(...contexts.map((context) => context.lightCadenceMs))
       : 0;
@@ -250,6 +518,14 @@ class PositionMonitor {
           blackoutEvent: context.blackoutEvent || null,
         });
       }
+
+      if (context.state === 'market_stopped') {
+        marketStoppedPositions.push({
+          ...basePayload,
+          scanReason: 'market_stopped',
+          marketStop: context.marketStop || context.position.marketStop || null,
+        });
+      }
     }
 
     return {
@@ -261,6 +537,7 @@ class PositionMonitor {
       lightDuePositions,
       heavyDuePositions,
       fastModePositions,
+      marketStoppedPositions,
       lastScanAt: toIsoOrNull(now),
       lastForcedSyncAt: forcedSyncReason ? toIsoOrNull(now) : this.lastStatus.lastForcedSyncAt || null,
     };
@@ -404,6 +681,10 @@ class PositionMonitor {
 
     for (const position of positions) {
       try {
+        if (this._isMarketStoppedPosition(position)) {
+          continue;
+        }
+
         const ctx = contextByKey.get(this._getPositionKey(position));
         if (!ctx) continue;
 
@@ -509,6 +790,15 @@ class PositionMonitor {
       return [];
     }
 
+    const effectivePositions = positions.filter((position) => !this._isMarketStoppedPosition(position));
+    if (effectivePositions.length === 0) {
+      return [];
+    }
+    const effectiveKeys = new Set(effectivePositions.map((position) => this._getPositionKey(position)));
+    const effectiveContexts = Array.isArray(contexts)
+      ? contexts.filter((context) => effectiveKeys.has(context.key) && !this._isMarketStoppedPosition(context.position))
+      : [];
+
     const hooks = trailingStopService.createPositionManagementHooks({
       getCandlesFn: scanMode === 'heavy'
         ? async (symbol, timeframe) => mt5Service.getCandles(symbol, timeframe, null, 251)
@@ -536,9 +826,9 @@ class PositionMonitor {
       },
     });
 
-    const metadataByPosition = this._buildScanMetadataMap(contexts, scanMode, now);
+    const metadataByPosition = this._buildScanMetadataMap(effectiveContexts, scanMode, now);
     const updates = await trailingStopService.processPositions(
-      positions,
+      effectivePositions,
       async (symbol) => mt5Service.getPrice(symbol),
       async (positionId, newSl, newTp) => mt5Service.modifyPosition(positionId, newSl, newTp),
       hooks,
@@ -549,14 +839,14 @@ class PositionMonitor {
       }
     );
 
-    await this._runTradeManagementEvaluation(positions, contexts, scanMode, now);
+    await this._runTradeManagementEvaluation(effectivePositions, effectiveContexts, scanMode, now);
 
     if (updates.length === 0) {
       return [];
     }
 
     const positionsByMt5Id = new Map(
-      positions
+      effectivePositions
         .filter((position) => position.mt5PositionId != null)
         .map((position) => [String(position.mt5PositionId), position])
     );
@@ -665,7 +955,7 @@ class PositionMonitor {
     this.pendingSyncReason = null;
 
     try {
-      const syncedPositions = await this.syncPositions({ broadcast: false });
+      const syncedPositions = await this.syncPositions({ broadcast: false, now });
       const positions = Array.isArray(syncedPositions) ? syncedPositions : [];
       const positionsChanged = this._didPositionsChange(positions);
       if (positionsChanged && !forcedSyncReason) {
@@ -713,7 +1003,7 @@ class PositionMonitor {
   }
 
   async syncPositions(options = {}) {
-    const { broadcast = true } = options;
+    const { broadcast = true, now = new Date() } = options;
     if (!mt5Service.isConnected()) {
       return await positionsDb.find({});
     }
@@ -733,14 +1023,26 @@ class PositionMonitor {
         (lp) => String(lp.mt5PositionId) === String(mt5Pos.id)
       );
       if (localPos) {
-        await positionsDb.update({ _id: localPos._id }, {
-          $set: {
-            currentSl: mt5Pos.stopLoss || localPos.currentSl,
-            currentTp: mt5Pos.takeProfit || localPos.currentTp,
-            currentPrice: mt5Pos.currentPrice,
-            unrealizedPl: mt5Pos.unrealizedProfit || mt5Pos.profit || 0,
-          },
-        });
+        const marketState = await this._resolveMarketStopState(localPos, mt5Pos, now);
+        const marketStopResult = await this._applyMarketStopState(localPos, marketState, now);
+        if (marketStopResult.active) {
+          continue;
+        }
+
+        const effectiveLocalPos = marketStopResult.position || localPos;
+        const snapshotPatch = {
+          currentSl: mt5Pos.stopLoss || effectiveLocalPos.currentSl,
+          currentTp: mt5Pos.takeProfit || effectiveLocalPos.currentTp,
+          currentPrice: mt5Pos.currentPrice ?? effectiveLocalPos.currentPrice ?? null,
+          unrealizedPl: mt5Pos.unrealizedProfit ?? mt5Pos.profit ?? 0,
+        };
+
+        if (this._hasSnapshotChanges(effectiveLocalPos, snapshotPatch)) {
+          await positionsDb.update(
+            { _id: effectiveLocalPos._id },
+            { $set: snapshotPatch }
+          );
+        }
       }
     }
 

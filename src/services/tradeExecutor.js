@@ -27,6 +27,22 @@ const {
 const auditService = require('./auditService');
 const strategyDailyStopService = require('./strategyDailyStopService');
 
+function buildSignalPlaybookTradeFields(signal = {}) {
+  const playbook = signal.playbook && typeof signal.playbook === 'object' && !Array.isArray(signal.playbook)
+    ? signal.playbook
+    : null;
+
+  return {
+    setupType: signal.setupType || null,
+    playbookRole: playbook?.role || null,
+    preferredEntryStyle: playbook?.preferredEntryStyle || null,
+    beStyle: playbook?.beStyle || null,
+    riskWeight: playbook?.riskWeight ?? null,
+    liveBias: playbook?.liveBias || null,
+    symbolPlaybookSnapshot: playbook || null,
+  };
+}
+
 class TradeExecutor {
   async _recordAudit(stage, status, signal, extra = {}) {
     const audit = await ExecutionAudit.create({
@@ -203,6 +219,7 @@ class TradeExecutor {
         plannedRiskAmount: riskCheck.plannedRiskAmount,
       });
       const openCapture = buildOpenTradeCapture(signal, managedPositionState);
+      const playbookTradeFields = buildSignalPlaybookTradeFields(signal);
       const spreadAtEntry = Number.isFinite(Number(priceData.ask)) && Number.isFinite(Number(priceData.bid))
         ? Math.abs(Number(priceData.ask) - Number(priceData.bid))
         : null;
@@ -229,6 +246,7 @@ class TradeExecutor {
         atrAtEntry,
         ...managedPositionState,
         ...openCapture,
+        ...playbookTradeFields,
         requestedEntryPrice: quotedEntryPrice,
         spreadAtEntry,
         slippageEstimate,
@@ -266,6 +284,7 @@ class TradeExecutor {
         entryTimeframe: managedPositionState.entryTimeframe,
         setupCandleTime: managedPositionState.setupCandleTime,
         entryCandleTime: managedPositionState.entryCandleTime,
+        ...playbookTradeFields,
         initialSl: openCapture.initialSl,
         initialTp: openCapture.initialTp,
         finalSl: openCapture.finalSl,
@@ -324,6 +343,19 @@ class TradeExecutor {
       await tradeNotificationService.notifyTradeOpened({
         scope: 'live',
         ...position,
+        symbol: position.symbol || signal.symbol,
+        type: position.type || signal.signal,
+        side: position.type || signal.signal,
+        entryPrice: position.entryPrice ?? executedEntryPrice,
+        stopLoss: position.currentSl ?? signal.sl,
+        takeProfit: position.currentTp ?? signal.tp,
+        volume: position.lotSize ?? riskCheck.lotSize,
+        strategy: position.strategy || signal.strategy,
+        confidence: position.confidence ?? signal.confidence,
+        reason: position.reason || openCapture.signalReason || signal.reason,
+        openedAt: position.openedAt || openedAt,
+        mt5OrderId: position.mt5OrderId || result.orderId || null,
+        mt5PositionId: position.mt5PositionId || mt5PositionId,
       });
       await positionMonitor.syncNow('forced_sync');
 

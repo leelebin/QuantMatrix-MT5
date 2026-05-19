@@ -172,6 +172,20 @@ function buildOpenTradeCapture(signal = {}, managedPositionState = {}) {
   };
 }
 
+function buildSignalPlaybookTradeFields(signal = {}) {
+  const playbook = isPlainObject(signal.playbook) ? signal.playbook : null;
+
+  return {
+    setupType: signal.setupType || null,
+    playbookRole: playbook?.role || null,
+    preferredEntryStyle: playbook?.preferredEntryStyle || null,
+    beStyle: playbook?.beStyle || null,
+    riskWeight: playbook?.riskWeight ?? null,
+    liveBias: playbook?.liveBias || null,
+    symbolPlaybookSnapshot: playbook || null,
+  };
+}
+
 function buildPositionExportSnapshot(position = {}) {
   return {
     positionDbId: position._id || position.positionDbId || null,
@@ -217,6 +231,7 @@ module.exports = {
   buildEntryIndicatorsSnapshot,
   buildOpenTradeCapture,
   buildPositionExportSnapshot,
+  buildSignalPlaybookTradeFields,
   buildSignalReasonFields,
   compactSnapshotObject,
   compactSnapshotValue,

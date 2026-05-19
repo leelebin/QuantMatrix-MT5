@@ -11,10 +11,31 @@ class TradeNotificationService {
     this.pendingOpenEvents = new Map();
   }
 
-  async notifyTradeOpened(event = {}) {
+  async notifyTradeOpened(event = {}, options = {}) {
     const normalized = normalizeOpenEvent(event);
     if (!normalized) {
       return { queued: false, reason: 'invalid_open_event' };
+    }
+
+    if (shouldSendOpenImmediately(options)) {
+      const message = buildOpenMessage({ [normalized.scope]: normalized });
+      if (!message) return { queued: false, sent: false, reason: 'empty_open_message' };
+
+      const result = await this.sendTelegram(message, {
+        type: 'trade_open',
+        scope: normalized.scope,
+        priority: normalized.scope === 'live' ? 9 : 7,
+        title: 'Trade open',
+        dedupeKey: buildDedupeKey(normalized),
+        immediate: true,
+      });
+      return {
+        queued: result.queued > 0,
+        sent: result.configured === true && result.queued > 0,
+        immediate: true,
+        message,
+        delivery: result,
+      };
     }
 
     const key = findMergeKey(this.pendingOpenEvents, normalized) || buildDedupeKey(normalized);
@@ -42,12 +63,6 @@ class TradeNotificationService {
     }
 
     pending.events[normalized.scope] = normalized;
-
-    if (isOpenImmediateEnabled()) {
-      const message = await this.flushOpenEvent(key);
-      return { queued: true, key, flushed: Boolean(message) };
-    }
-
     return { queued: true, key };
   }
 
@@ -149,15 +164,33 @@ class TradeNotificationService {
 }
 
 function getMergeWindowMs() {
-  const configured = Number(process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS);
-  if (Number.isFinite(configured) && configured > 0) {
-    return configured;
+  const raw = process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS;
+  if (raw !== undefined && raw !== '') {
+    const configured = Number(raw);
+    if (Number.isFinite(configured) && configured >= 0) {
+      return configured;
+    }
   }
   return DEFAULT_MERGE_WINDOW_MS;
 }
 
-function isOpenImmediateEnabled() {
-  return parseBoolean(process.env.TELEGRAM_TRADE_OPEN_IMMEDIATE, false);
+function shouldSendOpenImmediately(options = {}) {
+  if (options.immediate === true) return true;
+  if (options.immediate === false) return false;
+
+  if (parseBoolean(process.env.TELEGRAM_TRADE_OPEN_IMMEDIATE, false)) {
+    return true;
+  }
+
+  const raw = process.env.TELEGRAM_TRADE_OPEN_MERGE_WINDOW_MS;
+  if (raw !== undefined && raw !== '') {
+    const configured = Number(raw);
+    if (Number.isFinite(configured) && configured === 0) {
+      return true;
+    }
+  }
+
+  return getMergeWindowMs() === 0;
 }
 
 function normalizeOpenEvent(event) {

@@ -270,7 +270,20 @@ async function persistOpenedDebugTrade(signal, volume, order, brokerComment) {
   await tradeNotificationService.notifyTradeOpened({
     scope: 'live',
     ...position,
-  });
+    symbol: position.symbol || signal.symbol,
+    type: position.type || signal.signal,
+    side: position.type || signal.signal,
+    entryPrice: position.entryPrice ?? executedEntryPrice,
+    stopLoss: position.currentSl ?? signal.sl,
+    takeProfit: position.currentTp ?? signal.tp,
+    volume: position.lotSize ?? volume,
+    strategy: position.strategy || signal.strategy,
+    confidence: position.confidence ?? signal.confidence,
+    reason: position.reason || openCapture.signalReason || signal.reason,
+    openedAt: position.openedAt || openedAt,
+    mt5OrderId: position.mt5OrderId || order.orderId || null,
+    mt5PositionId: position.mt5PositionId || mt5PositionId,
+  }, { immediate: true });
 
   return position;
 }

@@ -1,0 +1,513 @@
+const express = require('express');
+const request = require('supertest');
+
+jest.mock('../src/middleware/auth', () => ({
+  protect: (_req, _res, next) => next(),
+}));
+
+jest.mock('../src/services/symbolCustomService', () => ({
+  listSymbolCustoms: jest.fn(),
+  getSymbolCustom: jest.fn(),
+  getSymbolCustomsBySymbol: jest.fn(),
+  createSymbolCustom: jest.fn(),
+  updateSymbolCustom: jest.fn(),
+  deleteSymbolCustom: jest.fn(),
+  duplicateSymbolCustom: jest.fn(),
+  syncSymbolCustomSchemaFromLogic: jest.fn(),
+  applySymbolCustomCandidateParameters: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomSeedService', () => ({
+  ensureDefaultSymbolCustomDrafts: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomBacktestService', () => ({
+  runSymbolCustomBacktest: jest.fn(),
+  listSymbolCustomBacktests: jest.fn(),
+  getSymbolCustomBacktest: jest.fn(),
+  deleteSymbolCustomBacktest: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomEngine', () => ({
+  analyzeSymbolCustom: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomReportService', () => ({
+  buildSymbolCustomReport: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomOptimizerService', () => ({
+  createOptimizerRun: jest.fn(),
+  listOptimizerRuns: jest.fn(),
+  getOptimizerRun: jest.fn(),
+  deleteOptimizerRun: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomSafetyAuditService', () => ({
+  runSymbolCustomPhase1SafetyAudit: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomPaperRuntimeService', () => ({
+  getStatus: jest.fn(),
+  runPaperScan: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomPresetComparisonService', () => ({
+  runSymbolCustomPresetComparison: jest.fn(),
+}));
+
+jest.mock('../src/services/symbolCustomCandidateValidationService', () => ({
+  runSymbolCustomCandidateValidation: jest.fn(),
+}));
+
+const symbolCustomService = require('../src/services/symbolCustomService');
+const symbolCustomSeedService = require('../src/services/symbolCustomSeedService');
+const symbolCustomBacktestService = require('../src/services/symbolCustomBacktestService');
+const symbolCustomEngine = require('../src/services/symbolCustomEngine');
+const symbolCustomReportService = require('../src/services/symbolCustomReportService');
+const symbolCustomOptimizerService = require('../src/services/symbolCustomOptimizerService');
+const symbolCustomSafetyAuditService = require('../src/services/symbolCustomSafetyAuditService');
+const symbolCustomPaperRuntimeService = require('../src/services/symbolCustomPaperRuntimeService');
+const symbolCustomPresetComparisonService = require('../src/services/symbolCustomPresetComparisonService');
+const symbolCustomCandidateValidationService = require('../src/services/symbolCustomCandidateValidationService');
+const symbolCustomRoutes = require('../src/routes/symbolCustomRoutes');
+
+function createApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/symbol-customs', symbolCustomRoutes);
+  return app;
+}
+
+describe('symbolCustomRoutes', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('POST /api/symbol-customs/defaults/ensure ensures backend default drafts', async () => {
+    symbolCustomSeedService.ensureDefaultSymbolCustomDrafts.mockResolvedValue({
+      createdCount: 3,
+      existingCount: 0,
+      totalCount: 3,
+      created: [
+        { symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1' },
+        { symbolCustomName: 'GBPJPY_VOLATILITY_BREAKOUT_V1' },
+        { symbolCustomName: 'AUDUSD_SESSION_PULLBACK_V1' },
+      ],
+      existing: [],
+      symbolCustoms: [],
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/defaults/ensure')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomSeedService.ensureDefaultSymbolCustomDrafts).toHaveBeenCalledTimes(1);
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      createdCount: 3,
+      existingCount: 0,
+      totalCount: 3,
+    }));
+  });
+
+  test('GET /api/symbol-customs/report is mounted before generic id route', async () => {
+    symbolCustomReportService.buildSymbolCustomReport.mockResolvedValue({
+      success: true,
+      count: 1,
+      symbolCustoms: [{ symbol: 'USDJPY', recommendation: 'PLACEHOLDER_ONLY' }],
+    });
+
+    const response = await request(createApp())
+      .get('/api/symbol-customs/report?symbol=USDJPY&status=draft');
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomReportService.buildSymbolCustomReport).toHaveBeenCalledWith({
+      symbol: 'USDJPY',
+      status: 'draft',
+    });
+    expect(response.body).toEqual({
+      success: true,
+      count: 1,
+      symbolCustoms: [{ symbol: 'USDJPY', recommendation: 'PLACEHOLDER_ONLY' }],
+    });
+  });
+
+  test('GET /api/symbol-customs/safety-audit is mounted before generic id route', async () => {
+    symbolCustomSafetyAuditService.runSymbolCustomPhase1SafetyAudit.mockResolvedValue({
+      success: true,
+      checks: [{ name: 'live execution not connected', status: 'PASS', message: 'ok' }],
+      summary: { pass: 1, warn: 0, fail: 0 },
+    });
+
+    const response = await request(createApp()).get('/api/symbol-customs/safety-audit');
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomSafetyAuditService.runSymbolCustomPhase1SafetyAudit).toHaveBeenCalledTimes(1);
+    expect(response.body).toEqual({
+      success: true,
+      checks: [{ name: 'live execution not connected', status: 'PASS', message: 'ok' }],
+      summary: { pass: 1, warn: 0, fail: 0 },
+    });
+  });
+
+  test('SymbolCustom paper runtime routes are mounted before generic id route', async () => {
+    symbolCustomPaperRuntimeService.getStatus.mockReturnValue({
+      enabled: false,
+      running: false,
+      lastScanAt: null,
+      lastError: null,
+      activePaperCustoms: 0,
+      lastSignalCount: 0,
+      lastSignals: [],
+    });
+    symbolCustomPaperRuntimeService.runPaperScan.mockResolvedValue({
+      success: true,
+      enabled: false,
+      forced: false,
+      scanned: 1,
+      activePaperCustoms: 1,
+      signalCount: 1,
+      submitted: 0,
+      ignored: 1,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
+    });
+
+    const app = createApp();
+    const statusResponse = await request(app).get('/api/symbol-customs/paper-runtime/status');
+    const scanResponse = await request(app).post('/api/symbol-customs/paper-runtime/scan-once').send({});
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusResponse.body).toEqual({
+      success: true,
+      enabled: false,
+      running: false,
+      lastScanAt: null,
+      lastError: null,
+      activePaperCustoms: 0,
+      lastSignalCount: 0,
+      lastSignals: [],
+    });
+    expect(scanResponse.status).toBe(200);
+    expect(scanResponse.body).toEqual({
+      success: true,
+      enabled: false,
+      forced: false,
+      scanned: 1,
+      activePaperCustoms: 1,
+      signalCount: 1,
+      submitted: 0,
+      ignored: 1,
+      signals: [{ source: 'symbolCustom', scope: 'paper', signal: 'NONE' }],
+      results: [],
+    });
+    expect(symbolCustomPaperRuntimeService.runPaperScan).toHaveBeenCalledWith({ force: false });
+  });
+
+  test('SymbolCustom backtest routes are mounted before generic id route', async () => {
+    symbolCustomBacktestService.listSymbolCustomBacktests.mockResolvedValue([
+      { _id: 'bt-1', status: 'stub' },
+    ]);
+    symbolCustomBacktestService.getSymbolCustomBacktest.mockResolvedValue({
+      _id: 'bt-1',
+      status: 'stub',
+    });
+    symbolCustomBacktestService.runSymbolCustomBacktest.mockResolvedValue({
+      _id: 'bt-2',
+      status: 'stub',
+    });
+    symbolCustomBacktestService.deleteSymbolCustomBacktest.mockResolvedValue({
+      _id: 'bt-1',
+      status: 'stub',
+    });
+
+    const app = createApp();
+    const listResponse = await request(app).get('/api/symbol-customs/backtests');
+    const getResponse = await request(app).get('/api/symbol-customs/backtests/bt-1');
+    const runResponse = await request(app)
+      .post('/api/symbol-customs/sc-1/backtest')
+      .send({ startDate: '2026-01-01', endDate: '2026-05-01', initialBalance: 500 });
+    const deleteResponse = await request(app).delete('/api/symbol-customs/backtests/bt-1');
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body).toEqual({
+      success: true,
+      count: 1,
+      backtests: [{ _id: 'bt-1', status: 'stub' }],
+    });
+    expect(getResponse.body).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
+    expect(runResponse.body).toEqual(expect.objectContaining({
+      success: true,
+      backtest: { _id: 'bt-2', status: 'stub' },
+      evaluation: expect.objectContaining({
+        recommendation: expect.any(Object),
+      }),
+    }));
+    expect(deleteResponse.body).toEqual({ success: true, backtest: { _id: 'bt-1', status: 'stub' } });
+    expect(symbolCustomBacktestService.runSymbolCustomBacktest).toHaveBeenCalledWith({
+      symbolCustomId: 'sc-1',
+      startDate: '2026-01-01',
+      endDate: '2026-05-01',
+      initialBalance: 500,
+    });
+  });
+
+  test('POST /api/symbol-customs/:id/preset-comparison works before generic id route', async () => {
+    symbolCustomPresetComparisonService.runSymbolCustomPresetComparison.mockResolvedValue({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      startDate: '2025-03-15',
+      endDate: '2026-05-15',
+      results: [{ presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' }],
+      bestPreset: { presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' },
+      conclusion: { recommendation: 'REJECT_NO_EDGE', message: 'No edge' },
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-usdjpy/preset-comparison')
+      .send({
+        startDate: '2025-03-15',
+        endDate: '2026-05-15',
+        initialBalance: 500,
+        costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      });
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomPresetComparisonService.runSymbolCustomPresetComparison).toHaveBeenCalledWith({
+      symbolCustomId: 'sc-usdjpy',
+      startDate: '2025-03-15',
+      endDate: '2026-05-15',
+      initialBalance: 500,
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+    });
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      results: [{ presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' }],
+      bestPreset: { presetName: 'baseline', score: -5, recommendation: 'REJECT_NO_EDGE' },
+    }));
+  });
+
+  test('POST /api/symbol-customs/:id/preset-comparison returns clear invalid SymbolCustom error', async () => {
+    const error = new Error('SymbolCustom not found');
+    error.statusCode = 404;
+    error.reasonCode = 'SYMBOL_CUSTOM_NOT_FOUND';
+    symbolCustomPresetComparisonService.runSymbolCustomPresetComparison.mockRejectedValueOnce(error);
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/missing/preset-comparison')
+      .send({});
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual(expect.objectContaining({
+      success: false,
+      message: 'SymbolCustom not found',
+      reasonCode: 'SYMBOL_CUSTOM_NOT_FOUND',
+    }));
+  });
+
+  test('POST /api/symbol-customs/:id/preset-comparison returns placeholder reason', async () => {
+    symbolCustomPresetComparisonService.runSymbolCustomPresetComparison.mockResolvedValue({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_PLACEHOLDER',
+      logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      results: [],
+      bestPreset: null,
+      conclusion: {
+        recommendation: 'REJECT_NO_EDGE',
+        reasonCode: 'PLACEHOLDER_SYMBOL_CUSTOM',
+        message: 'Placeholder SymbolCustom has no active backtest logic for preset comparison.',
+      },
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-placeholder/preset-comparison')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      results: [],
+      bestPreset: null,
+      conclusion: expect.objectContaining({
+        reasonCode: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      }),
+    }));
+  });
+
+  test('POST /api/symbol-customs/:id/candidate-validation works before generic id route', async () => {
+    symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation.mockResolvedValue({
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+      candidateName: 'buy_session_conservative',
+      candidateParameters: { enableBuy: true, enableSell: false },
+      windows: [{ label: '2M', trades: 80, validationStatus: 'PASS', reason: 'PASS_RULES_MET' }],
+      passCount: 1,
+      failCount: 0,
+      overallRecommendation: 'VALIDATION_PASSED',
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-usdjpy/candidate-validation')
+      .send({
+        candidateName: 'buy_session_conservative',
+        candidateParameters: { enableBuy: true, enableSell: false },
+        windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+        initialBalance: 500,
+        costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+      });
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomCandidateValidationService.runSymbolCustomCandidateValidation).toHaveBeenCalledWith({
+      symbolCustomId: 'sc-usdjpy',
+      candidateName: 'buy_session_conservative',
+      candidateParameters: { enableBuy: true, enableSell: false },
+      windows: [{ label: '2M', startDate: '2026-03-15', endDate: '2026-05-15' }],
+      initialBalance: 500,
+      costModel: { spread: 0, commissionPerTrade: 0, slippage: 0 },
+    });
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      candidateName: 'buy_session_conservative',
+      windows: [{ label: '2M', trades: 80, validationStatus: 'PASS', reason: 'PASS_RULES_MET' }],
+      overallRecommendation: 'VALIDATION_PASSED',
+    }));
+  });
+
+  test('POST /api/symbol-customs/:id/analyze-paper-once returns a read-only paper signal', async () => {
+    symbolCustomService.getSymbolCustom.mockResolvedValue({
+      _id: 'sc-1',
+      symbol: 'USDJPY',
+      symbolCustomName: 'USDJPY_PAPER',
+    });
+    symbolCustomEngine.analyzeSymbolCustom.mockResolvedValue({
+      scope: 'paper',
+      source: 'symbolCustom',
+      symbolCustomId: 'sc-1',
+      signal: 'NONE',
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-1/analyze-paper-once')
+      .send({ candles: { entry: [] } });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      success: true,
+      signal: {
+        scope: 'paper',
+        source: 'symbolCustom',
+        symbolCustomId: 'sc-1',
+        signal: 'NONE',
+      },
+    });
+    expect(symbolCustomEngine.analyzeSymbolCustom).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: 'sc-1' }),
+      null,
+      expect.objectContaining({ scope: 'paper', candles: { entry: [] } })
+    );
+    expect(symbolCustomService.updateSymbolCustom).not.toHaveBeenCalled();
+  });
+
+  test('POST /api/symbol-customs/:id/sync-schema works before generic id route', async () => {
+    symbolCustomService.syncSymbolCustomSchemaFromLogic.mockResolvedValue({
+      symbolCustom: { _id: 'sc-1', parameters: { enableBuy: true } },
+      addedParameters: ['enableBuy'],
+      keptParameters: [],
+      addedSchemaFields: ['enableBuy'],
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-1/sync-schema')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomService.syncSymbolCustomSchemaFromLogic).toHaveBeenCalledWith('sc-1', {});
+    expect(response.body).toEqual({
+      success: true,
+      symbolCustom: { _id: 'sc-1', parameters: { enableBuy: true } },
+      addedParameters: ['enableBuy'],
+      keptParameters: [],
+      addedSchemaFields: ['enableBuy'],
+    });
+  });
+
+  test('POST /api/symbol-customs/:id/apply-candidate works before generic id route', async () => {
+    symbolCustomService.applySymbolCustomCandidateParameters.mockResolvedValue({
+      symbolCustom: {
+        _id: 'sc-1',
+        parameters: { enableBuy: true, enableSell: false },
+      },
+      candidateName: 'buy_session_conservative',
+      appliedParameters: { enableBuy: true, enableSell: false },
+      changedParameters: { enableSell: { before: true, after: false } },
+      unchangedParameters: ['enableBuy'],
+      beforeParameters: { enableBuy: true, enableSell: true },
+      afterParameters: { enableBuy: true, enableSell: false },
+    });
+
+    const response = await request(createApp())
+      .post('/api/symbol-customs/sc-1/apply-candidate')
+      .send({
+        candidateName: 'buy_session_conservative',
+        parameters: { enableBuy: true, enableSell: false },
+      });
+
+    expect(response.status).toBe(200);
+    expect(symbolCustomService.applySymbolCustomCandidateParameters).toHaveBeenCalledWith(
+      'sc-1',
+      'buy_session_conservative',
+      { enableBuy: true, enableSell: false }
+    );
+    expect(response.body).toEqual(expect.objectContaining({
+      success: true,
+      candidateName: 'buy_session_conservative',
+      changedParameters: { enableSell: { before: true, after: false } },
+      afterParameters: { enableBuy: true, enableSell: false },
+    }));
+  });
+
+  test('SymbolCustom optimizer stub routes are mounted before generic id route', async () => {
+    symbolCustomOptimizerService.listOptimizerRuns.mockResolvedValue([
+      { _id: 'opt-1', status: 'stub' },
+    ]);
+    symbolCustomOptimizerService.getOptimizerRun.mockResolvedValue({
+      _id: 'opt-1',
+      status: 'stub',
+    });
+    symbolCustomOptimizerService.createOptimizerRun.mockResolvedValue({
+      _id: 'opt-2',
+      status: 'stub',
+    });
+    symbolCustomOptimizerService.deleteOptimizerRun.mockResolvedValue({
+      _id: 'opt-1',
+      status: 'stub',
+    });
+
+    const app = createApp();
+    const listResponse = await request(app).get('/api/symbol-customs/optimizer/runs');
+    const getResponse = await request(app).get('/api/symbol-customs/optimizer/runs/opt-1');
+    const runResponse = await request(app)
+      .post('/api/symbol-customs/sc-1/optimizer/run')
+      .send({ maxCombinations: 10, parameterOverrides: { lookbackBars: { max: 60 } } });
+    const deleteResponse = await request(app).delete('/api/symbol-customs/optimizer/runs/opt-1');
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body).toEqual({
+      success: true,
+      count: 1,
+      optimizerRuns: [{ _id: 'opt-1', status: 'stub' }],
+    });
+    expect(getResponse.body).toEqual({ success: true, optimizerRun: { _id: 'opt-1', status: 'stub' } });
+    expect(runResponse.body).toEqual({ success: true, optimizerRun: { _id: 'opt-2', status: 'stub' } });
+    expect(deleteResponse.body).toEqual({ success: true, optimizerRun: { _id: 'opt-1', status: 'stub' } });
+    expect(symbolCustomOptimizerService.createOptimizerRun).toHaveBeenCalledWith({
+      symbolCustomId: 'sc-1',
+      maxCombinations: 10,
+      parameterOverrides: { lookbackBars: { max: 60 } },
+    });
+  });
+});

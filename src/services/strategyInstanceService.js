@@ -149,7 +149,9 @@ function buildEffectiveInstancePayload({
 }
 
 async function getStrategyInstance(symbol, strategyName, options = {}) {
-  await ensureRuntimeDefaultsMigrated();
+  if (options.skipRuntimeDefaultsMigration !== true) {
+    await ensureRuntimeDefaultsMigrated();
+  }
 
   const strategy = await Strategy.findByName(strategyName);
   if (!strategy) {

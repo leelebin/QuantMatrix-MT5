@@ -147,6 +147,7 @@ notificationDeliveriesDb.ensureIndex({ fieldName: 'scope' });
 notificationDeliveriesDb.ensureIndex({ fieldName: 'priority' });
 notificationDeliveriesDb.ensureIndex({ fieldName: 'dedupeKey' });
 notificationDeliveriesDb.ensureIndex({ fieldName: 'createdAt' });
+notificationDeliveriesDb.ensureIndex({ fieldName: 'nextAttemptAt' });
 notificationDeliveriesDb.ensureIndex({ fieldName: 'sentAt' });
 symbolCustomsDb.ensureIndex({ fieldName: 'symbol' });
 symbolCustomsDb.ensureIndex({ fieldName: 'symbolCustomName' });

@@ -23,7 +23,7 @@ const ALERT_TYPES = Object.freeze({
 const DEFAULT_INTERVAL_MINUTES = 5;
 const DEFAULT_SUMMARY_INTERVAL_MINUTES = 360;
 const DEFAULT_MEMORY_ALERT_MB = 800;
-const DEFAULT_NO_SCAN_MINUTES = 30;
+const DEFAULT_NO_SCAN_MINUTES = 0;
 
 class RuntimeHeartbeatService {
   constructor() {
@@ -339,7 +339,7 @@ function evaluateSnapshot(snapshot) {
       snapshot.memory
     ));
   }
-  if (snapshot.decisionAudit.recentCount === 0 && getNoScanMinutes() > 0) {
+  if (shouldAlertNoScanActivity() && snapshot.decisionAudit.recentCount === 0 && getNoScanMinutes() > 0) {
     alerts.push(createAlert(
       ALERT_TYPES.NO_SIGNAL_SCAN_ACTIVITY,
       'No signal scan activity',
@@ -488,7 +488,7 @@ async function getSymbolCustomRuntimeStatus(service) {
 
 async function getDecisionAuditActivity(now) {
   const minutes = getNoScanMinutes();
-  if (minutes <= 0) {
+  if (minutes <= 0 || !shouldAlertNoScanActivity()) {
     return { enabled: false, recentCount: null, windowMinutes: minutes };
   }
 
@@ -534,6 +534,13 @@ function isSymbolCustomRuntimeExpected(status) {
   return Boolean(status?.available && (status.running || status.enabled));
 }
 
+function shouldAlertNoScanActivity() {
+  return parseBoolean(process.env.TRADING_ENABLED, false)
+    || parseBoolean(process.env.PAPER_TRADING_ENABLED, false)
+    || parseBoolean(process.env.SYMBOL_CUSTOM_PAPER_ENABLED, false)
+    || parseBoolean(process.env.TELEGRAM_ALERT_NO_SCAN_ALWAYS, false);
+}
+
 function loadOptionalSymbolCustomRuntime() {
   const servicePath = path.join(__dirname, 'symbolCustomPaperRuntimeService.js');
   if (!fs.existsSync(servicePath)) return null;
@@ -557,12 +564,19 @@ function getMemoryAlertMb() {
 }
 
 function getNoScanMinutes() {
-  return getPositiveNumber(process.env.TELEGRAM_ALERT_NO_SCAN_MINUTES, DEFAULT_NO_SCAN_MINUTES);
+  return getNonNegativeNumber(process.env.TELEGRAM_ALERT_NO_SCAN_MINUTES, DEFAULT_NO_SCAN_MINUTES);
 }
 
 function getPositiveNumber(value, fallback) {
   const numeric = Number(value);
   if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  return fallback;
+}
+
+function getNonNegativeNumber(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric >= 0) return numeric;
   return fallback;
 }
 
@@ -642,4 +656,5 @@ module.exports._internals = {
   buildSummaryMessage,
   evaluateSnapshot,
   parseBoolean,
+  shouldAlertNoScanActivity,
 };

@@ -267,6 +267,17 @@ function buildTelegramMessage(publicUrl, basicAuth, urlChanged, previousUrl) {
   return message;
 }
 
+function buildRemoteAccessDedupeKey(publicUrl, basicAuth) {
+  const username = String(basicAuth?.username || '').trim();
+  const password = String(basicAuth?.password || '');
+  const authHash = crypto
+    .createHash('sha256')
+    .update(`${username}:${password}`)
+    .digest('hex')
+    .slice(0, 16);
+  return `remote_access:${publicUrl}:${username}:${authHash}`;
+}
+
 async function maybeNotifyTelegram(publicUrl, basicAuth, previousState) {
   if (!remoteAccessService.isRemoteUrlNotifyEnabled()) {
     return false;
@@ -294,7 +305,7 @@ async function maybeNotifyTelegram(publicUrl, basicAuth, previousState) {
     priority: 8,
     title: 'Remote access URL',
     message: buildTelegramMessage(publicUrl, basicAuth, publicUrl !== previousUrl, previousUrl),
-    dedupeKey: `remote_access:${publicUrl}:${basicAuth.username}:${basicAuth.password}`,
+    dedupeKey: buildRemoteAccessDedupeKey(publicUrl, basicAuth),
     immediate: true,
   });
 
@@ -364,7 +375,15 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('[RemoteAccess] Failed to start remote access:', err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('[RemoteAccess] Failed to start remote access:', err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildRemoteAccessDedupeKey,
+  buildTelegramMessage,
+  maybeNotifyTelegram,
+};

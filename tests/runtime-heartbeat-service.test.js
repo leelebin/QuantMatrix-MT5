@@ -56,7 +56,10 @@ describe('runtimeHeartbeatService', () => {
     process.env.TELEGRAM_HEARTBEAT_SUMMARY_INTERVAL_MINUTES = '360';
     process.env.TELEGRAM_ALERT_MEMORY_MB = '800';
     process.env.TELEGRAM_ALERT_NO_SCAN_MINUTES = '30';
+    process.env.TRADING_ENABLED = 'false';
     process.env.PAPER_TRADING_ENABLED = 'false';
+    process.env.SYMBOL_CUSTOM_PAPER_ENABLED = 'false';
+    delete process.env.TELEGRAM_ALERT_NO_SCAN_ALWAYS;
     runtimeHeartbeatService._resetForTests();
     runtimeHeartbeatService._setNowForTests('2026-05-19T00:00:00.000Z');
     runtimeHeartbeatService._setMemoryUsageForTests({ rss: 120 * MB, heapUsed: 40 * MB });
@@ -82,7 +85,10 @@ describe('runtimeHeartbeatService', () => {
     delete process.env.TELEGRAM_HEARTBEAT_SUMMARY_INTERVAL_MINUTES;
     delete process.env.TELEGRAM_ALERT_MEMORY_MB;
     delete process.env.TELEGRAM_ALERT_NO_SCAN_MINUTES;
+    delete process.env.TRADING_ENABLED;
     delete process.env.PAPER_TRADING_ENABLED;
+    delete process.env.SYMBOL_CUSTOM_PAPER_ENABLED;
+    delete process.env.TELEGRAM_ALERT_NO_SCAN_ALWAYS;
   });
 
   test('normal heartbeat sends no spam', async () => {
@@ -160,7 +166,23 @@ describe('runtimeHeartbeatService', () => {
     }));
   });
 
-  test('no decision audit activity alert', async () => {
+  test('no decision audit activity does not alert when all runtimes are disabled', async () => {
+    DecisionAudit.count.mockResolvedValue(0);
+
+    await runtimeHeartbeatService.checkNow();
+
+    expect(notificationHubService.enqueueTelegram).not.toHaveBeenCalled();
+    expect(DecisionAudit.count).not.toHaveBeenCalled();
+  });
+
+  test('no decision audit activity alerts when paper trading is enabled', async () => {
+    process.env.PAPER_TRADING_ENABLED = 'true';
+    paperTradingService.getStatus.mockResolvedValue({
+      enabled: true,
+      running: true,
+      connected: true,
+      positionMonitor: { lastScanAt: '2026-05-19T00:00:00.000Z' },
+    });
     DecisionAudit.count.mockResolvedValue(0);
 
     await runtimeHeartbeatService.checkNow();

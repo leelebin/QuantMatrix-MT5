@@ -10,6 +10,8 @@ class NotificationHubService {
   constructor() {
     this.sending = false;
     this.timer = null;
+    this.timerDueAt = 0;
+    this.started = false;
     this.backoffUntil = 0;
     this.lastSentAt = 0;
   }
@@ -84,6 +86,25 @@ class NotificationHubService {
     };
   }
 
+  async start() {
+    this.started = true;
+    await this._scheduleDueOrFutureDrain();
+    return await this.getStatus();
+  }
+
+  stop() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+    }
+    this.timer = null;
+    this.timerDueAt = 0;
+    this.started = false;
+    return {
+      sending: this.sending,
+      started: this.started,
+    };
+  }
+
   async sendNow(message) {
     if (!this.isTelegramConfigured()) {
       throw new Error('Telegram not configured');
@@ -120,6 +141,7 @@ class NotificationHubService {
       telegramConfigured: this.isTelegramConfigured(),
       queueLength,
       sending: this.sending,
+      started: this.started,
       recentSent,
       recentFailed,
       backoffUntil: this.backoffUntil ? new Date(this.backoffUntil).toISOString() : null,
@@ -139,10 +161,16 @@ class NotificationHubService {
   }
 
   _scheduleDrain(delayMs = 0) {
-    if (this.timer) return;
     const delay = Math.max(0, delayMs);
+    const dueAt = Date.now() + delay;
+    if (this.timer) {
+      if (this.timerDueAt && this.timerDueAt <= dueAt) return;
+      clearTimeout(this.timer);
+    }
+    this.timerDueAt = dueAt;
     this.timer = setTimeout(() => {
       this.timer = null;
+      this.timerDueAt = 0;
       this._drainQueue().catch((error) => {
         console.warn(`[NotificationHub] Queue drain failed: ${error.message}`);
       });
@@ -151,6 +179,22 @@ class NotificationHubService {
     if (typeof this.timer.unref === 'function') {
       this.timer.unref();
     }
+  }
+
+  async _scheduleDueOrFutureDrain() {
+    const now = new Date();
+    const dueDelivery = await NotificationDelivery.findNextPending(now);
+    if (dueDelivery) {
+      this._scheduleDrain(0);
+      return { scheduled: true, delayMs: 0 };
+    }
+
+    const futureDelivery = await NotificationDelivery.findNextFuturePending(now);
+    if (!futureDelivery) return { scheduled: false, delayMs: null };
+
+    const delayMs = Math.max(0, toTimestamp(futureDelivery.nextAttemptAt) - Date.now());
+    this._scheduleDrain(delayMs);
+    return { scheduled: true, delayMs };
   }
 
   async _drainQueue() {
@@ -172,11 +216,15 @@ class NotificationHubService {
           break;
         }
 
-        const delivery = await NotificationDelivery.findNextPending();
-        if (!delivery) break;
+        const delivery = await NotificationDelivery.findNextPending(new Date());
+        if (!delivery) {
+          await this._scheduleDueOrFutureDrain();
+          break;
+        }
 
-        const wasSent = await this._sendDelivery(delivery);
-        if (wasSent) sent += 1;
+        const result = await this._sendDelivery(delivery);
+        if (result.sent) sent += 1;
+        if (result.stopDrain) break;
       }
     } finally {
       this.sending = false;
@@ -191,7 +239,7 @@ class NotificationHubService {
         status: NotificationDelivery.STATUS.SKIPPED,
         lastError: 'Telegram is not configured',
       });
-      return false;
+      return { sent: false, stopDrain: false };
     }
 
     const attempts = Number(delivery.attempts || 0) + 1;
@@ -201,25 +249,28 @@ class NotificationHubService {
       this.lastSentAt = Date.now();
       await NotificationDelivery.update(delivery._id, { attempts });
       await NotificationDelivery.markSent(delivery._id, extractTelegramMessageId(result));
-      return true;
+      return { sent: true, stopDrain: false };
     } catch (error) {
       const errorMessage = normalizeErrorMessage(error);
       if (isRateLimited(error)) {
         const retryAfterMs = getRetryAfterMs(error);
-        this.backoffUntil = Date.now() + retryAfterMs;
-        await NotificationDelivery.markPendingRetry(delivery._id, attempts, errorMessage);
+        const nextAttemptAt = new Date(Date.now() + retryAfterMs);
+        this.backoffUntil = nextAttemptAt.getTime();
+        await NotificationDelivery.markPendingRetry(delivery._id, attempts, errorMessage, nextAttemptAt);
         this._scheduleDrain(retryAfterMs);
-        return false;
+        return { sent: false, stopDrain: true };
       }
 
       if (attempts >= MAX_ATTEMPTS) {
         await NotificationDelivery.markFailed(delivery._id, attempts, errorMessage);
-        return false;
+        return { sent: false, stopDrain: false };
       }
 
-      await NotificationDelivery.markPendingRetry(delivery._id, attempts, errorMessage);
-      this._scheduleDrain(getRetryDelayMs(attempts));
-      return false;
+      const retryDelayMs = getRetryDelayMs(attempts);
+      const nextAttemptAt = new Date(Date.now() + retryDelayMs);
+      await NotificationDelivery.markPendingRetry(delivery._id, attempts, errorMessage, nextAttemptAt);
+      this._scheduleDrain(retryDelayMs);
+      return { sent: false, stopDrain: true };
     }
   }
 
@@ -232,6 +283,8 @@ class NotificationHubService {
     if (this.timer) clearTimeout(this.timer);
     this.sending = false;
     this.timer = null;
+    this.timerDueAt = 0;
+    this.started = false;
     this.backoffUntil = 0;
     this.lastSentAt = 0;
     NotificationDelivery._resetForTests();
@@ -349,6 +402,13 @@ function getRetryDelayMs(attempts) {
 
 function normalizeErrorMessage(error) {
   return error?.message || String(error || 'Telegram send failed');
+}
+
+function toTimestamp(value) {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 const notificationHubService = new NotificationHubService();

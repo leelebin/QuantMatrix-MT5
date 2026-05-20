@@ -66,7 +66,6 @@ const TradeLog = {
       logicName: trade.logicName || null,
       candidatePreset: trade.candidatePreset || null,
       parameterSnapshot: trade.parameterSnapshot || null,
-      setupType: trade.setupType || null,
       scope: trade.scope || 'paper',
       status: 'OPEN',
       openedAt: trade.openedAt || new Date(),

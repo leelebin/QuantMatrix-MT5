@@ -57,6 +57,7 @@ const {
   StrategyInstance,
   websocketService,
   notificationService,
+  notificationHubService,
   fileLogger,
   remoteAccessService,
   strategyEngine,
@@ -71,6 +72,7 @@ const {
   StrategyInstance: require('./models/StrategyInstance'),
   websocketService: require('./services/websocketService'),
   notificationService: require('./services/notificationService'),
+  notificationHubService: require('./services/notificationHubService'),
   fileLogger: require('./services/fileLogger'),
   remoteAccessService: require('./services/remoteAccessService'),
   strategyEngine: require('./services/strategyEngine'),
@@ -267,6 +269,15 @@ async function startServer() {
       console.log(`Dashboard: http://localhost:${PORT}`);
 
       bootProfiler.measure('websocket:init', () => websocketService.init(server));
+      bootProfiler.measure('notificationHub:init', () => {
+        try {
+          notificationHubService.start().catch((error) => {
+            console.error(`[NotificationHub] Failed to start: ${error.message}`);
+          });
+        } catch (error) {
+          console.error(`[NotificationHub] Failed to start: ${error.message}`);
+        }
+      });
       bootProfiler.measure('dataSync:init', () => {
         try {
           dataSyncSchedulerService.start();
@@ -317,6 +328,7 @@ async function shutdown(signal) {
     console.warn(`[Heartbeat] Failed to send server stopping alert: ${error.message}`);
   }
   runtimeHeartbeatService.stop();
+  notificationHubService.stop();
   dataSyncSchedulerService.stop();
   symbolCustomPaperRuntimeService.stop();
   websocketService.shutdown();

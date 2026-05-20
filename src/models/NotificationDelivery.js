@@ -85,6 +85,7 @@ const NotificationDelivery = {
 
   async create(delivery = {}) {
     const now = delivery.createdAt || new Date();
+    const nextAttemptAt = delivery.nextAttemptAt === undefined ? now : delivery.nextAttemptAt;
     const row = {
       type: delivery.type || 'generic',
       scope: delivery.scope || 'system',
@@ -97,6 +98,7 @@ const NotificationDelivery = {
       telegramMessageId: delivery.telegramMessageId || null,
       dedupeKey: delivery.dedupeKey || null,
       createdAt: now,
+      nextAttemptAt,
       sentAt: delivery.sentAt || null,
     };
 
@@ -126,13 +128,32 @@ const NotificationDelivery = {
     return await notificationDeliveriesDb.findOne(query);
   },
 
-  async findNextPending() {
+  async findNextPending(now = new Date()) {
     const rows = await dbFind(
       { status: STATUS.PENDING },
       { priority: -1, createdAt: 1 },
-      1
+      0
     );
-    return rows[0] || null;
+    const nowMs = toTimestamp(now);
+    return rows.find((row) => !row.nextAttemptAt || toTimestamp(row.nextAttemptAt) <= nowMs) || null;
+  },
+
+  async findNextFuturePending(now = new Date()) {
+    const rows = await dbFind(
+      { status: STATUS.PENDING },
+      { nextAttemptAt: 1, priority: -1, createdAt: 1 },
+      0
+    );
+    const nowMs = toTimestamp(now);
+    return rows
+      .filter((row) => row.nextAttemptAt && toTimestamp(row.nextAttemptAt) > nowMs)
+      .sort((a, b) => {
+        const aTime = toTimestamp(a.nextAttemptAt);
+        const bTime = toTimestamp(b.nextAttemptAt);
+        if (aTime !== bTime) return aTime - bTime;
+        if (a.priority !== b.priority) return (b.priority || 0) - (a.priority || 0);
+        return toTimestamp(a.createdAt) - toTimestamp(b.createdAt);
+      })[0] || null;
   },
 
   async listRecent(filters = {}) {
@@ -163,6 +184,7 @@ const NotificationDelivery = {
         status: STATUS.PENDING,
         attempts: 0,
         lastError: null,
+        nextAttemptAt: new Date(),
       });
     }
     return rows.length;
@@ -182,6 +204,7 @@ const NotificationDelivery = {
       status: STATUS.SENT,
       lastError: null,
       telegramMessageId: telegramMessageId || null,
+      nextAttemptAt: null,
       sentAt: new Date(),
     });
   },
@@ -191,14 +214,16 @@ const NotificationDelivery = {
       status: STATUS.FAILED,
       attempts,
       lastError: errorMessage || 'Telegram send failed',
+      nextAttemptAt: null,
     });
   },
 
-  async markPendingRetry(id, attempts, errorMessage) {
+  async markPendingRetry(id, attempts, errorMessage, nextAttemptAt = new Date()) {
     return await NotificationDelivery.update(id, {
       status: STATUS.PENDING,
       attempts,
       lastError: errorMessage || 'Telegram send failed',
+      nextAttemptAt,
     });
   },
 
@@ -212,6 +237,13 @@ function normalizeLimit(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.min(parsed, 500);
+}
+
+function toTimestamp(value) {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 module.exports = NotificationDelivery;

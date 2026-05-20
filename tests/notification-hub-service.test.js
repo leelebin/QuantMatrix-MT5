@@ -7,6 +7,7 @@ jest.mock('../src/services/notificationService', () => ({
 
 const notificationService = require('../src/services/notificationService');
 const notificationHubService = require('../src/services/notificationHubService');
+const NotificationDelivery = require('../src/models/NotificationDelivery');
 
 describe('notificationHubService', () => {
   beforeEach(async () => {
@@ -21,6 +22,7 @@ describe('notificationHubService', () => {
 
   afterEach(() => {
     notificationHubService._resetForTests();
+    jest.useRealTimers();
     delete process.env.NOTIFICATION_SEND_INTERVAL_MS;
   });
 
@@ -43,7 +45,8 @@ describe('notificationHubService', () => {
     expect(status.recentSent).toBe(1);
   });
 
-  test('retries failed Telegram sends and records SENT', async () => {
+  test('non-429 retry waits for backoff instead of consuming max attempts in same drain', async () => {
+    jest.useFakeTimers();
     notificationService.sendTelegramRaw
       .mockRejectedValueOnce(new Error('temporary outage'))
       .mockResolvedValueOnce({ ok: true, result: { message_id: 202 } });
@@ -55,8 +58,19 @@ describe('notificationHubService', () => {
       immediate: true,
     });
 
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    let deliveries = await notificationHubService.listRecentDeliveries({ limit: 1 });
+    expect(deliveries[0]).toMatchObject({
+      status: 'PENDING',
+      attempts: 1,
+      lastError: 'temporary outage',
+    });
+    expect(new Date(deliveries[0].nextAttemptAt).getTime()).toBeGreaterThan(Date.now());
+
+    await jest.advanceTimersByTimeAsync(1000);
+
     expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(2);
-    const deliveries = await notificationHubService.listRecentDeliveries({ limit: 1 });
+    deliveries = await notificationHubService.listRecentDeliveries({ limit: 1 });
     expect(deliveries[0]).toMatchObject({
       status: 'SENT',
       attempts: 2,
@@ -76,6 +90,52 @@ describe('notificationHubService', () => {
     const deliveries = await notificationHubService.listRecentDeliveries({ type: 'long', limit: 10 });
     expect(deliveries.length).toBeGreaterThan(1);
     expect(deliveries.every((delivery) => delivery.message.length <= 3900)).toBe(true);
+  });
+
+  test('findNextPending only returns due deliveries and exposes the next future pending', async () => {
+    const now = new Date();
+    const futureAt = new Date(now.getTime() + 60000);
+    const dueAt = new Date(now.getTime() - 1000);
+
+    await NotificationDelivery.create({
+      type: 'future',
+      scope: 'system',
+      priority: 99,
+      message: 'future pending',
+      nextAttemptAt: futureAt,
+    });
+    await NotificationDelivery.create({
+      type: 'due',
+      scope: 'system',
+      priority: 1,
+      message: 'due pending',
+      nextAttemptAt: dueAt,
+    });
+
+    const due = await NotificationDelivery.findNextPending(now);
+    const future = await NotificationDelivery.findNextFuturePending(now);
+
+    expect(due.message).toBe('due pending');
+    expect(future.message).toBe('future pending');
+  });
+
+  test('start drains an existing pending delivery after startup', async () => {
+    jest.useFakeTimers();
+    await NotificationDelivery.create({
+      type: 'startup',
+      scope: 'system',
+      message: 'boot pending',
+    });
+
+    await notificationHubService.start();
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledWith('boot pending');
+    const deliveries = await notificationHubService.listRecentDeliveries({ type: 'startup', limit: 1 });
+    expect(deliveries[0]).toMatchObject({
+      status: 'SENT',
+      attempts: 1,
+    });
   });
 
   test('handles 429 with backoff before retrying', async () => {
@@ -98,6 +158,12 @@ describe('notificationHubService', () => {
     expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
     let status = await notificationHubService.getStatus();
     expect(status.backoffUntil).not.toBeNull();
+    let deliveries = await notificationHubService.listRecentDeliveries({ type: 'rate_limit', limit: 1 });
+    expect(deliveries[0]).toMatchObject({
+      status: 'PENDING',
+      attempts: 1,
+    });
+    expect(new Date(deliveries[0].nextAttemptAt).getTime()).toBeGreaterThan(Date.now());
 
     await jest.advanceTimersByTimeAsync(2000);
 
@@ -108,6 +174,7 @@ describe('notificationHubService', () => {
   });
 
   test('records FAILED after max attempts', async () => {
+    jest.useFakeTimers();
     notificationService.sendTelegramRaw.mockRejectedValue(new Error('permanent failure'));
 
     await notificationHubService.enqueueTelegram({
@@ -117,6 +184,10 @@ describe('notificationHubService', () => {
       immediate: true,
     });
 
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(2);
+    await jest.advanceTimersByTimeAsync(2000);
     expect(notificationService.sendTelegramRaw).toHaveBeenCalledTimes(3);
     const deliveries = await notificationHubService.listRecentDeliveries({ type: 'fail', limit: 1 });
     expect(deliveries[0]).toMatchObject({

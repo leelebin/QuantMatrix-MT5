@@ -14,6 +14,7 @@ const websocketService = require('./websocketService');
 const notificationHubService = require('./notificationHubService');
 const tradeNotificationService = require('./tradeNotificationService');
 const trailingStopService = require('./trailingStopService');
+const directionControlRuntimeService = require('./directionControlRuntimeService');
 const breakevenService = require('./breakevenService');
 const economicCalendarService = require('./economicCalendarService');
 const TradeLog = require('../models/TradeLog');
@@ -47,12 +48,46 @@ const {
   resolveCategoryContext,
   toIsoOrNull,
 } = require('./assignmentRuntimeService');
+const {
+  markCaptureAttempt,
+  mergeCandlesIntoCapture,
+  shouldCaptureTimeframe,
+} = require('../utils/postBreakevenCandleCapture');
 
 const BASE_MONITOR_TICK_MS = 15 * 1000;
 const JUST_OPENED_WINDOW_MS = 5 * 60 * 1000;
 const PAPER_OPEN_SYNC_GRACE_MS = 2 * 60 * 1000;
 const MARKET_STOP_STALE_TICK_MS = 30 * 60 * 1000;
 const MARKET_STOP_UNTRADEABLE_MODES = new Set(['DISABLED', 'CLOSEONLY']);
+const POST_BE_CANDLE_FETCH_COUNT = Object.freeze({
+  M1: 30,
+  M5: 30,
+  M15: 20,
+});
+
+function readRuntimeSwitch(name) {
+  if (process.env[name] === undefined) return null;
+  return process.env[name] === 'true';
+}
+
+function buildPaperRuntimeSwitchSnapshot(signal = {}, extra = {}) {
+  const metadata = signal.metadata && typeof signal.metadata === 'object' ? signal.metadata : {};
+  return {
+    scope: 'paper',
+    source: signal.source || metadata.source || null,
+    symbol: signal.symbol || null,
+    strategy: signal.strategy || null,
+    symbolCustomName: signal.symbolCustomName || metadata.symbolCustomName || null,
+    logicName: signal.logicName || metadata.logicName || null,
+    mt5ServiceScope: 'paper',
+    PAPER_TRADING_ENABLED: readRuntimeSwitch('PAPER_TRADING_ENABLED'),
+    SYMBOL_CUSTOM_PAPER_ENABLED: readRuntimeSwitch('SYMBOL_CUSTOM_PAPER_ENABLED'),
+    LIVE_TRADING_ENABLED: readRuntimeSwitch('LIVE_TRADING_ENABLED'),
+    TRADING_ENABLED: readRuntimeSwitch('TRADING_ENABLED'),
+    MT5_STRICT_RUNTIME_ISOLATION: readRuntimeSwitch('MT5_STRICT_RUNTIME_ISOLATION'),
+    ...extra,
+  };
+}
 
 function isCryptoSymbol(symbol) {
   const instrument = getInstrument(symbol);
@@ -867,28 +902,36 @@ class PaperTradingService {
    * Start paper trading mode
    * Connects to MT5 demo account and begins the analysis/execution loop
    */
+  async ensureConnected() {
+    if (!mt5Service.isConnected()) {
+      await mt5Service.connect();
+    }
+
+    const accountInfo = await mt5Service.getAccountInfo();
+    if (typeof mt5Service.validateRuntimeAccountIdentity === 'function') {
+      mt5Service.validateRuntimeAccountIdentity(accountInfo);
+    }
+    mt5Service.ensurePaperTradingAccount(accountInfo);
+    const runtimeIdentity = typeof mt5Service.buildRuntimeIdentityStatus === 'function'
+      ? mt5Service.buildRuntimeIdentityStatus(accountInfo)
+      : null;
+
+    return {
+      success: true,
+      accountInfo,
+      runtimeIdentity,
+    };
+  }
+
   async start() {
     if (this.running) {
       return { success: false, message: 'Paper trading is already running' };
     }
 
     try {
-      // Connect to MT5 (demo account configured in .env)
-      if (!mt5Service.isConnected()) {
-        await mt5Service.connect();
-      }
-
-      // Verify it's a demo account
-      const accountInfo = await mt5Service.getAccountInfo();
-      if (typeof mt5Service.validateRuntimeAccountIdentity === 'function') {
-        mt5Service.validateRuntimeAccountIdentity(accountInfo);
-      }
-      mt5Service.ensurePaperTradingAccount(accountInfo);
+      const { accountInfo, runtimeIdentity } = await this.ensureConnected();
       console.log(`[PaperTrading] Connected to account: ${accountInfo.login} | Server: ${accountInfo.server}`);
       console.log(`[PaperTrading] Balance: ${accountInfo.balance} ${accountInfo.currency} | Leverage: 1:${accountInfo.leverage}`);
-      const runtimeIdentity = typeof mt5Service.buildRuntimeIdentityStatus === 'function'
-        ? mt5Service.buildRuntimeIdentityStatus(accountInfo)
-        : null;
 
       // Initialize strategy configs in DB
       await Strategy.initDefaults(strategyEngine.getStrategiesInfo());
@@ -1284,6 +1327,7 @@ class PaperTradingService {
         executionScoreDetails: managedPositionState.executionScoreDetails,
         plannedRiskAmount: managedPositionState.plannedRiskAmount,
         targetRMultiple: managedPositionState.targetRMultiple,
+        atrAtEntry,
         exitPlanSnapshot: managedPositionState.exitPlanSnapshot,
         managementEvents: managedPositionState.managementEvents,
         setupTimeframe: managedPositionState.setupTimeframe,
@@ -1376,7 +1420,21 @@ class PaperTradingService {
     } catch (err) {
       console.error(`[PaperTrading] Execute error for ${signal.symbol}:`, err.message);
       try {
-        const accountInfo = mt5Service.isConnected() ? await mt5Service.getAccountInfo() : null;
+        let mt5Connected = null;
+        let mt5ConnectionCheckError = null;
+        try {
+          mt5Connected = typeof mt5Service.isConnected === 'function' ? mt5Service.isConnected() : null;
+        } catch (connectionCheckError) {
+          mt5ConnectionCheckError = connectionCheckError.message;
+        }
+        const runtimeSwitches = buildPaperRuntimeSwitchSnapshot(signal, {
+          mt5Connected,
+          mt5ConnectionCheckError,
+          failureMessage: err.message,
+        });
+        console.warn(`[PaperTrading] Runtime switches on paper execution failure: ${JSON.stringify(runtimeSwitches)}`);
+
+        const accountInfo = mt5Connected ? await mt5Service.getAccountInfo() : null;
         const auditCode = err.code ?? err.details?.retcode ?? null;
         const auditCodeName = err.codeName ?? err.details?.retcodeName ?? null;
         const auditStage = err.method === 'placeOrder'
@@ -1397,6 +1455,7 @@ class PaperTradingService {
             preflightRetcodeName: preflight?.retcodeName ?? null,
             sendRetcode: err.details?.retcode ?? err.code ?? null,
             sendRetcodeName: err.details?.retcodeName ?? err.codeName ?? null,
+            runtimeSwitches,
           },
         });
         auditService.orderFailed({
@@ -1415,6 +1474,7 @@ class PaperTradingService {
             preflightRetcodeName: preflight?.retcodeName ?? null,
             sendRetcode: err.details?.retcode ?? err.code ?? null,
             sendRetcodeName: err.details?.retcodeName ?? err.codeName ?? null,
+            runtimeSwitches,
           },
         });
         this._broadcastRejection(signal, err.message, {
@@ -1553,6 +1613,54 @@ class PaperTradingService {
     return updatedPositions;
   }
 
+  async _capturePostBreakevenCandles(positions = [], now = new Date()) {
+    const requestedNow = now instanceof Date ? now : new Date(now);
+    const captureNow = Number.isFinite(requestedNow.getTime()) && requestedNow.getTime() > Date.now()
+      ? requestedNow
+      : new Date();
+    const candidates = Array.isArray(positions)
+      ? positions.filter((position) => (
+          position?._id
+          && position?.symbol
+          && position.postBreakevenCandleCapture?.active === true
+        ))
+      : [];
+    let updatedCount = 0;
+
+    for (const position of candidates) {
+      let capture = position.postBreakevenCandleCapture;
+      let changed = false;
+      const timeframes = Array.isArray(capture.timeframes) ? capture.timeframes : [];
+
+      for (const timeframe of timeframes) {
+        const tf = String(timeframe || '').toUpperCase();
+        if (!shouldCaptureTimeframe(capture, tf, captureNow)) continue;
+
+        try {
+          const count = POST_BE_CANDLE_FETCH_COUNT[tf] || 30;
+          const candles = await mt5Service.getCandles(position.symbol, tf, null, count);
+          const result = mergeCandlesIntoCapture(capture, candles, tf, position, captureNow);
+          capture = result.capture;
+          changed = changed || result.changed;
+        } catch (err) {
+          console.warn(`[PaperTrading] Post-BE candle capture skipped ${position.symbol} ${tf}: ${err.message}`);
+          capture = markCaptureAttempt(capture, tf, captureNow);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await paperPositionsDb.update(
+          { _id: position._id },
+          { $set: { postBreakevenCandleCapture: capture } }
+        );
+        updatedCount += 1;
+      }
+    }
+
+    return updatedCount;
+  }
+
   async _runTrailingStops(
     positions = null,
     contexts = null,
@@ -1610,7 +1718,31 @@ class PaperTradingService {
       }
     );
 
+    const directionUpdates = await directionControlRuntimeService.evaluateRuntimeDirectionControl({
+      positions: effectivePositions,
+      scope: 'paper',
+      getStrategyInstanceFn: async (position) => {
+        if (!position?.strategy) return null;
+        return getStrategyInstance(position.symbol, position.strategy, { scope: 'paper' }).catch(() => null);
+      },
+      getPriceFn: async (symbol) => mt5Service.getPrice(symbol),
+      getCandlesFn: async (symbol, timeframe) => mt5Service.getCandles(symbol, timeframe, null, 251),
+      updatePositionFn: async (localId, patch) => {
+        await paperPositionsDb.update({ _id: localId }, { $set: patch });
+      },
+      now,
+    });
+
+    let postBeCaptureUpdates = 0;
+    if (scanMode === 'heavy') {
+      postBeCaptureUpdates = await this._capturePostBreakevenCandles(effectivePositions, now);
+    }
+
     if (updates.length === 0) {
+      if (postBeCaptureUpdates > 0 || directionUpdates.some((update) => update && !update.error)) {
+        const refreshedPositions = await paperPositionsDb.find({});
+        websocketService.broadcast('positions', 'paper_positions_sync', refreshedPositions);
+      }
       return [];
     }
 
@@ -1780,7 +1912,11 @@ class PaperTradingService {
       finalSl: localPos.currentSl ?? localPos.finalSl ?? localPos.sl ?? null,
       finalTp: localPos.currentTp ?? localPos.finalTp ?? localPos.tp ?? null,
       brokerRetcodeModify: localPos.brokerRetcodeModify ?? null,
-      positionSnapshot: buildPositionExportSnapshot(localPos),
+      postBreakevenCandleCapture: closedSnapshot.postBreakevenCandleCapture || null,
+      positionSnapshot: buildPositionExportSnapshot({
+        ...localPos,
+        postBreakevenCandleCapture: closedSnapshot.postBreakevenCandleCapture || localPos.postBreakevenCandleCapture || null,
+      }),
       openedAt,
       closedAt: closedSnapshot.closedAt,
       realizedRMultiple: closedSnapshot.realizedRMultiple,
@@ -1929,7 +2065,11 @@ class PaperTradingService {
       finalTp: position.currentTp ?? position.finalTp ?? position.tp ?? null,
       brokerRetcodeClose: closeResult?.retcode ?? null,
       brokerRetcodeModify: position.brokerRetcodeModify ?? null,
-      positionSnapshot: buildPositionExportSnapshot(position),
+      postBreakevenCandleCapture: closedSnapshot.postBreakevenCandleCapture || null,
+      positionSnapshot: buildPositionExportSnapshot({
+        ...position,
+        postBreakevenCandleCapture: closedSnapshot.postBreakevenCandleCapture || position.postBreakevenCandleCapture || null,
+      }),
       openedAt,
       closedAt: closedSnapshot.closedAt,
       realizedRMultiple: closedSnapshot.realizedRMultiple,

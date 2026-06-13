@@ -11,6 +11,9 @@ const { resolveStrategyParameters } = require('../config/strategyParameters');
 const {
   resolveExecutionPolicy,
 } = require('./executionPolicyService');
+const {
+  resolveDirectionControlConfig,
+} = require('./directionControlConfig');
 
 function cloneValue(value) {
   if (value === undefined) {
@@ -102,6 +105,9 @@ function buildEffectiveInstancePayload({
 
   const effectiveBreakeven = breakevenService.resolveEffectiveBreakeven(activeProfile, mergedStrategy);
   const effectiveExitPlan = breakevenService.resolveEffectiveExitPlan(activeProfile, mergedStrategy, null);
+  const effectiveDirectionControl = resolveDirectionControlConfig({
+    strategyInstance: { tradeManagement: mergedStrategy.tradeManagement || null },
+  });
   const paperEnabled = storedInstance
     ? (
         storedInstance.paperEnabled !== undefined
@@ -136,6 +142,7 @@ function buildEffectiveInstancePayload({
     effectiveTradeManagement: {
       breakeven: effectiveBreakeven,
       exitPlan: effectiveExitPlan,
+      directionControl: effectiveDirectionControl,
     },
     source: storedInstance ? 'instance' : 'strategy_default',
     hasStoredInstance: Boolean(storedInstance),

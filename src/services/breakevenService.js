@@ -7,6 +7,10 @@ const DEFAULT_BREAKEVEN_CONFIG = Object.freeze({
   trailDistanceAtrMultiple: 1.0,
 });
 
+const {
+  normalizeDirectionControlConfig,
+} = require('./directionControlConfig');
+
 const LEGACY_BREAKEVEN_CONFIG = Object.freeze({
   enabled: true,
   triggerAtrMultiple: 1.0,
@@ -264,8 +268,9 @@ function normalizeStrategyTradeManagement(input, { activeProfile = null } = {}) 
   const cleaned = {};
   const hasBreakevenOverride = Object.prototype.hasOwnProperty.call(input, 'breakevenOverride');
   const hasExitPlanOverride = Object.prototype.hasOwnProperty.call(input, 'exitPlanOverride');
+  const hasDirectionControl = Object.prototype.hasOwnProperty.call(input, 'directionControl');
 
-  if (!hasBreakevenOverride && !hasExitPlanOverride) {
+  if (!hasBreakevenOverride && !hasExitPlanOverride && !hasDirectionControl) {
     return undefined;
   }
 
@@ -291,6 +296,10 @@ function normalizeStrategyTradeManagement(input, { activeProfile = null } = {}) 
         baseConfig: profileBase,
       });
     }
+  }
+
+  if (hasDirectionControl) {
+    cleaned.directionControl = normalizeDirectionControlConfig(input.directionControl);
   }
 
   return cleaned;

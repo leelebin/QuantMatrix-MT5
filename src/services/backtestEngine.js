@@ -9,6 +9,9 @@ const breakevenService = require('./breakevenService');
 const volumeFeatureService = require('./volumeFeatureService');
 const backtestChartService = require('./backtestChartService');
 const { DEFAULT_EXECUTION_POLICY, calculateExecutionScore } = require('./executionPolicyService');
+const { normalizeDirectionControlConfig, resolveDirectionControlConfig } = require('./directionControlConfig');
+const { evaluateDirectionControl } = require('./directionControlEvaluator');
+const { buildDirectionControlSummary } = require('./directionControlSummary');
 const { getInstrument } = require('../config/instruments');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const { backtestsDb } = require('../config/db');
@@ -308,6 +311,8 @@ class BacktestEngine {
       parameterPreset = 'default',
       parameterPresetResolution = null,
       breakevenConfig = null,
+      directionControlConfig = null,
+      strategyInstance = null,
       executionPolicy = null,
       executionConfigOverride = null,
       includeChartData = false,
@@ -340,6 +345,9 @@ class BacktestEngine {
           baseConfig: breakevenService.DEFAULT_BREAKEVEN_CONFIG,
         })
       : breakevenService.getDefaultBreakevenConfig();
+    const effectiveDirectionControl = directionControlConfig
+      ? normalizeDirectionControlConfig(directionControlConfig)
+      : resolveDirectionControlConfig({ strategyInstance });
     const tradingInstrument = this._buildTradingInstrument(instrument, resolvedParams, strategyType, executionConfigOverride);
     const valuation = instrumentValuation.getValuationContext(tradingInstrument);
     const strategy = this._createStrategy(strategyType);
@@ -370,6 +378,7 @@ class BacktestEngine {
     const fullIndicators = this._buildIndicators(candles, resolvedParams, strategyType);
     const preparedIndicators = this._prepareIndicatorSeries(fullIndicators, candles.length);
     const fullVolumeFeatureSeries = this._buildVolumeFeatureSeries(candles, resolvedParams, strategyType);
+    const volumeFlowHybridFilterStats = {};
     const lowerTfTimes = lowerTfCandles ? lowerTfCandles.map((candle) => this._toTimeMs(candle.time)) : null;
     const fullLowerIndicators = lowerTfCandles && tradingInstrument.entryTimeframe && needsEntryIndicators
       ? this._buildIndicators(lowerTfCandles, resolvedParams, strategyType)
@@ -431,6 +440,7 @@ class BacktestEngine {
       if (openPosition) {
         const hit = this._checkSlTp(openPosition, currentCandle);
         if (hit) {
+          this._updateDirectionControlPostTriggerExcursion(openPosition, currentCandle);
           const trade = this._closeTrade(openPosition, hit.exitPrice, hit.reason, currentCandle.time, tradingInstrument);
           balance += trade.profitLoss;
           trades.push(trade);
@@ -440,11 +450,23 @@ class BacktestEngine {
           continue;
         }
 
+        this._updateBacktestPositionExcursions(openPosition, currentCandle);
         const trailingResult = this._simulateTrailingStop(openPosition, currentCandle, tradingInstrument);
         if (trailingResult.updated) {
           openPosition.currentSl = trailingResult.newSl;
           this._markBreakevenState(openPosition, trailingResult.phase);
         }
+        this._evaluateBacktestDirectionControlAudit({
+          position: openPosition,
+          config: effectiveDirectionControl,
+          candles,
+          currentBar: currentCandle,
+          currentIndex: i,
+          indicators: ind,
+          strategyType,
+          strategyInstance,
+          symbol,
+        });
       }
 
       if (!openPosition && nextCandle && (tradeStartMs === null || currentTimeMs >= tradeStartMs)) {
@@ -455,6 +477,10 @@ class BacktestEngine {
           volumeFeatureSnapshot: fullVolumeFeatureSeries ? fullVolumeFeatureSeries[i] : null,
           strategyParams: resolvedParams,
         });
+
+        if (strategyType === 'VolumeFlowHybrid' && result.signal === 'NONE') {
+          this._recordVolumeFlowHybridFilter(volumeFlowHybridFilterStats, result);
+        }
 
         if (result.signal !== 'NONE') {
           const entryPrice = result.signal === 'BUY'
@@ -501,6 +527,14 @@ class BacktestEngine {
             duplicatePenalty: Boolean(duplicateReference),
           });
           if (executionScore.score < effectiveExecutionPolicy.minExecutionScore) {
+            if (strategyType === 'VolumeFlowHybrid') {
+              this._recordVolumeFlowHybridFilter(volumeFlowHybridFilterStats, {
+                ...result,
+                signal: 'NONE',
+                status: 'FILTERED',
+                filterReason: `Execution score too low: ${executionScore.score.toFixed(2)} < ${effectiveExecutionPolicy.minExecutionScore}`,
+              });
+            }
             continue;
           }
           const plannedRiskAmount = parseFloat(
@@ -514,12 +548,18 @@ class BacktestEngine {
           const targetRMultiple = slDistance > 0
             ? parseFloat((Math.abs(result.tp - entryPrice) / slDistance).toFixed(4))
             : null;
+          const positionExitPlan = this._resolveBacktestExitPlan(result, effectiveBreakeven);
 
           pendingEntry = {
             id: trades.length + 1,
+            symbol,
+            strategy: strategyType,
+            strategyInstanceId: strategyInstance?._id || null,
             type: result.signal,
+            side: result.signal,
             entryPrice,
             entryTime: nextCandle.time,
+            entryIndex: i + 1,
             sl: result.sl,
             tp: result.tp,
             currentSl: result.sl,
@@ -529,14 +569,20 @@ class BacktestEngine {
             lotSize,
             atrAtEntry: currentAtr,
             breakevenConfig: effectiveBreakeven,
+            exitPlan: positionExitPlan,
+            exitPlanSnapshot: JSON.parse(JSON.stringify(positionExitPlan)),
             executionPolicy: effectiveExecutionPolicy,
             executionScore: executionScore.score,
             executionScoreDetails: executionScore.details,
             plannedRiskAmount,
             targetRMultiple,
+            maxFavourablePrice: entryPrice,
+            maxAdversePrice: entryPrice,
+            structureAnchor: this._resolveBacktestStructureAnchor(result),
             costModel: resolvedCostModel,
             costModelSources,
             indicatorsSnapshot: result.indicatorsSnapshot,
+            entryThesisLevels: this._resolveBacktestEntryThesisLevels(result),
             reason: result.reason,
             entryReason: result.entryReason || [result.reason, result.triggerReason].filter(Boolean).join(' | ') || result.reason,
             setupReason: result.setupReason || result.reason || '',
@@ -545,6 +591,9 @@ class BacktestEngine {
             entryTimeframe: result.entryTimeframe || null,
             setupCandleTime: result.setupCandleTime || currentCandle.time,
             entryCandleTime: result.entryCandleTime || signalTime,
+            managementEvents: [],
+            directionControlEvents: [],
+            directionControl: null,
           };
         }
       }
@@ -571,6 +620,7 @@ class BacktestEngine {
 
     if (openPosition) {
       const lastCandle = candles[candles.length - 1];
+      this._updateDirectionControlPostTriggerExcursion(openPosition, lastCandle);
       const exitPrice = openPosition.type === 'BUY'
         ? lastCandle.close - spread / 2
         : lastCandle.close + spread / 2;
@@ -583,6 +633,9 @@ class BacktestEngine {
     equity = balance;
     const summary = this._generateSummary(trades, initialBalance, balance, equityCurve);
     const monthlyBreakdown = this._generateMonthlyBreakdown(trades);
+    const volumeFlowHybridBreakdown = strategyType === 'VolumeFlowHybrid'
+      ? this._generateVolumeFlowHybridBreakdown(trades, symbol, volumeFlowHybridFilterStats)
+      : null;
     const resolvedPreset = parameterPresetResolution || {
       preset: parameterPreset || 'default',
       fallbackUsed: false,
@@ -630,6 +683,7 @@ class BacktestEngine {
         optimizerOptimizeFor: resolvedPreset.optimizerOptimizeFor || null,
       },
       breakevenConfigUsed: effectiveBreakeven,
+      directionControlConfigUsed: effectiveDirectionControl,
       executionPolicyUsed: effectiveExecutionPolicy,
       costModelUsed: {
         costModel: resolvedCostModel,
@@ -637,6 +691,7 @@ class BacktestEngine {
       },
       summary,
       monthlyBreakdown,
+      volumeFlowHybridBreakdown,
       trades,
       equityCurve,
       chartData,
@@ -697,11 +752,11 @@ class BacktestEngine {
    */
   _simulateTrailingStop(position, candle, instrument) {
     const currentPrice = position.type === 'BUY' ? candle.high : candle.low;
-    const result = breakevenService.calculateBreakevenStop(
+    const result = breakevenService.calculateExitAdjustment(
       position,
       currentPrice,
       instrument,
-      position.breakevenConfig || null
+      position.exitPlan || null
     );
 
     if (!result.shouldUpdate) {
@@ -709,6 +764,52 @@ class BacktestEngine {
     }
 
     return { updated: true, newSl: result.newSl, phase: result.phase };
+  }
+
+  _resolveBacktestExitPlan(result = {}, breakevenConfig = null) {
+    const basePlan = breakevenService.breakevenConfigToExitPlan(
+      breakevenConfig || breakevenService.getDefaultBreakevenConfig()
+    );
+    if (result.exitPlan && typeof result.exitPlan === 'object') {
+      try {
+        return breakevenService.normalizeExitPlan(result.exitPlan, { baseConfig: basePlan });
+      } catch (_) {
+        return basePlan;
+      }
+    }
+    return basePlan;
+  }
+
+  _resolveBacktestStructureAnchor(result = {}) {
+    const candidate = result.structureAnchor
+      ?? result.indicatorsSnapshot?.structureAnchor
+      ?? result.indicatorsSnapshot?.structureLevel;
+    const numericCandidate = Number(candidate);
+    return Number.isFinite(numericCandidate) && numericCandidate > 0 ? numericCandidate : null;
+  }
+
+  _updateBacktestPositionExcursions(position, candle = {}) {
+    if (!position || !candle) return;
+    const high = Number(candle.high);
+    const low = Number(candle.low);
+    if (!Number.isFinite(high) || !Number.isFinite(low)) return;
+
+    if (position.type === 'SELL') {
+      position.maxFavourablePrice = Number.isFinite(Number(position.maxFavourablePrice))
+        ? Math.min(Number(position.maxFavourablePrice), low)
+        : low;
+      position.maxAdversePrice = Number.isFinite(Number(position.maxAdversePrice))
+        ? Math.max(Number(position.maxAdversePrice), high)
+        : high;
+      return;
+    }
+
+    position.maxFavourablePrice = Number.isFinite(Number(position.maxFavourablePrice))
+      ? Math.max(Number(position.maxFavourablePrice), high)
+      : high;
+    position.maxAdversePrice = Number.isFinite(Number(position.maxAdversePrice))
+      ? Math.min(Number(position.maxAdversePrice), low)
+      : low;
   }
 
   _markBreakevenState(position, phase) {
@@ -720,6 +821,137 @@ class BacktestEngine {
       position.breakevenActivated = true;
       position.trailingActivated = true;
       position.breakevenPhase = 'trailing';
+    }
+  }
+
+  _resolveBacktestEntryThesisLevels(result = {}) {
+    const snapshot = result.indicatorsSnapshot || {};
+    const structureAnchor = this._resolveBacktestStructureAnchor(result);
+    return {
+      zone_boundary: result.zoneBoundary
+        ?? result.zone_boundary
+        ?? snapshot.zoneBoundary
+        ?? snapshot.zone_boundary
+        ?? snapshot.zone,
+      pinbar_extreme: result.pinbarExtreme
+        ?? result.pinbar_extreme
+        ?? snapshot.pinbarExtreme
+        ?? snapshot.pinbar_extreme,
+      entry_swing: result.entrySwing
+        ?? result.entry_swing
+        ?? snapshot.entrySwing
+        ?? snapshot.entry_swing
+        ?? structureAnchor,
+    };
+  }
+
+  _getLatestIndicatorValue(indicators = {}, key) {
+    const value = indicators ? indicators[key] : null;
+    if (Array.isArray(value) && value.length > 0) {
+      const latest = Number(value[value.length - 1]);
+      return Number.isFinite(latest) ? latest : null;
+    }
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  _evaluateBacktestDirectionControlAudit({
+    position,
+    config,
+    candles,
+    currentBar,
+    currentIndex,
+    indicators,
+    strategyType,
+    strategyInstance,
+    symbol,
+  }) {
+    if (!position || !config || config.enabled !== true) {
+      return null;
+    }
+
+    this._updateDirectionControlPostTriggerExcursion(position, currentBar);
+    const atr = this._getLatestIndicatorValue(indicators, 'atr');
+    const result = evaluateDirectionControl({
+      config,
+      position,
+      candles,
+      currentBar,
+      currentIndex,
+      existingState: position.directionControl || null,
+      strategyContext: {
+        atr,
+        symbol,
+        strategy: strategyType,
+        strategyInstanceId: strategyInstance?._id || position.strategyInstanceId || null,
+        entryThesisLevels: position.entryThesisLevels || null,
+        currentBarClosed: true,
+      },
+      serverTime: currentBar?.time || null,
+    });
+
+    if (!result || !result.event || !result.statePatch?.directionControl) {
+      return result;
+    }
+
+    const existingEvents = Array.isArray(position.directionControlEvents)
+      ? position.directionControlEvents
+      : [];
+    if (existingEvents.some((event) => event.eventKey === result.event.eventKey)) {
+      return result;
+    }
+
+    position.directionControlEvents = [...existingEvents, result.event];
+    position.managementEvents = [
+      ...(Array.isArray(position.managementEvents) ? position.managementEvents : []),
+      result.event,
+    ];
+    position.directionControl = {
+      ...(position.directionControl || {}),
+      ...result.statePatch.directionControl,
+    };
+    position.directionControlTriggerPrice = Number(result.event.currentPrice);
+    position.directionControlPostTriggerMfeR = 0;
+    position.directionControlPostTriggerMaeR = 0;
+    this._updateDirectionControlPostTriggerExcursion(position, currentBar);
+    return result;
+  }
+
+  _updateDirectionControlPostTriggerExcursion(position, candle = {}) {
+    if (!position?.directionControl?.firstTriggered) return;
+    const triggerPrice = Number(position.directionControlTriggerPrice);
+    const entryPrice = Number(position.entryPrice);
+    const stopLoss = Number(position.sl);
+    const high = Number(candle.high);
+    const low = Number(candle.low);
+    if (
+      !Number.isFinite(triggerPrice)
+      || !Number.isFinite(entryPrice)
+      || !Number.isFinite(stopLoss)
+      || !Number.isFinite(high)
+      || !Number.isFinite(low)
+    ) {
+      return;
+    }
+    const riskDistance = Math.abs(entryPrice - stopLoss);
+    if (!Number.isFinite(riskDistance) || riskDistance <= 0) return;
+    const favourable = position.type === 'SELL'
+      ? (triggerPrice - low) / riskDistance
+      : (high - triggerPrice) / riskDistance;
+    const adverse = position.type === 'SELL'
+      ? (triggerPrice - high) / riskDistance
+      : (low - triggerPrice) / riskDistance;
+    if (Number.isFinite(favourable)) {
+      position.directionControlPostTriggerMfeR = Math.max(
+        Number(position.directionControlPostTriggerMfeR) || 0,
+        favourable
+      );
+    }
+    if (Number.isFinite(adverse)) {
+      position.directionControlPostTriggerMaeR = Math.min(
+        Number(position.directionControlPostTriggerMaeR) || 0,
+        adverse
+      );
     }
   }
 
@@ -840,9 +1072,24 @@ class BacktestEngine {
       plannedRiskAmount: Number(position.plannedRiskAmount) || 0,
       realizedRMultiple,
       targetRMultipleCaptured,
+      atrAtEntry: Number(position.atrAtEntry) || null,
+      exitPlanSnapshot: position.exitPlanSnapshot || position.exitPlan || null,
+      maxFavourablePrice: position.maxFavourablePrice ?? null,
+      maxAdversePrice: position.maxAdversePrice ?? null,
       breakevenActivated: Boolean(position.breakevenActivated),
       trailingActivated: Boolean(position.trailingActivated),
       breakevenPhase: position.breakevenPhase || null,
+      managementEvents: Array.isArray(position.managementEvents) ? JSON.parse(JSON.stringify(position.managementEvents)) : [],
+      directionControlEvents: Array.isArray(position.directionControlEvents)
+        ? JSON.parse(JSON.stringify(position.directionControlEvents))
+        : [],
+      directionControl: position.directionControl ? JSON.parse(JSON.stringify(position.directionControl)) : null,
+      directionControlPostTriggerMfeR: Number.isFinite(Number(position.directionControlPostTriggerMfeR))
+        ? parseFloat(Number(position.directionControlPostTriggerMfeR).toFixed(4))
+        : null,
+      directionControlPostTriggerMaeR: Number.isFinite(Number(position.directionControlPostTriggerMaeR))
+        ? parseFloat(Number(position.directionControlPostTriggerMaeR).toFixed(4))
+        : null,
       exitReason: reason,
       exitReasonText: backtestChartService.humanizeExitReason(reason),
       reason: position.reason,
@@ -922,6 +1169,7 @@ class BacktestEngine {
       };
       return {
         ...emptySummary,
+        directionControl: buildDirectionControlSummary([]),
         ...calculateBacktestRobustScore(emptySummary),
       };
     }
@@ -1118,11 +1366,119 @@ class BacktestEngine {
       // grossNetDifference = (gross gain - gross loss) - net P&L. With cost
       // model active this equals -totalTradingCosts; with no costs it's 0.
       grossNetDifference: parseFloat((grossNet - netProfitMoney).toFixed(2)),
+      directionControl: buildDirectionControlSummary(trades),
     };
 
     return {
       ...summary,
       ...calculateBacktestRobustScore(summary),
+    };
+  }
+
+  _recordVolumeFlowHybridFilter(stats, result = {}) {
+    if (!stats) return;
+    const snapshot = result.indicatorsSnapshot || {};
+    const reason = result.filterReason || result.reason || result.status || 'NO_SETUP';
+    if (!stats[reason]) {
+      stats[reason] = {
+        totalSignals: 0,
+        module: snapshot.module || null,
+        session: snapshot.sessionName || null,
+        status: result.status || null,
+      };
+    }
+    stats[reason].totalSignals += 1;
+  }
+
+  _generateVolumeFlowHybridBreakdown(trades = [], symbol = null, filterStats = {}) {
+    const emptyBuckets = () => ({
+      module: {},
+      symbol: {},
+      session: {},
+      direction: {},
+      filterReason: {},
+    });
+
+    if (!Array.isArray(trades) || trades.length === 0) {
+      return {
+        ...emptyBuckets(),
+        filterReason: filterStats || {},
+      };
+    }
+
+    const buckets = emptyBuckets();
+    const addToBucket = (bucket, key, trade) => {
+      const bucketKey = key || 'UNKNOWN';
+      if (!bucket[bucketKey]) bucket[bucketKey] = [];
+      bucket[bucketKey].push(trade);
+    };
+
+    for (const trade of trades) {
+      const snapshot = trade.indicatorsAtEntry || {};
+      addToBucket(buckets.module, snapshot.module, trade);
+      addToBucket(buckets.symbol, symbol || snapshot.symbol, trade);
+      addToBucket(buckets.session, snapshot.sessionName, trade);
+      addToBucket(buckets.direction, trade.type, trade);
+    }
+
+    const summarizeGroup = (groupTrades) => {
+      const totalTrades = groupTrades.length;
+      const netPnl = groupTrades.reduce((sum, trade) => sum + (Number(trade.profitLoss) || 0), 0);
+      const winners = groupTrades.filter((trade) => (Number(trade.profitLoss) || 0) > 0);
+      const losers = groupTrades.filter((trade) => (Number(trade.profitLoss) || 0) < 0);
+      const grossWin = winners.reduce((sum, trade) => sum + (Number(trade.profitLoss) || 0), 0);
+      const grossLoss = Math.abs(losers.reduce((sum, trade) => sum + (Number(trade.profitLoss) || 0), 0));
+      const averageR = groupTrades.reduce((sum, trade) => sum + (Number(trade.realizedRMultiple) || 0), 0) / totalTrades;
+      let equity = 0;
+      let peak = 0;
+      let maxDrawdown = 0;
+      let currentLosses = 0;
+      let maxConsecutiveLosses = 0;
+      let holdingMinutes = 0;
+      let holdingCount = 0;
+
+      for (const trade of groupTrades) {
+        const pnl = Number(trade.profitLoss) || 0;
+        equity += pnl;
+        peak = Math.max(peak, equity);
+        maxDrawdown = Math.max(maxDrawdown, peak - equity);
+        if (pnl < 0) {
+          currentLosses += 1;
+          maxConsecutiveLosses = Math.max(maxConsecutiveLosses, currentLosses);
+        } else {
+          currentLosses = 0;
+        }
+        const entryMs = trade.entryTime ? new Date(trade.entryTime).getTime() : null;
+        const exitMs = trade.exitTime ? new Date(trade.exitTime).getTime() : null;
+        if (Number.isFinite(entryMs) && Number.isFinite(exitMs) && exitMs >= entryMs) {
+          holdingMinutes += (exitMs - entryMs) / 60000;
+          holdingCount += 1;
+        }
+      }
+
+      return {
+        totalTrades,
+        winRate: totalTrades > 0 ? parseFloat((winners.length / totalTrades).toFixed(4)) : 0,
+        netPnl: parseFloat(netPnl.toFixed(2)),
+        averageR: parseFloat(averageR.toFixed(4)),
+        maxDrawdown: parseFloat(maxDrawdown.toFixed(2)),
+        maxConsecutiveLosses,
+        averageHoldingTimeMinutes: holdingCount > 0 ? parseFloat((holdingMinutes / holdingCount).toFixed(2)) : 0,
+        profitFactor: grossLoss > 0 ? parseFloat((grossWin / grossLoss).toFixed(4)) : grossWin > 0 ? 999 : 0,
+        expectancyPerTrade: totalTrades > 0 ? parseFloat((netPnl / totalTrades).toFixed(2)) : 0,
+      };
+    };
+
+    const summarizeBuckets = (bucket) => Object.fromEntries(
+      Object.entries(bucket).map(([key, groupTrades]) => [key, summarizeGroup(groupTrades)])
+    );
+
+    return {
+      module: summarizeBuckets(buckets.module),
+      symbol: summarizeBuckets(buckets.symbol),
+      session: summarizeBuckets(buckets.session),
+      direction: summarizeBuckets(buckets.direction),
+      filterReason: filterStats || buckets.filterReason,
     };
   }
 

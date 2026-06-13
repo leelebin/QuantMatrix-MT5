@@ -225,6 +225,8 @@ exports.runBacktest = async (req, res) => {
       parameterPreset: presetResolution.parameterPreset,
       parameterPresetResolution: presetResolution.parameterPresetResolution,
       breakevenConfig: effectiveBreakeven,
+      directionControlConfig: presetResolution.strategyInstance.effectiveTradeManagement?.directionControl || null,
+      strategyInstance: presetResolution.strategyInstance,
       executionPolicy: presetResolution.strategyInstance.executionPolicy,
       includeChartData: true,
       costModel: costModel || null,
@@ -405,6 +407,8 @@ exports.runAllStrategies = async (req, res) => {
           storedStrategyParameters: strategyInstance.parameters,
           strategyParams: null,
           breakevenConfig: effectiveBreakeven,
+          directionControlConfig: strategyInstance.effectiveTradeManagement?.directionControl || null,
+          strategyInstance,
           executionPolicy: strategyInstance.executionPolicy,
           costModel: costModel || null,
         });
@@ -487,6 +491,7 @@ exports.runBatchBacktest = async (req, res) => {
       forcedTimeframe,
       strategyScopeMode,
       runModel,
+      symbolCustomEnabled,
       costModel,
     } = req.body;
     const job = await batchBacktestService.startJob(
@@ -499,6 +504,7 @@ exports.runBatchBacktest = async (req, res) => {
         forcedTimeframe,
         strategyScopeMode,
         runModel,
+        symbolCustomEnabled,
         costModel,
       },
       {

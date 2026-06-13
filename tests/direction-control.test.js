@@ -35,6 +35,16 @@ function baseCandles() {
   ];
 }
 
+function lowMfeCandles() {
+  return [
+    candle(0, { high: 100, low: 100, close: 100 }),
+    candle(1, { high: 100.5, low: 99, close: 99.5 }),
+    candle(2, { high: 100.75, low: 98, close: 98.5 }),
+    candle(3, { high: 100.8, low: 96, close: 97 }),
+    candle(4, { high: 100.9, low: 95, close: 96 }),
+  ];
+}
+
 function scoreConfig(overrides = {}) {
   return normalizeDirectionControlConfig({
     enabled: true,
@@ -150,11 +160,12 @@ describe('directionControlEvaluator', () => {
     const config = scoreConfig();
     const position = basePosition();
     const before = JSON.stringify(position);
+    const candles = lowMfeCandles();
     const result = evaluateDirectionControl({
       config,
       position,
-      candles: baseCandles(),
-      currentBar: baseCandles()[4],
+      candles,
+      currentBar: candles[4],
       currentIndex: 4,
       strategyContext: { currentBarClosed: true },
       serverTime: '2026-01-01T04:00:00.000Z',
@@ -171,6 +182,67 @@ describe('directionControlEvaluator', () => {
     }));
     expect(result.statePatch.directionControl.firstTriggered).toBe(true);
     expect(JSON.stringify(position)).toBe(before);
+  });
+
+  test('failedFollowThrough triggers when MFE stays below minimum and currentR breaches threshold', () => {
+    const candles = lowMfeCandles();
+    const result = evaluateDirectionControl({
+      config: scoreConfig({
+        triggerScore: 1,
+        requiredCategories: 1,
+        checks: {
+          adverseR: { enabled: false },
+          failedFollowThrough: {
+            enabled: true,
+            minFavourableR: 0.25,
+            currentRThreshold: -0.35,
+            score: 1,
+            critical: false,
+          },
+        },
+      }),
+      position: basePosition(),
+      candles,
+      currentBar: candles[4],
+      currentIndex: 4,
+    });
+
+    expect(result.triggered).toBe(true);
+    expect(result.checkResults.failedFollowThrough).toEqual(expect.objectContaining({
+      triggered: true,
+      mfeR: 0.18,
+      currentR: -0.8,
+    }));
+  });
+
+  test('failedFollowThrough does not trigger once MFE has reached the minimum favourable excursion', () => {
+    const result = evaluateDirectionControl({
+      config: scoreConfig({
+        triggerScore: 1,
+        requiredCategories: 1,
+        checks: {
+          adverseR: { enabled: false },
+          failedFollowThrough: {
+            enabled: true,
+            minFavourableR: 0.25,
+            currentRThreshold: -0.35,
+            score: 1,
+            critical: false,
+          },
+        },
+      }),
+      position: basePosition(),
+      candles: baseCandles(),
+      currentBar: baseCandles()[4],
+      currentIndex: 4,
+    });
+
+    expect(result.triggered).toBe(false);
+    expect(result.checkResults.failedFollowThrough).toEqual(expect.objectContaining({
+      triggered: false,
+      mfeR: 0.4,
+      currentR: -0.8,
+    }));
   });
 
   test('adverseR alone does not trigger unless critical', () => {
@@ -258,11 +330,12 @@ describe('directionControlEvaluator', () => {
   });
 
   test('firstTriggerOnly and cooldown prevent event spam across persisted state', () => {
+    const candles = lowMfeCandles();
     const first = evaluateDirectionControl({
       config: scoreConfig(),
       position: basePosition(),
-      candles: baseCandles(),
-      currentBar: baseCandles()[4],
+      candles,
+      currentBar: candles[4],
       currentIndex: 4,
     });
     expect(first.triggered).toBe(true);
@@ -270,9 +343,9 @@ describe('directionControlEvaluator', () => {
     const repeated = evaluateDirectionControl({
       config: scoreConfig(),
       position: basePosition({ directionControl: first.statePatch.directionControl }),
-      candles: baseCandles(),
-      currentBar: baseCandles()[5],
-      currentIndex: 5,
+      candles,
+      currentBar: candles[4],
+      currentIndex: 4,
     });
     expect(repeated.triggered).toBe(false);
     expect(repeated.checkResults.reason).toBe('first_trigger_already_recorded');
@@ -280,8 +353,8 @@ describe('directionControlEvaluator', () => {
     const cooldown = evaluateDirectionControl({
       config: scoreConfig({ firstTriggerOnly: false, cooldownBars: 3 }),
       position: basePosition({ directionControl: { firstTriggered: true, lastTriggeredBarIndex: 5, triggerCount: 1 } }),
-      candles: baseCandles(),
-      currentBar: baseCandles()[6],
+      candles,
+      currentBar: candles[4],
       currentIndex: 6,
     });
     expect(cooldown.triggered).toBe(false);
@@ -331,7 +404,7 @@ describe('directionControlSummary and runtime integration', () => {
         tradeManagement: { directionControl: scoreConfig() },
       }),
       getPriceFn: async () => ({ bid: 96, ask: 96.1 }),
-      getCandlesFn: async () => baseCandles(),
+      getCandlesFn: async () => lowMfeCandles(),
       updatePositionFn: async (id, patch) => patches.push({ id, patch }),
       now: new Date('2026-01-01T04:00:00.000Z'),
     });
@@ -364,7 +437,7 @@ describe('directionControlSummary and runtime integration', () => {
         exitConfig: { directionControl: scoreConfig() },
       }),
       getPriceFn: async () => ({ bid: 96, ask: 96.1 }),
-      getCandlesFn: async () => baseCandles(),
+      getCandlesFn: async () => lowMfeCandles(),
       updatePositionFn: async (id, patch) => patches.push({ id, patch }),
       now: new Date('2026-01-01T04:00:00.000Z'),
     });

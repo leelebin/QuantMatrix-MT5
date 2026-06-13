@@ -194,7 +194,7 @@ function evaluateFailedFollowThrough(check, currentR, mfeR) {
   const currentRThreshold = toNumber(check.currentRThreshold, -0.35);
   const triggered = Number.isFinite(mfeR)
     && Number.isFinite(currentR)
-    && mfeR >= minFavourableR
+    && mfeR < minFavourableR
     && currentR <= currentRThreshold;
   return {
     ...getCheckBase(check),

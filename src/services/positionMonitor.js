@@ -22,6 +22,7 @@ const RiskProfile = require('../models/RiskProfile');
 const indicatorService = require('./indicatorService');
 const strategyEngine = require('./strategyEngine');
 const tradeManagementService = require('./tradeManagementService');
+const directionControlRuntimeService = require('./directionControlRuntimeService');
 const { resolveTradeManagementPolicy } = require('./tradeManagementConfig');
 const { getStrategyExecutionConfig } = require('../config/strategyExecution');
 const {
@@ -30,11 +31,21 @@ const {
   resolveCategoryContext,
   toIsoOrNull,
 } = require('./assignmentRuntimeService');
+const {
+  markCaptureAttempt,
+  mergeCandlesIntoCapture,
+  shouldCaptureTimeframe,
+} = require('../utils/postBreakevenCandleCapture');
 
 const BASE_MONITOR_TICK_MS = 15 * 1000;
 const JUST_OPENED_WINDOW_MS = 5 * 60 * 1000;
 const MARKET_STOP_STALE_TICK_MS = 30 * 60 * 1000;
 const MARKET_STOP_UNTRADEABLE_MODES = new Set(['DISABLED', 'CLOSEONLY']);
+const POST_BE_CANDLE_FETCH_COUNT = Object.freeze({
+  M1: 30,
+  M5: 30,
+  M15: 20,
+});
 
 function isCryptoSymbol(symbol) {
   const instrument = getInstrument(symbol);
@@ -627,6 +638,54 @@ class PositionMonitor {
     }
   }
 
+  async _capturePostBreakevenCandles(positions = [], now = new Date()) {
+    const requestedNow = now instanceof Date ? now : new Date(now);
+    const captureNow = Number.isFinite(requestedNow.getTime()) && requestedNow.getTime() > Date.now()
+      ? requestedNow
+      : new Date();
+    const candidates = Array.isArray(positions)
+      ? positions.filter((position) => (
+          position?._id
+          && position?.symbol
+          && position.postBreakevenCandleCapture?.active === true
+        ))
+      : [];
+    let updatedCount = 0;
+
+    for (const position of candidates) {
+      let capture = position.postBreakevenCandleCapture;
+      let changed = false;
+      const timeframes = Array.isArray(capture.timeframes) ? capture.timeframes : [];
+
+      for (const timeframe of timeframes) {
+        const tf = String(timeframe || '').toUpperCase();
+        if (!shouldCaptureTimeframe(capture, tf, captureNow)) continue;
+
+        try {
+          const count = POST_BE_CANDLE_FETCH_COUNT[tf] || 30;
+          const candles = await mt5Service.getCandles(position.symbol, tf, null, count);
+          const result = mergeCandlesIntoCapture(capture, candles, tf, position, captureNow);
+          capture = result.capture;
+          changed = changed || result.changed;
+        } catch (err) {
+          console.warn(`[Monitor] Post-BE candle capture skipped ${position.symbol} ${tf}: ${err.message}`);
+          capture = markCaptureAttempt(capture, tf, captureNow);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await positionsDb.update(
+          { _id: position._id },
+          { $set: { postBreakevenCandleCapture: capture } }
+        );
+        updatedCount += 1;
+      }
+    }
+
+    return updatedCount;
+  }
+
   /**
    * After trailing/breakeven processing, run the conservative trade-management
    * evaluator on each position. All side-effects (close/partialClose/modifySl)
@@ -783,6 +842,25 @@ class PositionMonitor {
         console.warn(`[Monitor] Trade management evaluation failed for ${position?.symbol}: ${err.message}`);
       }
     }
+
+    const directionUpdates = await directionControlRuntimeService.evaluateRuntimeDirectionControl({
+      positions: positions.filter((position) => !this._isMarketStoppedPosition(position)),
+      scope: 'live',
+      getStrategyInstanceFn: getCachedStrategyInstance,
+      getPriceFn: fetchPrice,
+      getCandlesFn: fetchCandles,
+      updatePositionFn: async (localId, patch) => {
+        const query = localId && typeof localId === 'string' && localId.length >= 16
+          ? { _id: localId }
+          : { mt5PositionId: String(localId) };
+        await positionsDb.update(query, { $set: patch });
+      },
+      now,
+    });
+    if (directionUpdates.some((update) => update && !update.error)) {
+      const refreshedPositions = await positionsDb.find({});
+      websocketService.broadcast('positions', 'positions_sync', refreshedPositions);
+    }
   }
 
   async _runPositionManagement(positions, contexts, scanMode, now, cycleState) {
@@ -841,7 +919,16 @@ class PositionMonitor {
 
     await this._runTradeManagementEvaluation(effectivePositions, effectiveContexts, scanMode, now);
 
+    let postBeCaptureUpdates = 0;
+    if (scanMode === 'heavy') {
+      postBeCaptureUpdates = await this._capturePostBreakevenCandles(effectivePositions, now);
+    }
+
     if (updates.length === 0) {
+      if (postBeCaptureUpdates > 0) {
+        const refreshedPositions = await positionsDb.find({});
+        websocketService.broadcast('positions', 'positions_sync', refreshedPositions);
+      }
       return [];
     }
 
@@ -1108,7 +1195,11 @@ class PositionMonitor {
         managementEvents: closedSnapshot.managementEvents || [],
         realizedRMultiple: closedSnapshot.realizedRMultiple,
         targetRMultipleCaptured: closedSnapshot.targetRMultipleCaptured,
-        positionSnapshot: buildPositionExportSnapshot(localPos),
+        postBreakevenCandleCapture: closedSnapshot.postBreakevenCandleCapture || null,
+        positionSnapshot: buildPositionExportSnapshot({
+          ...localPos,
+          postBreakevenCandleCapture: closedSnapshot.postBreakevenCandleCapture || localPos.postBreakevenCandleCapture || null,
+        }),
       },
     });
 

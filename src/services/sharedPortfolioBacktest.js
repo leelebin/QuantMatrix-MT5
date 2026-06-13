@@ -26,6 +26,10 @@ const {
   getStrategyExecutionConfig,
   getForcedTimeframeExecutionConfig,
 } = require('../config/strategyExecution');
+const { getSymbolCustomLogic } = require('../symbolCustom/registry');
+const symbolCustomRunner = require('./symbolCustomBacktestRunnerService');
+const { resolveDirectionControlConfig } = require('./directionControlConfig');
+const { buildDirectionControlSummary } = require('./directionControlSummary');
 const instrumentValuation = require('../utils/instrumentValuation');
 const backtestCostModel = require('../utils/backtestCostModel');
 
@@ -89,6 +93,66 @@ function isProtectiveExitOrTriggered(trade) {
     || trade.trailingActivated
     || PROTECTIVE_EXIT_REASONS.has(trade.exitReason)
   ));
+}
+
+function isSymbolCustomCombo(combo = {}) {
+  return combo.source === 'symbolCustom' || combo.type === 'symbolCustom';
+}
+
+function getComboKey(combo = {}) {
+  return isSymbolCustomCombo(combo)
+    ? `${combo.symbol}:${combo.symbolCustomId || combo.symbolCustomName || combo.strategy}`
+    : `${combo.symbol}:${combo.strategy}`;
+}
+
+function getSymbolCustomLogicName(symbolCustom = {}, combo = {}) {
+  return String(
+    combo.logicName
+      || symbolCustom.logicName
+      || symbolCustom.registryLogicName
+      || symbolCustom.symbolCustomName
+      || combo.strategy
+      || ''
+  ).trim();
+}
+
+function getTradeProfitLoss(trade = {}) {
+  if (trade.profitLoss != null) return Number(trade.profitLoss) || 0;
+  if (trade.pnl != null) return Number(trade.pnl) || 0;
+  return 0;
+}
+
+function normalizeSymbolCustomClosedTrade(trade = {}, combo = {}, comboIdx = null) {
+  const profitLoss = getTradeProfitLoss(trade);
+  const normalized = {
+    ...trade,
+    type: trade.type || trade.side,
+    direction: trade.direction || trade.side,
+    strategy: combo.strategy || trade.symbolCustomName || combo.symbolCustomName || 'SymbolCustom',
+    symbol: combo.symbol || trade.symbol,
+    symbolCustomId: combo.symbolCustomId || trade.symbolCustomId || null,
+    symbolCustomName: combo.symbolCustomName || trade.symbolCustomName || combo.strategy || null,
+    logicName: combo.logicName || trade.logicName || null,
+    profitLoss,
+    grossProfitLoss: trade.grossProfitLoss != null ? trade.grossProfitLoss : profitLoss,
+    comboIndex: comboIdx,
+  };
+
+  if (normalized.exitReason && !normalized.reason) {
+    normalized.reason = normalized.exitReason;
+  }
+
+  return normalized;
+}
+
+function markToMarketSymbolCustomPosition(position, latest) {
+  if (!position || !latest) return 0;
+  const close = symbolCustomRunner.toNumber(latest.close, null);
+  if (!Number.isFinite(close)) return 0;
+  const entryPrice = symbolCustomRunner.toNumber(position.entryPrice, close);
+  const quantity = symbolCustomRunner.toNumber(position.quantity, 0);
+  const direction = position.side === 'SELL' ? -1 : 1;
+  return (close - entryPrice) * direction * quantity;
 }
 
 function buildComboState({
@@ -200,6 +264,7 @@ function buildComboState({
     valuation,
     costModel: resolvedCostModel,
     costModelSources,
+    directionControlConfig: resolveDirectionControlConfig({ strategyInstance }),
     spread,
     slippage,
     historyWindowState: backtestEngine._createRollingArrayWindowState(candles),
@@ -217,6 +282,70 @@ function buildComboState({
   };
 }
 
+function buildSymbolCustomComboState({
+  combo,
+  candles,
+  requestCostModel = null,
+}) {
+  const symbolCustom = combo.symbolCustom;
+  if (!symbolCustom) {
+    throw new Error(`SymbolCustom record not loaded: ${combo.symbolCustomId || combo.strategy || combo.symbol}`);
+  }
+
+  const logicName = getSymbolCustomLogicName(symbolCustom, combo);
+  const logic = combo.logic || getSymbolCustomLogic(logicName);
+  if (!logic) {
+    throw new Error(`SymbolCustom logic is not registered: ${logicName || '(empty)'}`);
+  }
+
+  const normalizedCandles = symbolCustomRunner.normalizeCandles(candles || {});
+  const entryCandles = normalizedCandles.entry;
+  const parameters = {
+    ...(symbolCustom.parameters || {}),
+    ...(combo.parameters || {}),
+  };
+  const costModel = symbolCustomRunner.normalizeCostModel(requestCostModel || combo.costModel || {});
+
+  return {
+    kind: 'symbolCustom',
+    combo: {
+      ...combo,
+      source: 'symbolCustom',
+      strategy: combo.strategy || symbolCustom.symbolCustomName,
+      symbolCustomName: combo.symbolCustomName || symbolCustom.symbolCustomName,
+      logicName,
+    },
+    symbolCustom,
+    logic,
+    logicName,
+    parameters,
+    costModel,
+    riskPerTradePct: symbolCustomRunner.resolveRiskPerTradePct(symbolCustom, combo.options || {}),
+    directionControlConfig: resolveDirectionControlConfig({
+      symbolCustom,
+      source: 'symbolCustom',
+    }),
+    normalizedCandles,
+    candles: entryCandles,
+    candleTimes: entryCandles.map((candle) => toTimeMs(symbolCustomRunner.getBarTime(candle))),
+    setupHistoryCursor: symbolCustomRunner.createTimeHistoryCursor(normalizedCandles.setup),
+    higherHistoryCursor: symbolCustomRunner.createTimeHistoryCursor(normalizedCandles.higher),
+    entryHistory: [],
+    staticContext: symbolCustomRunner.buildStaticContext({ symbolCustom, logicName, parameters }),
+    tradeIndexes: {
+      byExitDate: new Map(),
+      byEntryDate: new Map(),
+    },
+    closedTrades: [],
+    rawSignals: 0,
+    openedSignals: 0,
+    rejectedSignalDetails: [],
+    openPosition: null,
+    disabled: false,
+    startBarIndex: 0,
+  };
+}
+
 function markToMarketEquity(state) {
   let eq = state.balance;
   state.openPositionComboIdx.forEach((idx) => {
@@ -224,6 +353,10 @@ function markToMarketEquity(state) {
     const pos = s.openPosition;
     const latest = state.latestCandleBySymbol[s.combo.symbol];
     if (!pos || !latest) return;
+    if (s.kind === 'symbolCustom') {
+      eq += markToMarketSymbolCustomPosition(pos, latest);
+      return;
+    }
     eq += instrumentValuation.calculateGrossProfitLoss({
       type: pos.type,
       entryPrice: pos.entryPrice,
@@ -240,7 +373,7 @@ function isEquityBust(state, ruinThreshold) {
 }
 
 function recordEquityPoint(state, time, equity) {
-  state.equityCurve.push({ time, equity: round2(equity) });
+  state.equityCurve.push({ time, equity: round2(equity), balance: round2(state.balance) });
   if (equity > state.peakEquity) state.peakEquity = equity;
   const dd = state.peakEquity > 0 ? (state.peakEquity - equity) / state.peakEquity : 0;
   if (dd > state.maxDrawdown) state.maxDrawdown = dd;
@@ -249,6 +382,41 @@ function recordEquityPoint(state, time, equity) {
 function closePositionForCombo(state, comboIdx, exitPrice, reason, exitTime) {
   const s = state.combos[comboIdx];
   if (!s.openPosition) return null;
+  if (s.kind === 'symbolCustom') {
+    const currentIndex = Number.isFinite(Number(s.openPosition.currentIndex))
+      ? Number(s.openPosition.currentIndex)
+      : Math.max(0, s.candles.length - 1);
+    const currentBar = {
+      ...(state.latestCandleBySymbol[s.combo.symbol] || s.candles[currentIndex] || {}),
+      time: exitTime,
+      close: exitPrice,
+    };
+    symbolCustomRunner.updateSymbolCustomDirectionControlPostTrigger(s.openPosition, currentBar);
+    const rawTrade = symbolCustomRunner.closeTrade(
+      s.openPosition,
+      currentBar,
+      currentIndex,
+      exitPrice,
+      reason,
+      s.costModel
+    );
+    const trade = normalizeSymbolCustomClosedTrade(rawTrade, s.combo, comboIdx);
+    state.balance += trade.profitLoss;
+    state.trades.push(trade);
+    s.closedTrades.push(rawTrade);
+    symbolCustomRunner.indexClosedTrade(rawTrade, s.tradeIndexes);
+    state.openPositionComboIdx.delete(comboIdx);
+    s.openPosition = null;
+    if (state.balance > state.peakBalance) state.peakBalance = state.balance;
+    return trade;
+  }
+
+  if (typeof backtestEngine._updateDirectionControlPostTriggerExcursion === 'function') {
+    backtestEngine._updateDirectionControlPostTriggerExcursion(
+      s.openPosition,
+      state.latestCandleBySymbol[s.combo.symbol] || { time: exitTime, high: exitPrice, low: exitPrice, close: exitPrice }
+    );
+  }
   const trade = backtestEngine._closeTrade(
     s.openPosition,
     exitPrice,
@@ -276,9 +444,11 @@ function triggerBustAndHalt(state, ruinThreshold, currentCandleTime, eventIndex,
     const latest = state.latestCandleBySymbol[s.combo.symbol];
     if (!s.openPosition || !latest) return;
 
-    const exitPrice = s.openPosition.type === 'BUY'
-      ? latest.close - s.spread / 2
-      : latest.close + s.spread / 2;
+    const exitPrice = s.kind === 'symbolCustom'
+      ? latest.close
+      : (s.openPosition.type === 'BUY'
+        ? latest.close - s.spread / 2
+        : latest.close + s.spread / 2);
     const trade = closePositionForCombo(state, comboIdx, exitPrice, 'BUST', currentCandleTime);
     if (trade) forcedCloseCount += 1;
   });
@@ -296,8 +466,147 @@ function triggerBustAndHalt(state, ruinThreshold, currentCandleTime, eventIndex,
   recordEquityPoint(state, currentCandleTime, state.balance);
 }
 
-function processEvent(state, comboIdx, barIdx) {
+async function processSymbolCustomEvent(state, comboIdx, barIdx) {
   const s = state.combos[comboIdx];
+  if (s.disabled) return;
+  const currentBar = s.candles[barIdx];
+  if (!currentBar) return;
+
+  const currentTime = symbolCustomRunner.getBarTime(currentBar);
+  state.latestCandleBySymbol[s.combo.symbol] = currentBar;
+  s.entryHistory.push(currentBar);
+  const setupHistory = symbolCustomRunner.advanceTimeHistoryCursor(s.setupHistoryCursor, currentBar);
+  const higherHistory = symbolCustomRunner.advanceTimeHistoryCursor(s.higherHistoryCursor, currentBar);
+
+  if (s.openPosition) {
+    s.openPosition.currentIndex = barIdx;
+    const barrierExit = symbolCustomRunner.detectStopTakeProfitExit(s.openPosition, currentBar);
+    if (barrierExit) {
+      symbolCustomRunner.updateSymbolCustomDirectionControlPostTrigger(s.openPosition, currentBar);
+      closePositionForCombo(state, comboIdx, barrierExit.exitPrice, barrierExit.exitReason, currentTime);
+      recordEquityPoint(state, currentTime, markToMarketEquity(state));
+      return;
+    }
+  }
+
+  const context = symbolCustomRunner.buildContext({
+    symbolCustom: s.symbolCustom,
+    logicName: s.logicName,
+    parameters: s.parameters,
+    candles: s.normalizedCandles,
+    currentBar,
+    currentIndex: barIdx,
+    openPosition: s.openPosition,
+    balance: state.balance,
+    closedTrades: s.closedTrades,
+    candleHistories: {
+      setup: setupHistory,
+      entry: s.entryHistory,
+      higher: higherHistory,
+    },
+    staticContext: s.staticContext,
+    tradeIndexes: s.tradeIndexes,
+  });
+
+  let result = null;
+  try {
+    result = await s.logic.analyze(context) || {};
+  } catch (err) {
+    s.disabled = true;
+    state.errors.push({
+      symbol: s.combo.symbol,
+      strategy: s.combo.strategy,
+      symbolCustomId: s.combo.symbolCustomId || null,
+      message: err.message,
+    });
+    recordEquityPoint(state, currentTime, markToMarketEquity(state));
+    return;
+  }
+
+  const signal = result.signal || 'NONE';
+  if (s.openPosition) {
+    symbolCustomRunner.evaluateSymbolCustomDirectionControlAudit({
+      position: s.openPosition,
+      config: s.directionControlConfig,
+      candles: s.candles,
+      currentBar,
+      currentIndex: barIdx,
+      symbolCustom: s.symbolCustom,
+      logicName: s.logicName,
+      result,
+    });
+  }
+
+  if (s.openPosition && signal === 'CLOSE') {
+    const exitPrice = symbolCustomRunner.toNumber(currentBar.close, s.openPosition.entryPrice);
+    const exitReason = result.exitReason
+      || result.metadata?.exitRule
+      || result.reasonCode
+      || 'CUSTOM_CLOSE';
+    closePositionForCombo(state, comboIdx, exitPrice, exitReason, currentTime);
+  } else if (!s.openPosition && (signal === 'BUY' || signal === 'SELL')) {
+    s.rawSignals += 1;
+    if (state.openPositionComboIdx.size >= state.maxConcurrentPositions) {
+      state.rejectedSignals.noCapacity += 1;
+    } else {
+      const executionGate = symbolCustomRunner.evaluateBacktestExecutionGate({
+        symbolCustom: s.symbolCustom,
+        logicName: s.logicName,
+        result,
+        currentBar,
+        currentIndex: barIdx,
+        parameters: s.parameters,
+        options: s.combo.options || {},
+        closedTrades: s.closedTrades,
+      });
+
+      if (!executionGate.allowed) {
+        s.rejectedSignalDetails.push(executionGate.detail);
+      } else {
+        const nextPosition = symbolCustomRunner.openTrade({
+          symbolCustom: s.symbolCustom,
+          logicName: s.logicName,
+          result,
+          currentBar,
+          currentIndex: barIdx,
+          balance: state.balance,
+          riskPerTradePct: s.riskPerTradePct,
+          costModel: s.costModel,
+          executionGate,
+        });
+
+        if (nextPosition) {
+          nextPosition.currentIndex = barIdx;
+          s.openPosition = nextPosition;
+          state.openPositionComboIdx.add(comboIdx);
+          s.openedSignals += 1;
+        } else {
+          state.rejectedSignals.zeroSize += 1;
+          s.rejectedSignalDetails.push(symbolCustomRunner.buildRejectedSignalDetail({
+            symbolCustom: s.symbolCustom,
+            logicName: s.logicName,
+            result,
+            currentBar,
+            currentIndex: barIdx,
+            reasonCode: symbolCustomRunner.SYMBOL_CUSTOM_BACKTEST_PROTECTIVE_LEVELS_REQUIRED,
+            reasonText: 'BUY/SELL signal rejected because SL/TP protective levels were missing or invalid',
+            executionScore: executionGate.executionScore,
+            executionPolicy: executionGate.executionPolicy,
+          }));
+        }
+      }
+    }
+  }
+
+  recordEquityPoint(state, currentTime, markToMarketEquity(state));
+}
+
+async function processEvent(state, comboIdx, barIdx) {
+  const s = state.combos[comboIdx];
+  if (s.kind === 'symbolCustom') {
+    await processSymbolCustomEvent(state, comboIdx, barIdx);
+    return;
+  }
   if (s.disabled) return;
   const currentCandle = s.candles[barIdx];
   const currentTimeMs = s.candleTimes[barIdx];
@@ -345,6 +654,19 @@ function processEvent(state, comboIdx, barIdx) {
     if (trailing.updated) {
       s.openPosition.currentSl = trailing.newSl;
       backtestEngine._markBreakevenState(s.openPosition, trailing.phase);
+    }
+    if (typeof backtestEngine._evaluateBacktestDirectionControlAudit === 'function') {
+      backtestEngine._evaluateBacktestDirectionControlAudit({
+        position: s.openPosition,
+        config: s.directionControlConfig,
+        candles: s.candles,
+        currentBar: currentCandle,
+        currentIndex: barIdx,
+        indicators: {},
+        strategyType: s.combo.strategy,
+        strategyInstance: s.strategyInstance,
+        symbol: s.combo.symbol,
+      });
     }
   }
 
@@ -425,9 +747,14 @@ function processEvent(state, comboIdx, barIdx) {
           const currentAtr = ind.atr && ind.atr.length > 0 ? ind.atr[ind.atr.length - 1] : 0;
           pendingEntry = {
             id: state.trades.length + state.openPositionComboIdx.size + 1,
+            symbol: s.combo.symbol,
+            strategy: s.combo.strategy,
+            strategyInstanceId: s.strategyInstance?._id || null,
             type: result.signal,
+            side: result.signal,
             entryPrice,
             entryTime: nextCandle.time,
+            entryIndex: barIdx + 1,
             sl: result.sl,
             tp: result.tp,
             currentSl: result.sl,
@@ -441,6 +768,9 @@ function processEvent(state, comboIdx, barIdx) {
             costModel: s.costModel,
             costModelSources: s.costModelSources,
             indicatorsSnapshot: result.indicatorsSnapshot,
+            entryThesisLevels: typeof backtestEngine._resolveBacktestEntryThesisLevels === 'function'
+              ? backtestEngine._resolveBacktestEntryThesisLevels(result)
+              : {},
             reason: result.reason,
             entryReason: result.entryReason || [result.reason, result.triggerReason].filter(Boolean).join(' | ') || result.reason,
             setupReason: result.setupReason || result.reason || '',
@@ -449,6 +779,9 @@ function processEvent(state, comboIdx, barIdx) {
             entryTimeframe: result.entryTimeframe || null,
             setupCandleTime: result.setupCandleTime || currentCandle.time,
             entryCandleTime: result.entryCandleTime || result.setupCandleTime || currentCandle.time,
+            managementEvents: [],
+            directionControlEvents: [],
+            directionControl: null,
           };
         }
       }
@@ -526,6 +859,58 @@ function buildContributions(trades) {
     perStrategy: Array.from(byStrategy.values()).map(finalize).sort((a, b) => b.netMoney - a.netMoney),
     perSymbol: Array.from(bySymbol.values()).map(finalize).sort((a, b) => b.netMoney - a.netMoney),
   };
+}
+
+function buildComboResultSummary(trades = [], initialBalance = 0) {
+  const totalTrades = trades.length;
+  const outcomes = trades.map((trade) => classifyTradeOutcome(trade, 'net'));
+  const winningTrades = outcomes.filter((outcome) => outcome === 'win').length;
+  const losingTrades = outcomes.filter((outcome) => outcome === 'loss').length;
+  const neutralTrades = outcomes.filter((outcome) => outcome === 'neutral').length;
+  const decisiveTrades = winningTrades + losingTrades;
+  const netProfitMoney = trades.reduce((sum, trade) => sum + getTradeProfitLoss(trade), 0);
+  const grossProfitMoney = trades.reduce((sum, trade) => {
+    const value = getTradeProfitLoss(trade);
+    return value > 0 ? sum + value : sum;
+  }, 0);
+  const grossLossMoney = trades.reduce((sum, trade) => {
+    const value = getTradeProfitLoss(trade);
+    return value < 0 ? sum + Math.abs(value) : sum;
+  }, 0);
+
+  return {
+    totalTrades,
+    winningTrades,
+    losingTrades,
+    neutralTrades,
+    decisiveTrades,
+    winRate: decisiveTrades > 0 ? round4(winningTrades / decisiveTrades) : 0,
+    lossRate: decisiveTrades > 0 ? round4(losingTrades / decisiveTrades) : 0,
+    neutralRate: totalTrades > 0 ? round4(neutralTrades / totalTrades) : 0,
+    netProfitMoney: round2(netProfitMoney),
+    returnPercent: initialBalance > 0 ? round2((netProfitMoney / initialBalance) * 100) : 0,
+    grossProfitMoney: round2(grossProfitMoney),
+    grossLossMoney: round2(grossLossMoney),
+    profitFactor: grossLossMoney > 0 ? round2(grossProfitMoney / grossLossMoney) : (grossProfitMoney > 0 ? 999 : 0),
+    netProfitFactor: grossLossMoney > 0 ? round2(grossProfitMoney / grossLossMoney) : (grossProfitMoney > 0 ? 999 : 0),
+    maxDrawdownPercent: 0,
+    totalTradingCosts: 0,
+  };
+}
+
+function buildComboResults(state, readiedComboInfo = [], initialBalance = 0) {
+  return readiedComboInfo.map((info, comboIndex) => {
+    const trades = state.trades.filter((trade) => trade.comboIndex === comboIndex);
+    return {
+      ...info,
+      status: trades.length > 0 ? 'completed' : 'no_trades',
+      summary: buildComboResultSummary(trades, initialBalance),
+      parameters: info.parameters || null,
+      parameterSource: info.parameterSource || null,
+      error: null,
+      backtestId: null,
+    };
+  });
 }
 
 function buildSummary(state, initialBalance) {
@@ -620,6 +1005,7 @@ function buildSummary(state, initialBalance) {
     maxConsecutiveLosses: maxConsLosses,
     peakBalance: round2(state.peakBalance),
     peakEquity: round2(state.peakEquity),
+    directionControl: buildDirectionControlSummary(trades),
   };
 }
 
@@ -630,6 +1016,7 @@ async function runSharedPortfolioBacktest({
   start,
   endExclusive,
   fetchCandles,
+  fetchSymbolCustomCandles = null,
   strategyInstancesByCombination,
   forcedTimeframe = null,
   maxConcurrentPositions = null,
@@ -653,7 +1040,11 @@ async function runSharedPortfolioBacktest({
     peakEquity: safeInitialBalance,
     maxDrawdown: 0,
     trades: [],
-    equityCurve: [{ time: start ? new Date(start).toISOString() : '', equity: safeInitialBalance }],
+    equityCurve: [{
+      time: start ? new Date(start).toISOString() : '',
+      equity: safeInitialBalance,
+      balance: safeInitialBalance,
+    }],
     openPositionComboIdx: new Set(),
     latestCandleBySymbol: {},
     rejectedSignals: { noCapacity: 0, zeroSize: 0 },
@@ -679,6 +1070,77 @@ async function runSharedPortfolioBacktest({
 
   for (let idx = 0; idx < combinations.length; idx++) {
     const combo = combinations[idx];
+    if (isSymbolCustomCombo(combo)) {
+      try {
+        if (typeof fetchSymbolCustomCandles !== 'function') {
+          throw new Error('fetchSymbolCustomCandles function is required for SymbolCustom portfolio combinations.');
+        }
+        const customCandles = await fetchSymbolCustomCandles(combo.symbolCustom || combo);
+        const entryCandles = customCandles && Array.isArray(customCandles.entry)
+          ? customCandles.entry
+          : [];
+        if (entryCandles.length < 2) {
+          skipped.push({
+            source: 'symbolCustom',
+            symbol: combo.symbol,
+            strategy: combo.strategy,
+            symbolCustomId: combo.symbolCustomId || null,
+            symbolCustomName: combo.symbolCustomName || combo.strategy,
+            logicName: combo.logicName || null,
+            status: 'insufficient_data',
+            timeframe: combo.symbolCustom?.timeframes?.entryTimeframe || null,
+            reason: `Insufficient historical data: ${entryCandles.length} entry candles in range`,
+          });
+          continue;
+        }
+
+        const comboState = buildSymbolCustomComboState({
+          combo,
+          candles: customCandles,
+          requestCostModel,
+        });
+        prepared.push({ comboState, primaryCandles: comboState.candles });
+        state.combos.push(comboState);
+        readiedCombos.push(comboState.combo);
+        readiedComboInfo.push({
+          source: 'symbolCustom',
+          symbol: comboState.combo.symbol,
+          strategy: comboState.combo.strategy,
+          symbolCustomId: comboState.combo.symbolCustomId || comboState.symbolCustom._id || null,
+          symbolCustomName: comboState.combo.symbolCustomName || comboState.symbolCustom.symbolCustomName,
+          logicName: comboState.logicName,
+          timeframe: comboState.symbolCustom.timeframes?.entryTimeframe || null,
+          setupTimeframe: comboState.symbolCustom.timeframes?.setupTimeframe || null,
+          higherTimeframe: comboState.symbolCustom.timeframes?.higherTimeframe || null,
+          entryTimeframe: comboState.symbolCustom.timeframes?.entryTimeframe || null,
+          costModelUsed: comboState.costModel,
+          parameters: comboState.parameters,
+        });
+
+        if (typeof onProgress === 'function') {
+          onProgress({
+            phase: 'prepare',
+            preparedCount: prepared.length,
+            totalCombinations: combinations.length,
+            currentSymbol: combo.symbol,
+            currentStrategy: combo.strategy,
+          });
+        }
+      } catch (err) {
+        skipped.push({
+          source: 'symbolCustom',
+          symbol: combo.symbol,
+          strategy: combo.strategy,
+          symbolCustomId: combo.symbolCustomId || null,
+          symbolCustomName: combo.symbolCustomName || combo.strategy,
+          logicName: combo.logicName || null,
+          status: 'error',
+          reason: err.message,
+        });
+      }
+      continue;
+    }
+
     const baseExec = forcedTimeframe
       ? getForcedTimeframeExecutionConfig(combo.symbol, combo.strategy, forcedTimeframe)
       : getStrategyExecutionConfig(combo.symbol, combo.strategy);
@@ -778,7 +1240,8 @@ async function runSharedPortfolioBacktest({
   const events = [];
   for (let cIdx = 0; cIdx < state.combos.length; cIdx++) {
     const s = state.combos[cIdx];
-    for (let bar = WARMUP; bar < s.candles.length; bar++) {
+    const startBarIndex = Number.isInteger(s.startBarIndex) ? s.startBarIndex : WARMUP;
+    for (let bar = startBarIndex; bar < s.candles.length; bar++) {
       const timeMs = s.candleTimes[bar];
       if (tradeStartMs !== null && timeMs < tradeStartMs) continue;
       events.push({ timeMs, comboIdx: cIdx, barIdx: bar });
@@ -793,7 +1256,7 @@ async function runSharedPortfolioBacktest({
   const progressEvery = Math.max(1, Math.floor(events.length / 25));
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
-    processEvent(state, ev.comboIdx, ev.barIdx);
+    await processEvent(state, ev.comboIdx, ev.barIdx);
     if (isEquityBust(state, safeRuinThreshold)) {
       const currentCandleTime = state.combos[ev.comboIdx]?.candles?.[ev.barIdx]?.time || null;
       triggerBustAndHalt(state, safeRuinThreshold, currentCandleTime, i, events.length);
@@ -830,10 +1293,12 @@ async function runSharedPortfolioBacktest({
       const s = state.combos[cIdx];
       const lastCandle = s.candles[s.candles.length - 1];
       if (!lastCandle || !s.openPosition) return;
-      const exitPrice = s.openPosition.type === 'BUY'
-        ? lastCandle.close - s.spread / 2
-        : lastCandle.close + s.spread / 2;
-      closePositionForCombo(state, cIdx, exitPrice, 'END_OF_DATA', lastCandle.time);
+      const exitPrice = s.kind === 'symbolCustom'
+        ? symbolCustomRunner.toNumber(lastCandle.close, s.openPosition.entryPrice)
+        : (s.openPosition.type === 'BUY'
+          ? lastCandle.close - s.spread / 2
+          : lastCandle.close + s.spread / 2);
+      closePositionForCombo(state, cIdx, exitPrice, 'END_OF_DATA', symbolCustomRunner.getBarTime(lastCandle));
     });
     if (state.openPositionComboIdx.size > 0) state.openPositionComboIdx.clear();
     recordEquityPoint(state, state.equityCurve[state.equityCurve.length - 1].time, state.balance);
@@ -841,6 +1306,7 @@ async function runSharedPortfolioBacktest({
 
   const summary = buildSummary(state, safeInitialBalance);
   const contributions = buildContributions(state.trades);
+  const comboResults = buildComboResults(state, readiedComboInfo, safeInitialBalance);
 
   return {
     runModel: 'shared_portfolio',
@@ -850,6 +1316,7 @@ async function runSharedPortfolioBacktest({
     trades: state.trades,
     equityCurve: downsample(state.equityCurve, MAX_EQUITY_POINTS),
     equityCurvePoints: state.equityCurve.length,
+    comboResults,
     perStrategyContribution: contributions.perStrategy,
     perSymbolContribution: contributions.perSymbol,
     rejectedSignals: state.rejectedSignals,

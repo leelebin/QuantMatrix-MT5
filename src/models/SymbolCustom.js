@@ -1,4 +1,5 @@
 const { symbolCustomsDb } = require('../config/db');
+const { normalizeDirectionControlConfig } = require('../services/directionControlConfig');
 
 const VALID_STATUSES = Object.freeze([
   'draft',
@@ -263,6 +264,13 @@ const SymbolCustom = {
         cleaned[field] = source[field] === undefined && !partial
           ? {}
           : normalizePlainObject(source[field], field, errors);
+        if (
+          field === 'exitConfig'
+          && cleaned[field]
+          && Object.prototype.hasOwnProperty.call(cleaned[field], 'directionControl')
+        ) {
+          cleaned[field].directionControl = normalizeDirectionControlConfig(cleaned[field].directionControl);
+        }
       }
     }
 

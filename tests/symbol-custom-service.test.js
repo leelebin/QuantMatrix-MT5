@@ -174,7 +174,7 @@ describe('symbolCustomService CRUD', () => {
     expect(remaining[0]._id).toBe(duplicated.symbolCustom._id);
   });
 
-  test('liveEnabled true is saved with phase 1 warning and does not execute live', async () => {
+  test('liveEnabled true is saved with live runtime safety warning and does not execute immediately', async () => {
     const { service, tradeExecutor } = loadService();
 
     const created = await service.createSymbolCustom({
@@ -185,7 +185,7 @@ describe('symbolCustomService CRUD', () => {
 
     expect(created.symbolCustom.liveEnabled).toBe(true);
     expect(created.warnings).toEqual([
-      service.SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
+      service.SYMBOL_CUSTOM_LIVE_RUNTIME_SAFETY_GATED,
     ]);
     expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
   });

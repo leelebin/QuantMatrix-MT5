@@ -1,7 +1,8 @@
 const SymbolCustom = require('../models/SymbolCustom');
 const { getSymbolCustomLogic } = require('../symbolCustom/registry');
 
-const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1 = 'SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1';
+const SYMBOL_CUSTOM_LIVE_RUNTIME_SAFETY_GATED = 'SYMBOL_CUSTOM_LIVE_RUNTIME_SAFETY_GATED';
+const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1 = SYMBOL_CUSTOM_LIVE_RUNTIME_SAFETY_GATED;
 const DEFAULT_ALLOW_MULTIPLE_LIVE_SYMBOL_CUSTOMS_PER_SYMBOL = false;
 
 function cloneValue(value) {
@@ -49,8 +50,8 @@ function buildListFilter(filter = {}) {
 }
 
 function buildWarnings(payload = {}) {
-  return payload.liveEnabled === true
-    ? [SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1]
+  return payload.liveEnabled === true || payload.allowLive === true
+    ? [SYMBOL_CUSTOM_LIVE_RUNTIME_SAFETY_GATED]
     : [];
 }
 
@@ -318,6 +319,7 @@ async function applySymbolCustomCandidateParameters(id, candidateName, parameter
 }
 
 module.exports = {
+  SYMBOL_CUSTOM_LIVE_RUNTIME_SAFETY_GATED,
   SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
   DEFAULT_ALLOW_MULTIPLE_LIVE_SYMBOL_CUSTOMS_PER_SYMBOL,
   listSymbolCustoms,

@@ -66,6 +66,7 @@ const {
   dataSyncSchedulerService,
   runtimeHeartbeatService,
   symbolCustomPaperRuntimeService,
+  symbolCustomLiveRuntimeService,
   symbolCustomPaperCandleProviderService
 } = bootProfiler.measure('runtime:load', () => ({
   Strategy: require('./models/Strategy'),
@@ -81,6 +82,7 @@ const {
   dataSyncSchedulerService: require('./services/dataSyncSchedulerService'),
   runtimeHeartbeatService: require('./services/runtimeHeartbeatService'),
   symbolCustomPaperRuntimeService: require('./services/symbolCustomPaperRuntimeService'),
+  symbolCustomLiveRuntimeService: require('./services/symbolCustomLiveRuntimeService'),
   symbolCustomPaperCandleProviderService: require('./services/symbolCustomPaperCandleProviderService')
 }));
 
@@ -299,6 +301,18 @@ async function startServer() {
         } else {
           console.log('[SymbolCustom] Paper runtime disabled');
         }
+        if (process.env.SYMBOL_CUSTOM_LIVE_ENABLED === 'true') {
+          try {
+            symbolCustomLiveRuntimeService.start({
+              getCandlesFn: symbolCustomPaperCandleProviderService.getSymbolCustomPaperCandles,
+            });
+            console.log('[SymbolCustom] Live runtime started');
+          } catch (error) {
+            console.error(`[SymbolCustom] Live runtime failed to start: ${error.message}`);
+          }
+        } else {
+          console.log('[SymbolCustom] Live runtime disabled');
+        }
       });
       bootProfiler.measure('heartbeat:init', () => {
         try {
@@ -331,6 +345,7 @@ async function shutdown(signal) {
   notificationHubService.stop();
   dataSyncSchedulerService.stop();
   symbolCustomPaperRuntimeService.stop();
+  symbolCustomLiveRuntimeService.stop();
   websocketService.shutdown();
   if (!server) {
     process.exit(0);

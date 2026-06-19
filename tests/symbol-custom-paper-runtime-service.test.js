@@ -1,5 +1,8 @@
 const ORIGINAL_SYMBOL_CUSTOM_PAPER_ENABLED = process.env.SYMBOL_CUSTOM_PAPER_ENABLED;
 const USDJPY_LOGIC = 'USDJPY_JPY_MACRO_REVERSAL_V1';
+const XAU_MICRO_LOGIC = 'XAUUSD_MICROSTRUCTURE_SCALP_V1';
+const XAU_EMA50_LOGIC = 'XAUUSD_EMA50_PULLBACK_TREND_V1';
+const XAU_VOLUME_PROFILE_LOGIC = 'XAUUSD_VOLUME_PROFILE_STRATEGY_V1';
 
 function loadRuntime({
   symbolCustoms = [],
@@ -12,6 +15,7 @@ function loadRuntime({
   };
 
   const paperTradingService = {
+    ensureConnected: jest.fn(async () => ({ success: true })),
     submitSymbolCustomSignal: jest.fn(async () => ({ success: true })),
     submitExternalPaperSignal: jest.fn(async () => ({ success: true })),
     _executePaperTrade: jest.fn(async () => ({ success: true })),
@@ -162,8 +166,8 @@ describe('symbolCustomPaperRuntimeService', () => {
     expect(result.signals).toEqual([]);
   });
 
-  test('liveEnabled=true SymbolCustom is rejected by paper runtime safety gate', async () => {
-    const { runtime, paperTradingService } = loadRuntime({
+  test('liveEnabled=true SymbolCustom can still run through paper runtime observation', async () => {
+    const { runtime, paperTradingService, tradeExecutor } = loadRuntime({
       symbolCustoms: [
         {
           _id: 'sc-live-flag',
@@ -174,6 +178,15 @@ describe('symbolCustomPaperRuntimeService', () => {
           liveEnabled: true,
         },
       ],
+      logicResults: {
+        [USDJPY_LOGIC]: {
+          signal: 'BUY',
+          confidence: 0.76,
+          reason: 'mock buy signal while live flag is also enabled',
+          sl: 147.1,
+          tp: 148.2,
+        },
+      },
     });
 
     const result = await runtime.runPaperScan({
@@ -181,13 +194,15 @@ describe('symbolCustomPaperRuntimeService', () => {
       getCandlesFn: jest.fn(async () => ({ entry: [{ close: 147.5 }] })),
     });
 
-    expect(result.submitted).toBe(0);
-    expect(result.ignored).toBe(1);
+    expect(result.submitted).toBe(1);
+    expect(result.ignored).toBe(0);
     expect(result.signals[0]).toEqual(expect.objectContaining({
-      status: 'IGNORED',
-      reasonCode: runtime.SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED,
+      status: 'SIGNAL',
+      signal: 'BUY',
+      symbolCustomId: 'sc-live-flag',
     }));
-    expect(paperTradingService.submitSymbolCustomSignal).not.toHaveBeenCalled();
+    expect(paperTradingService.submitSymbolCustomSignal).toHaveBeenCalledTimes(1);
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
   });
 
   test('paperEnabled=true placeholder is ignored without opening paper trade', async () => {
@@ -240,6 +255,9 @@ describe('symbolCustomPaperRuntimeService', () => {
       logicResults: {
         [USDJPY_LOGIC]: {
           signal: 'BUY',
+          confidence: 0.78,
+          marketQualityScore: 0.9,
+          marketQualityThreshold: 0.7,
           reason: 'mock buy signal',
           sl: 147.1,
           tp: 148.2,
@@ -271,6 +289,10 @@ describe('symbolCustomPaperRuntimeService', () => {
       strategy: USDJPY_LOGIC,
       strategyType: 'SymbolCustom',
       signal: 'BUY',
+      confidence: 0.78,
+      rawConfidence: 0.78,
+      marketQualityScore: 0.9,
+      marketQualityThreshold: 0.7,
       candidatePreset: 'buy_session_conservative',
       parameterSnapshot: expect.objectContaining({ lookbackBars: 20 }),
       metadata: expect.objectContaining({
@@ -281,12 +303,247 @@ describe('symbolCustomPaperRuntimeService', () => {
         setupType: 'jpy_macro_reversal',
         strategy: USDJPY_LOGIC,
         strategyType: 'SymbolCustom',
+        confidence: 0.78,
+        rawConfidence: 0.78,
+        marketQualityScore: 0.9,
+        marketQualityThreshold: 0.7,
         candidatePreset: 'buy_session_conservative',
         parameterSnapshot: expect.objectContaining({ lookbackBars: 20 }),
       }),
     }));
     expect(paperTradingService.submitExternalPaperSignal).not.toHaveBeenCalled();
     expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
+  });
+
+  test('connects paper trading service before submitting a SymbolCustom paper signal', async () => {
+    const { runtime, paperTradingService } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-connect-first',
+          symbol: 'USDJPY',
+          symbolCustomName: USDJPY_LOGIC,
+          logicName: USDJPY_LOGIC,
+          paperEnabled: true,
+          parameters: { enabled: true },
+        },
+      ],
+      logicResults: {
+        [USDJPY_LOGIC]: {
+          signal: 'BUY',
+          confidence: 0.7,
+          reason: 'mock buy signal',
+          sl: 147.1,
+          tp: 148.2,
+        },
+      },
+    });
+
+    await runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 147.5 }] })),
+    });
+
+    expect(paperTradingService.ensureConnected).toHaveBeenCalledWith({
+      source: 'symbolCustomPaperRuntime',
+    });
+    expect(paperTradingService.ensureConnected.mock.invocationCallOrder[0]).toBeLessThan(
+      paperTradingService.submitSymbolCustomSignal.mock.invocationCallOrder[0]
+    );
+  });
+
+  test('XAUUSD microstructure paper logic is allowed through SymbolCustom paper wrapper', async () => {
+    const { runtime, paperTradingService, tradeExecutor, riskManager } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-xau-micro',
+          symbol: 'XAUUSD',
+          symbolCustomName: XAU_MICRO_LOGIC,
+          logicName: XAU_MICRO_LOGIC,
+          paperEnabled: true,
+          liveEnabled: false,
+          parameters: { enabled: true, minSignalScore: 75 },
+        },
+      ],
+      logicResults: {
+        [XAU_MICRO_LOGIC]: {
+          signal: 'BUY',
+          confidence: 0.82,
+          marketQualityScore: 82,
+          marketQualityThreshold: 75,
+          reason: 'mock microstructure buy signal',
+          sl: 2347.75,
+          tp: 2354.00,
+          metadata: {
+            source: 'symbolCustom',
+            setupType: 'microstructure_scalp',
+            candidatePreset: 'microstructure_scalp_default_xauusd',
+            pattern: 'VWAP_RECLAIM_WITH_BULLISH_ABSORPTION',
+            dataMode: 'candleProxy',
+            scope: 'paper',
+          },
+        },
+      },
+    });
+
+    const result = await runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 2350.25 }] })),
+    });
+
+    expect(result.submitted).toBe(1);
+    expect(paperTradingService.submitSymbolCustomSignal).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'paper',
+      source: 'symbolCustom',
+      symbol: 'XAUUSD',
+      symbolCustomId: 'sc-xau-micro',
+      symbolCustomName: XAU_MICRO_LOGIC,
+      logicName: XAU_MICRO_LOGIC,
+      setupType: 'microstructure_scalp',
+      strategy: XAU_MICRO_LOGIC,
+      strategyType: 'SymbolCustom',
+      signal: 'BUY',
+      confidence: 0.82,
+      marketQualityScore: 82,
+      marketQualityThreshold: 75,
+      candidatePreset: 'microstructure_scalp_default_xauusd',
+      metadata: expect.objectContaining({
+        source: 'symbolCustom',
+        symbolCustomName: XAU_MICRO_LOGIC,
+        logicName: XAU_MICRO_LOGIC,
+        setupType: 'microstructure_scalp',
+        strategyType: 'SymbolCustom',
+        candidatePreset: 'microstructure_scalp_default_xauusd',
+      }),
+    }));
+    expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
+  });
+
+  test('XAUUSD volume profile paper logic is allowed through SymbolCustom paper wrapper', async () => {
+    const { runtime, paperTradingService, tradeExecutor, riskManager } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-xau-volume-profile',
+          symbol: 'XAUUSD',
+          symbolCustomName: XAU_VOLUME_PROFILE_LOGIC,
+          logicName: XAU_VOLUME_PROFILE_LOGIC,
+          paperEnabled: true,
+          liveEnabled: false,
+          parameters: { enabled: true, minConfidence: 65 },
+        },
+      ],
+      logicResults: {
+        [XAU_VOLUME_PROFILE_LOGIC]: {
+          signal: 'BUY',
+          strategyName: 'XAUUSD Volume Profile',
+          moduleName: 'BREAKOUT_CONTINUATION',
+          confidence: 0.78,
+          marketQualityScore: 78,
+          marketQualityThreshold: 65,
+          reason: 'mock volume profile buy signal',
+          sl: 2347.75,
+          tp: 2354.00,
+          metadata: {
+            source: 'symbolCustom',
+            setupType: 'volume_profile_strategy',
+            strategyName: 'XAUUSD Volume Profile',
+            moduleName: 'BREAKOUT_CONTINUATION',
+            candidatePreset: 'xauusd_m1_m5_volume_profile_strategy_v1',
+            scope: 'paper',
+          },
+        },
+      },
+    });
+
+    const result = await runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 2350.25 }] })),
+    });
+
+    expect(result.submitted).toBe(1);
+    expect(paperTradingService.submitSymbolCustomSignal).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'paper',
+      source: 'symbolCustom',
+      symbol: 'XAUUSD',
+      symbolCustomId: 'sc-xau-volume-profile',
+      symbolCustomName: XAU_VOLUME_PROFILE_LOGIC,
+      logicName: XAU_VOLUME_PROFILE_LOGIC,
+      setupType: 'volume_profile_strategy',
+      strategy: XAU_VOLUME_PROFILE_LOGIC,
+      strategyType: 'SymbolCustom',
+      signal: 'BUY',
+      confidence: 0.78,
+      marketQualityScore: 78,
+      marketQualityThreshold: 65,
+      candidatePreset: 'xauusd_m1_m5_volume_profile_strategy_v1',
+      metadata: expect.objectContaining({
+        source: 'symbolCustom',
+        symbolCustomName: XAU_VOLUME_PROFILE_LOGIC,
+        logicName: XAU_VOLUME_PROFILE_LOGIC,
+        setupType: 'volume_profile_strategy',
+        strategyType: 'SymbolCustom',
+        strategyName: 'XAUUSD Volume Profile',
+        moduleName: 'BREAKOUT_CONTINUATION',
+      }),
+    }));
+    expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
+    expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
+    expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
+  });
+
+  test('XAUUSD EMA50 paper logic is allowed even when liveEnabled is also true', async () => {
+    const { runtime, paperTradingService, tradeExecutor, riskManager } = loadRuntime({
+      symbolCustoms: [
+        {
+          _id: 'sc-xau-ema50',
+          symbol: 'XAUUSD',
+          symbolCustomName: XAU_EMA50_LOGIC,
+          logicName: XAU_EMA50_LOGIC,
+          paperEnabled: true,
+          liveEnabled: true,
+          parameters: { enabled: true, minSignalScore: 70 },
+        },
+      ],
+      logicResults: {
+        [XAU_EMA50_LOGIC]: {
+          signal: 'BUY',
+          confidence: 0.84,
+          marketQualityScore: 84,
+          marketQualityThreshold: 70,
+          reason: 'mock ema50 pullback buy signal',
+          sl: 2345.00,
+          tp: 2358.00,
+          metadata: {
+            source: 'symbolCustom',
+            setupType: 'ema50_pullback_trend',
+            candidatePreset: 'xauusd_ema50_pullback_trend_v1',
+            scope: 'paper',
+          },
+        },
+      },
+    });
+
+    const result = await runtime.runPaperScan({
+      force: true,
+      getCandlesFn: jest.fn(async () => ({ entry: [{ close: 2350.25 }] })),
+    });
+
+    expect(result.submitted).toBe(1);
+    expect(paperTradingService.submitSymbolCustomSignal).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'paper',
+      source: 'symbolCustom',
+      symbol: 'XAUUSD',
+      symbolCustomId: 'sc-xau-ema50',
+      symbolCustomName: XAU_EMA50_LOGIC,
+      logicName: XAU_EMA50_LOGIC,
+      setupType: 'ema50_pullback_trend',
+      strategyType: 'SymbolCustom',
+      signal: 'BUY',
+      confidence: 0.84,
+    }));
     expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
     expect(riskManager.calculateLotSize).not.toHaveBeenCalled();
   });
@@ -360,7 +617,7 @@ describe('symbolCustomPaperRuntimeService', () => {
     expect(paperTradingService._executePaperTrade).not.toHaveBeenCalled();
   });
 
-  test('live scope is blocked by symbolCustomEngine', async () => {
+  test('live scope is blocked by symbolCustomEngine readiness gate', async () => {
     const { engine } = loadRuntime();
 
     const signal = await engine.analyzeSymbolCustom({
@@ -375,7 +632,7 @@ describe('symbolCustomPaperRuntimeService', () => {
       source: 'symbolCustom',
       signal: 'NONE',
       status: 'BLOCKED',
-      reasonCode: engine.SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
+      reasonCode: engine.SYMBOL_CUSTOM_LIVE_NOT_ENABLED,
     }));
   });
 
@@ -492,6 +749,6 @@ describe('symbolCustomPaperRuntimeService', () => {
   test('paper runtime source does not reference six strategy classes', () => {
     const fs = require('fs');
     const source = fs.readFileSync(require('path').join(__dirname, '..', 'src/services/symbolCustomPaperRuntimeService.js'), 'utf8');
-    expect(source).not.toMatch(/TrendFollowing|MeanReversion|Breakout|Momentum|MultiTimeframe|VolumeFlowHybrid|src\/strategies|\.\.\/strategies/);
+    expect(source).not.toMatch(/TrendFollowingStrategy|MeanReversionStrategy|BreakoutStrategy|MomentumStrategy|MultiTimeframeStrategy|VolumeFlowHybridStrategy|src\/strategies|\.\.\/strategies/);
   });
 });

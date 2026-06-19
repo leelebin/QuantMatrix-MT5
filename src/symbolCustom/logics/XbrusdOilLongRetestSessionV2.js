@@ -12,7 +12,7 @@ class XbrusdOilLongRetestSessionV2 extends OilBreakoutRetestBase {
       description: 'XBRUSD long-only oil breakout retest session candidate. It keeps the failed V1 retest engine but removes weak short-side and weak-hour exposure found in diagnostics.',
       candidatePreset: CANDIDATE_PRESET,
       setupType: 'xbrusd_oil_long_retest_session',
-      runtimeScopes: ['backtest'],
+      runtimeScopes: ['backtest', 'paper'],
     });
   }
 

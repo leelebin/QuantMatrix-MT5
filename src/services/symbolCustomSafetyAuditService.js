@@ -7,7 +7,7 @@ const symbolCustomReportService = require('./symbolCustomReportService');
 const symbolCustomOptimizerService = require('./symbolCustomOptimizerService');
 const symbolCustomBacktestService = require('./symbolCustomBacktestService');
 
-const PHASE_1_LIVE_WARNING = 'Phase 1 does not support live execution';
+const LIVE_RUNTIME_GATE_WARNING = 'SymbolCustom live execution is available only through live runtime safety gates';
 const SYMBOL_CUSTOM_PAPER_ENABLED_ENV = 'SYMBOL_CUSTOM_PAPER_ENABLED';
 const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
 const USDJPY_PAPER_CANDIDATE_PARAMETERS = Object.freeze({
@@ -106,10 +106,10 @@ function auditLiveExecutionNotConnected() {
     ]);
 
     return safe
-      ? buildCheck('live execution not connected', 'PASS', 'symbolCustomEngine does not call tradeExecutor or paperTradingService.')
-      : buildCheck('live execution not connected', 'FAIL', 'symbolCustomEngine appears to reference trade execution.');
+      ? buildCheck('symbolCustom engine does not execute directly', 'PASS', 'symbolCustomEngine does not call tradeExecutor or paperTradingService directly.')
+      : buildCheck('symbolCustom engine does not execute directly', 'FAIL', 'symbolCustomEngine appears to reference trade execution.');
   } catch (error) {
-    return buildCheck('live execution not connected', 'FAIL', `Unable to inspect symbolCustomEngine: ${error.message}`);
+    return buildCheck('symbolCustom engine does not execute directly', 'FAIL', `Unable to inspect symbolCustomEngine: ${error.message}`);
   }
 }
 
@@ -325,7 +325,7 @@ async function auditLiveEnabledRecords(symbolCustoms) {
   return buildCheck(
     'default live disabled',
     'WARN',
-    `${liveEnabled.length} SymbolCustom record(s) have liveEnabled=true. ${PHASE_1_LIVE_WARNING}.`
+    `${liveEnabled.length} SymbolCustom record(s) have liveEnabled=true. ${LIVE_RUNTIME_GATE_WARNING}.`
   );
 }
 
@@ -354,21 +354,37 @@ function auditPaperRuntimeDefaultDisabled() {
   }
 }
 
-function auditSymbolCustomLiveRuntimeNotConnected() {
+function auditSymbolCustomLiveRuntimeExecutionPathGated() {
   try {
     const engineSource = readProjectFile('src/services/symbolCustomEngine.js');
-    const runtimeSource = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
-    const liveBlocked = /scope\s*===\s*'live'/.test(engineSource)
-      && /BLOCKED/.test(engineSource)
-      && /SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2/.test(engineSource);
-    const runtimeDoesNotStartLive = !/scope:\s*'live'/.test(runtimeSource)
-      && runtimeSource.includes('SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED');
+    const liveRuntimeSource = readProjectFile('src/services/symbolCustomLiveRuntimeService.js');
+    const paperRuntimeSource = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
+    const liveGated = /scope\s*===\s*'live'/.test(engineSource)
+      && /evaluateSymbolCustomLiveReadiness/.test(engineSource)
+      && /SYMBOL_CUSTOM_LIVE_NOT_ENABLED/.test(engineSource)
+      && /SYMBOL_CUSTOM_LIVE_NOT_ALLOWED/.test(engineSource)
+      && /SYMBOL_CUSTOM_LIVE_STATUS_NOT_READY/.test(engineSource)
+      && /liveAnalysisAllowed/.test(engineSource);
+    const liveRuntimeExecutesThroughGates = /handleSymbolCustomLiveSignal/.test(liveRuntimeSource)
+      && /resolveLiveSignalHandler/.test(liveRuntimeSource)
+      && /executeTrade/.test(liveRuntimeSource)
+      && /if\s*\(!isExecutionEnabled\(\)\)/.test(liveRuntimeSource)
+      && /getLiveRuntimeGate/.test(liveRuntimeSource)
+      && /LIVE_ALLOWED_LOGICS/.test(liveRuntimeSource)
+      && /findOpenSymbolCustomPosition/.test(liveRuntimeSource);
+    const paperRuntimeDoesNotStartLive = !/scope:\s*'live'/.test(paperRuntimeSource)
+      && sourceExcludes(paperRuntimeSource, [
+        /\bexecuteTrade\s*\(/,
+        /tradeExecutor/i,
+        /placeOrder\s*\(/,
+        /preflightOrder\s*\(/,
+      ]);
 
-    return liveBlocked && runtimeDoesNotStartLive
-      ? buildCheck('symbolCustom live runtime not connected', 'PASS', 'SymbolCustom live scope is blocked and the paper runtime has no live runtime path.')
-      : buildCheck('symbolCustom live runtime not connected', 'FAIL', 'SymbolCustom live runtime path may be connected.');
+    return liveGated && liveRuntimeExecutesThroughGates && paperRuntimeDoesNotStartLive
+      ? buildCheck('symbolCustom live runtime execution path gated', 'PASS', 'SymbolCustom live runtime can submit to tradeExecutor only after live/readiness/primary/allow-list/open-position gates.')
+      : buildCheck('symbolCustom live runtime execution path gated', 'FAIL', 'SymbolCustom live runtime execution path or paper isolation is not clear.');
   } catch (error) {
-    return buildCheck('symbolCustom live runtime not connected', 'FAIL', `Unable to inspect live runtime isolation: ${error.message}`);
+    return buildCheck('symbolCustom live runtime execution path gated', 'FAIL', `Unable to inspect live runtime path: ${error.message}`);
   }
 }
 
@@ -425,31 +441,41 @@ function auditPaperRuntimeRequiresPaperEnabled() {
   }
 }
 
-function auditPaperRuntimeRejectsLiveEnabled() {
+function auditPaperRuntimeKeepsLiveEnabledObservable() {
   try {
     const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
-    const ok = /symbolCustom\.liveEnabled\s*===\s*true/.test(source)
-      && source.includes('SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED');
+    const ok = !/symbolCustom\.liveEnabled\s*===\s*true/.test(source)
+      && !source.includes('SYMBOL_CUSTOM_PAPER_LIVE_ENABLED_BLOCKED')
+      && /symbolCustom\.paperEnabled\s*!==\s*true/.test(source)
+      && source.includes('PAPER_ALLOWED_LOGICS');
 
     return ok
-      ? buildCheck('paper runtime rejects liveEnabled true', 'PASS', 'SymbolCustom paper runtime rejects records with liveEnabled=true.')
-      : buildCheck('paper runtime rejects liveEnabled true', 'FAIL', 'SymbolCustom paper runtime may accept liveEnabled records.');
+      ? buildCheck('paper runtime keeps liveEnabled records observable', 'PASS', 'SymbolCustom paper runtime continues paper observation for records that are also liveEnabled.')
+      : buildCheck('paper runtime keeps liveEnabled records observable', 'FAIL', 'SymbolCustom paper runtime may block paper observation when liveEnabled=true.');
   } catch (error) {
-    return buildCheck('paper runtime rejects liveEnabled true', 'FAIL', `Unable to inspect liveEnabled paper gate: ${error.message}`);
+    return buildCheck('paper runtime keeps liveEnabled records observable', 'FAIL', `Unable to inspect liveEnabled paper observation gate: ${error.message}`);
   }
 }
 
-function auditPaperRuntimeAllowsOnlyUsdjpyLogic() {
+function auditPaperRuntimeUsesExplicitLogicAllowList() {
   try {
     const source = readProjectFile('src/services/symbolCustomPaperRuntimeService.js');
-    const ok = source.includes(USDJPY_JPY_MACRO_REVERSAL_V1)
+    const ok = source.includes('PAPER_ALLOWED_LOGICS')
+      && source.includes(USDJPY_JPY_MACRO_REVERSAL_V1)
+      && source.includes('XAUUSD_VOLUME_FLOW_BREAKOUT_NY_V1')
+      && source.includes('XAUUSD_MICROSTRUCTURE_SCALP_V1')
+      && source.includes('XAUUSD_EMA50_PULLBACK_TREND_V1')
+      && source.includes('XAUUSD_VOLUME_PROFILE_STRATEGY_V1')
+      && source.includes('XTIUSD_OIL_BREAKOUT_RETEST_V1')
+      && source.includes('XBRUSD_OIL_LONG_RETEST_SESSION_V2')
+      && source.includes('XAGUSD_VOL_TARGET_TREND_V1')
       && source.includes('SYMBOL_CUSTOM_PAPER_LOGIC_NOT_ALLOWED');
 
     return ok
-      ? buildCheck('paper runtime allows only USDJPY paper logic', 'PASS', 'SymbolCustom paper runtime is restricted to USDJPY_JPY_MACRO_REVERSAL_V1.')
-      : buildCheck('paper runtime allows only USDJPY paper logic', 'FAIL', 'SymbolCustom paper runtime logic allow-list is not clear.');
+      ? buildCheck('paper runtime uses explicit logic allow-list', 'PASS', 'SymbolCustom paper runtime allows only explicitly approved paper-trial logics.')
+      : buildCheck('paper runtime uses explicit logic allow-list', 'FAIL', 'SymbolCustom paper runtime logic allow-list is not clear.');
   } catch (error) {
-    return buildCheck('paper runtime allows only USDJPY paper logic', 'FAIL', `Unable to inspect paper logic allow-list: ${error.message}`);
+    return buildCheck('paper runtime uses explicit logic allow-list', 'FAIL', `Unable to inspect paper logic allow-list: ${error.message}`);
   }
 }
 
@@ -483,6 +509,64 @@ function auditPaperRuntimeRequiresEnvForSchedulerStart() {
       : buildCheck('paper runtime scheduler env gated', 'FAIL', 'Server startup does not clearly gate SymbolCustom paper runtime start by env flag.');
   } catch (error) {
     return buildCheck('paper runtime scheduler env gated', 'FAIL', `Unable to inspect server startup gating: ${error.message}`);
+  }
+}
+
+function auditLiveRuntimeDefaultDisabled() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomLiveRuntimeService.js');
+    const serverSource = readProjectFile('src/server.js');
+    const serviceRequiresTrue = source.includes('SYMBOL_CUSTOM_LIVE_ENABLED_ENV')
+      && /process\.env\[[^\]]*SYMBOL_CUSTOM_LIVE_ENABLED_ENV[^\]]*\]\s*===\s*'true'/.test(source);
+    const serverRequiresTrue = serverSource.includes("process.env.SYMBOL_CUSTOM_LIVE_ENABLED === 'true'")
+      && /symbolCustomLiveRuntimeService\.start\s*\(/.test(serverSource)
+      && serverSource.includes('[SymbolCustom] Live runtime disabled');
+
+    return serviceRequiresTrue && serverRequiresTrue
+      ? buildCheck('symbolCustom live runtime default disabled', 'PASS', 'SymbolCustom live runtime only starts when SYMBOL_CUSTOM_LIVE_ENABLED=true.')
+      : buildCheck('symbolCustom live runtime default disabled', 'FAIL', 'SymbolCustom live runtime start is not clearly gated by SYMBOL_CUSTOM_LIVE_ENABLED=true.');
+  } catch (error) {
+    return buildCheck('symbolCustom live runtime default disabled', 'FAIL', `Unable to inspect live runtime default: ${error.message}`);
+  }
+}
+
+function auditLiveRuntimeExecutionEnvGated() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomLiveRuntimeService.js');
+    const handlerSource = extractFunctionSource(source, 'handleSymbolCustomLiveSignal');
+    const resolverSource = extractFunctionSource(source, 'resolveLiveSignalHandler');
+    const executionCheckIndex = handlerSource.indexOf('if (!isExecutionEnabled())');
+    const handlerResolveIndex = handlerSource.indexOf('resolveLiveSignalHandler');
+    const gated = source.includes('SYMBOL_CUSTOM_LIVE_EXECUTION_ENABLED_ENV')
+      && source.includes('SYMBOL_CUSTOM_LIVE_EXECUTION_DISABLED')
+      && executionCheckIndex !== -1
+      && handlerResolveIndex !== -1
+      && executionCheckIndex < handlerResolveIndex
+      && resolverSource.includes('executeTrade');
+
+    return gated
+      ? buildCheck('symbolCustom live execution env gated', 'PASS', 'SymbolCustom live runtime cannot call tradeExecutor unless SYMBOL_CUSTOM_LIVE_EXECUTION_ENABLED=true.')
+      : buildCheck('symbolCustom live execution env gated', 'FAIL', 'SymbolCustom live execution gate is not clearly before tradeExecutor resolution.');
+  } catch (error) {
+    return buildCheck('symbolCustom live execution env gated', 'FAIL', `Unable to inspect live execution env gate: ${error.message}`);
+  }
+}
+
+function auditLiveRuntimeRequiresReadinessPrimaryAndAllowList() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomLiveRuntimeService.js');
+    const ok = source.includes('evaluateSymbolCustomLiveReadiness')
+      && source.includes('LIVE_ALLOWED_LOGICS')
+      && source.includes('XAUUSD_EMA50_PULLBACK_TREND_V1')
+      && source.includes('SYMBOL_CUSTOM_LIVE_LOGIC_NOT_ALLOWED')
+      && source.includes('symbolCustom.isPrimaryLive !== true')
+      && source.includes('SYMBOL_CUSTOM_LIVE_NOT_PRIMARY');
+
+    return ok
+      ? buildCheck('symbolCustom live runtime readiness gated', 'PASS', 'SymbolCustom live runtime requires engine readiness, primary-live selection, and explicit logic allow-list.')
+      : buildCheck('symbolCustom live runtime readiness gated', 'FAIL', 'SymbolCustom live runtime readiness/primary/allow-list gates are incomplete.');
+  } catch (error) {
+    return buildCheck('symbolCustom live runtime readiness gated', 'FAIL', `Unable to inspect live runtime readiness gates: ${error.message}`);
   }
 }
 
@@ -548,12 +632,14 @@ function auditBacktestScopeAllowedLiveBlocked() {
   try {
     const source = readProjectFile('src/services/symbolCustomEngine.js');
     const backtestAllowed = /VALID_SCOPES\s*=\s*Object\.freeze\(\['paper',\s*'backtest',\s*'live'\]\)/.test(source);
-    const liveBlocked = /scope\s*===\s*'live'/.test(source)
-      && /BLOCKED/.test(source)
-      && /SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2/.test(source);
+    const liveGated = /scope\s*===\s*'live'/.test(source)
+      && /evaluateSymbolCustomLiveReadiness/.test(source)
+      && /LIVE_READY_STATUSES/.test(source)
+      && /allowLive/.test(source)
+      && /liveEnabled/.test(source);
 
-    return backtestAllowed && liveBlocked
-      ? buildCheck('backtest scope allowed live blocked', 'PASS', 'SymbolCustom engine allows backtest scope while live scope remains blocked.')
+    return backtestAllowed && liveGated
+      ? buildCheck('backtest scope allowed live blocked', 'PASS', 'SymbolCustom engine allows backtest scope while live analysis is gated by readiness flags.')
       : buildCheck('backtest scope allowed live blocked', 'FAIL', 'SymbolCustom scope safety is not configured as expected.');
   } catch (error) {
     return buildCheck('backtest scope allowed live blocked', 'FAIL', `Unable to inspect SymbolCustom scopes: ${error.message}`);
@@ -1077,6 +1163,78 @@ function auditApplyCandidateDoesNotTouchTradingSystems() {
   }
 }
 
+function auditLivePromotionPreservesPaperLiveEnabled() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomLivePromotionService.js');
+    const promoteSource = extractFunctionSource(source, 'promoteSymbolCustomToLiveReady');
+    const hasPromotionPatch = promoteSource.includes('SymbolCustom.update')
+      && source.includes("status: 'live_ready'")
+      && source.includes('allowLive: true')
+      && source.includes('isPrimaryLive: true')
+      && source.includes('LIVE_READY_PATCH');
+    const preservesPaperLive = sourceExcludes(promoteSource, [
+      /paperEnabled\s*:/,
+      /liveEnabled\s*:/,
+    ]);
+
+    return hasPromotionPatch && preservesPaperLive
+      ? buildCheck('live promotion preserves paper/live enabled', 'PASS', 'Live promotion only patches status, allowLive, and isPrimaryLive.')
+      : buildCheck('live promotion preserves paper/live enabled', 'FAIL', 'Live promotion may modify paperEnabled or liveEnabled.');
+  } catch (error) {
+    return buildCheck('live promotion preserves paper/live enabled', 'FAIL', `Unable to inspect live promotion flag safety: ${error.message}`);
+  }
+}
+
+function auditLivePromotionRequiresStrictValidationEvidence() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomLivePromotionService.js');
+    const hasThresholds = source.includes('DEFAULT_LIVE_PROMOTION_THRESHOLDS')
+      && source.includes('full_window')
+      && source.includes('recent_window')
+      && source.includes('minProfitFactor')
+      && source.includes('maxDrawdown')
+      && source.includes('maxConsecutiveLosses');
+    const hasEvidenceGate = source.includes('strict validation evidence supplied')
+      && source.includes('evaluateRangeChecks')
+      && source.includes('equityCurveHasBalance')
+      && source.includes('equityCurveHasEquity');
+
+    return hasThresholds && hasEvidenceGate
+      ? buildCheck('live promotion requires strict validation evidence', 'PASS', 'Live promotion requires full/recent strict validation evidence with performance and curve-field gates.')
+      : buildCheck('live promotion requires strict validation evidence', 'FAIL', 'Live promotion evidence gates are incomplete.');
+  } catch (error) {
+    return buildCheck('live promotion requires strict validation evidence', 'FAIL', `Unable to inspect live promotion evidence gates: ${error.message}`);
+  }
+}
+
+function auditLivePromotionDoesNotTouchTradingSystems() {
+  try {
+    const source = readProjectFile('src/services/symbolCustomLivePromotionService.js');
+    const safe = sourceExcludes(source, [
+      /tradeExecutor/i,
+      /riskManager/i,
+      /backtestEngine/i,
+      /optimizerService/i,
+      /TrendFollowing/,
+      /MeanReversion/,
+      /Breakout/,
+      /MultiTimeframe/,
+      /Momentum/,
+      /VolumeFlowHybrid/,
+      /paperTradingService/i,
+      /placeOrder\s*\(/,
+      /executeTrade\s*\(/,
+      /preflightOrder\s*\(/,
+    ]);
+
+    return safe
+      ? buildCheck('live promotion does not touch trading systems', 'PASS', 'Live promotion only reads validation evidence and updates SymbolCustom readiness flags.')
+      : buildCheck('live promotion does not touch trading systems', 'FAIL', 'Live promotion appears to reference trading, risk, old backtest, optimizer, or six strategy systems.');
+  } catch (error) {
+    return buildCheck('live promotion does not touch trading systems', 'FAIL', `Unable to inspect live promotion isolation: ${error.message}`);
+  }
+}
+
 function auditPrimaryLiveUniqueness(symbolCustoms) {
   const grouped = new Map();
   symbolCustoms
@@ -1137,14 +1295,17 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditHistoricalBacktestRequiresDateRange());
   checks.push(auditPlaceholderStillDoesNotRequireCandles());
   checks.push(auditPaperRuntimeDefaultDisabled());
-  checks.push(auditSymbolCustomLiveRuntimeNotConnected());
+  checks.push(auditSymbolCustomLiveRuntimeExecutionPathGated());
   checks.push(auditPaperRuntimeNeverCallsTradeExecutor());
   checks.push(auditPaperRuntimeMarksSymbolCustomSource());
   checks.push(auditPaperRuntimeRequiresPaperEnabled());
-  checks.push(auditPaperRuntimeRejectsLiveEnabled());
-  checks.push(auditPaperRuntimeAllowsOnlyUsdjpyLogic());
+  checks.push(auditPaperRuntimeKeepsLiveEnabledObservable());
+  checks.push(auditPaperRuntimeUsesExplicitLogicAllowList());
   checks.push(auditSymbolCustomPaperTradesIncludeMetadata());
   checks.push(auditPaperRuntimeRequiresEnvForSchedulerStart());
+  checks.push(auditLiveRuntimeDefaultDisabled());
+  checks.push(auditLiveRuntimeExecutionEnvGated());
+  checks.push(auditLiveRuntimeRequiresReadinessPrimaryAndAllowList());
   checks.push(auditScanOnceRespectsEnvGateUnlessForced());
   checks.push(auditPaperRuntimeDoesNotCallPrivatePaperExecution());
   checks.push(auditPublicPaperSignalWrapperExists());
@@ -1176,6 +1337,9 @@ async function runSymbolCustomPhase1SafetyAudit() {
   checks.push(auditSchemaSyncDoesNotTouchTradingSystems());
   checks.push(auditApplyCandidateDoesNotChangeExecutionFlags());
   checks.push(auditApplyCandidateDoesNotTouchTradingSystems());
+  checks.push(auditLivePromotionPreservesPaperLiveEnabled());
+  checks.push(auditLivePromotionRequiresStrictValidationEvidence());
+  checks.push(auditLivePromotionDoesNotTouchTradingSystems());
 
   let symbolCustoms = [];
   try {

@@ -94,10 +94,19 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'symbolCustom paper runtime default disabled')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
-    expect(getCheck(audit, 'symbolCustom live runtime not connected')).toEqual(expect.objectContaining({
+    expect(getCheck(audit, 'symbolCustom live runtime execution path gated')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
     expect(getCheck(audit, 'paper runtime scheduler env gated')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'symbolCustom live runtime default disabled')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'symbolCustom live execution env gated')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'symbolCustom live runtime readiness gated')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
     expect(getCheck(audit, 'scan-once respects env gate unless forced')).toEqual(expect.objectContaining({
@@ -220,6 +229,15 @@ describe('symbolCustomSafetyAuditService', () => {
     expect(getCheck(audit, 'candidate apply does not touch trading systems')).toEqual(expect.objectContaining({
       status: 'PASS',
     }));
+    expect(getCheck(audit, 'live promotion preserves paper/live enabled')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'live promotion requires strict validation evidence')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
+    expect(getCheck(audit, 'live promotion does not touch trading systems')).toEqual(expect.objectContaining({
+      status: 'PASS',
+    }));
   });
 
   test('liveEnabled true produces WARN not FAIL', async () => {
@@ -239,7 +257,7 @@ describe('symbolCustomSafetyAuditService', () => {
     const check = getCheck(audit, 'default live disabled');
 
     expect(check.status).toBe('WARN');
-    expect(check.message).toContain('Phase 1 does not support live execution');
+    expect(check.message).toContain('SymbolCustom live execution is available only through live runtime safety gates');
   });
 
   test('multiple primary live records produce WARN without automatic fix', async () => {
@@ -287,7 +305,7 @@ describe('symbolCustomSafetyAuditService', () => {
     const audit = await service.runSymbolCustomPhase1SafetyAudit();
 
     expect(tradeExecutor.executeTrade).not.toHaveBeenCalled();
-    expect(getCheck(audit, 'live execution not connected').status).toBe('PASS');
+    expect(getCheck(audit, 'symbolCustom engine does not execute directly').status).toBe('PASS');
     expect(getCheck(audit, 'paper runtime never calls tradeExecutor').status).toBe('PASS');
   });
 
@@ -298,8 +316,8 @@ describe('symbolCustomSafetyAuditService', () => {
 
     expect(getCheck(audit, 'paper runtime marks source symbolCustom').status).toBe('PASS');
     expect(getCheck(audit, 'paper runtime requires paperEnabled true').status).toBe('PASS');
-    expect(getCheck(audit, 'paper runtime rejects liveEnabled true').status).toBe('PASS');
-    expect(getCheck(audit, 'paper runtime allows only USDJPY paper logic').status).toBe('PASS');
+    expect(getCheck(audit, 'paper runtime keeps liveEnabled records observable').status).toBe('PASS');
+    expect(getCheck(audit, 'paper runtime uses explicit logic allow-list').status).toBe('PASS');
     expect(getCheck(audit, 'symbolCustom paper trades include metadata').status).toBe('PASS');
   });
 });

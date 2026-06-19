@@ -21,6 +21,13 @@ const {
   RECOMMENDATION_TIERS,
   buildOptimizerRecommendation,
 } = require('../src/utils/optimizerRecommendations');
+const {
+  CANDIDATE_BUCKETS,
+  assessWalkForwardMetrics,
+  buildCostStressScenarios,
+  classifyOptimizerCandidate,
+  evaluateCostStressResults,
+} = require('../src/utils/optimizerCandidateValidation');
 
 function makeSummary(overrides = {}) {
   return {
@@ -29,7 +36,10 @@ function makeSummary(overrides = {}) {
     profitFactor: 1.5,
     expectancyPerTrade: 25,
     netProfitMoney: 1200,
+    returnPercent: 12,
     maxDrawdownPercent: 10,
+    maxConsecutiveLosses: 2,
+    profitConcentrationTop1: 0.25,
     warningFlags: [],
     returnToDrawdown: 3,
     avgRealizedR: 0.4,
@@ -105,6 +115,109 @@ describe('optimizer recommendations', () => {
     expect(recommendation.tier).toBe(RECOMMENDATION_TIERS.PAPER_ONLY);
     expect(recommendation.suggestedRiskPerTrade).toBe(0.001);
     expect(recommendation.riskNotes.join(' ')).toContain('Profit is concentrated');
+  });
+
+  test('live candidate requires strict concentration and consecutive-loss thresholds', () => {
+    expect(buildOptimizerRecommendation({
+      summary: makeSummary({
+        totalTrades: 120,
+        robustScore: 86,
+        profitFactor: 1.9,
+        maxConsecutiveLosses: 4,
+      }),
+    }, { symbol: 'EURUSD' }).tier).toBe(RECOMMENDATION_TIERS.PAPER_ONLY);
+
+    expect(buildOptimizerRecommendation({
+      summary: makeSummary({
+        totalTrades: 120,
+        robustScore: 86,
+        profitFactor: 1.9,
+        profitConcentrationTop1: 0.8,
+      }),
+    }, { symbol: 'EURUSD' }).tier).toBe(RECOMMENDATION_TIERS.REJECT);
+  });
+
+  test('cost stress failure downgrades live candidate and rejects failed default cost', () => {
+    const summary = makeSummary({
+      totalTrades: 120,
+      robustScore: 86,
+      profitFactor: 1.9,
+      maxDrawdownPercent: 8,
+    });
+    const stress = evaluateCostStressResults([
+      { name: 'default', summary },
+      { name: 'spread_x1_5', summary: { ...summary, profitFactor: 0.95, netProfitMoney: 50 } },
+      { name: 'slippage_x2', summary },
+      { name: 'commission_x2', summary },
+    ], { symbol: 'XAUUSD' });
+
+    const downgraded = classifyOptimizerCandidate({ summary }, {
+      symbol: 'XAUUSD',
+      requireCostStress: true,
+      costStressResult: stress,
+    });
+    expect(downgraded.bucket).toBe(CANDIDATE_BUCKETS.PAPER_ONLY);
+    expect(downgraded.reasons.join(' ')).toContain('Cost stress failed');
+
+    const failedDefault = evaluateCostStressResults([
+      { name: 'default', summary: { ...summary, profitFactor: 0.8, netProfitMoney: -10 } },
+      { name: 'spread_x1_5', summary },
+      { name: 'slippage_x2', summary },
+      { name: 'commission_x2', summary },
+    ], { symbol: 'XAUUSD' });
+    expect(classifyOptimizerCandidate({ summary }, {
+      symbol: 'XAUUSD',
+      requireCostStress: true,
+      costStressResult: failedDefault,
+    }).bucket).toBe(CANDIDATE_BUCKETS.REJECT);
+  });
+
+  test('cost stress scenarios preserve default and mutate one cost dimension each', () => {
+    const scenarios = buildCostStressScenarios({
+      spreadPips: 2,
+      slippagePips: 1,
+      commissionPerLot: 7,
+      commissionPerSide: true,
+    });
+
+    expect(scenarios.map((scenario) => scenario.name)).toEqual([
+      'default',
+      'spread_x1_5',
+      'slippage_x2',
+      'commission_x2',
+    ]);
+    expect(scenarios.find((scenario) => scenario.name === 'default').costModel).toEqual(expect.objectContaining({
+      spreadPips: 2,
+      slippagePips: 1,
+      commissionPerLot: 7,
+    }));
+    expect(scenarios.find((scenario) => scenario.name === 'spread_x1_5').costModel.spreadPips).toBe(3);
+    expect(scenarios.find((scenario) => scenario.name === 'slippage_x2').costModel.slippagePips).toBe(2);
+    expect(scenarios.find((scenario) => scenario.name === 'commission_x2').costModel.commissionPerLot).toBe(14);
+  });
+
+  test('walk-forward degradation downgrades without contaminating train metrics', () => {
+    const trainSummary = makeSummary({ netProfitMoney: 3000, profitFactor: 2.2, robustScore: 90 });
+    const validationSummary = makeSummary({ netProfitMoney: 1800, profitFactor: 1.6, robustScore: 75 });
+    const outOfSampleSummary = makeSummary({
+      netProfitMoney: 600,
+      profitFactor: 1.35,
+      robustScore: 72,
+      totalTrades: 70,
+    });
+
+    const assessment = assessWalkForwardMetrics({
+      trainSummary,
+      validationSummary,
+      outOfSampleSummary,
+    });
+
+    expect(assessment.trainMetrics).toBe(trainSummary);
+    expect(assessment.validationMetrics).toBe(validationSummary);
+    expect(assessment.outOfSampleMetrics).toBe(outOfSampleSummary);
+    expect(assessment.overfittingRisk).toBe('MEDIUM');
+    expect(assessment.finalBucket).toBe(CANDIDATE_BUCKETS.PAPER_ONLY);
+    expect(assessment.outOfSampleDegradationPercent).toBe(80);
   });
 
   test('negative expectancy is REJECT', () => {

@@ -89,7 +89,7 @@ describe('symbolCustomEngine', () => {
     }));
   });
 
-  test('live scope is blocked in Phase 2 before candle fetch or logic analysis', async () => {
+  test('live scope is blocked before candle fetch when live flags are not ready', async () => {
     const { engine } = loadEngine();
     const getCandlesFn = jest.fn();
 
@@ -105,9 +105,40 @@ describe('symbolCustomEngine', () => {
       source: 'symbolCustom',
       signal: 'NONE',
       status: 'BLOCKED',
-      reasonCode: engine.SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
+      reasonCode: engine.SYMBOL_CUSTOM_LIVE_NOT_ENABLED,
     }));
     expect(getCandlesFn).not.toHaveBeenCalled();
+  });
+
+  test('live scope can run analysis only after explicit live readiness flags pass', async () => {
+    const { engine } = loadEngine();
+    const getCandlesFn = jest.fn(async () => ({
+      entry: [{ close: 2000 }],
+    }));
+
+    const signal = await engine.analyzeSymbolCustom({
+      _id: 'sc-live-ready',
+      symbol: 'XAUUSD',
+      symbolCustomName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
+      status: 'live_ready',
+      liveEnabled: true,
+      allowLive: true,
+      parameters: { enabled: true },
+      timeframes: { setupTimeframe: '30m', entryTimeframe: '30m', higherTimeframe: '30m' },
+    }, getCandlesFn, { scope: 'live' });
+
+    expect(signal).toEqual(expect.objectContaining({
+      scope: 'live',
+      source: 'symbolCustom',
+      symbolCustomId: 'sc-live-ready',
+      signal: 'NONE',
+      status: 'NO_SIGNAL',
+    }));
+    expect(getCandlesFn).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'XAUUSD',
+      scope: 'live',
+    }));
   });
 
   test('unknown logic returns a clear error', async () => {
@@ -161,6 +192,55 @@ describe('symbolCustomEngine', () => {
       source: 'symbolCustom',
       logicName: 'PLACEHOLDER_SYMBOL_CUSTOM',
       signal: 'NONE',
+    }));
+  });
+
+  test('normalized SymbolCustom signal preserves execution scoring fields', () => {
+    const { engine } = loadEngine();
+    const timestamp = new Date('2026-05-14T03:04:05.000Z');
+
+    const signal = engine.buildSymbolCustomSignal(
+      {
+        _id: 'sc-confidence',
+        symbol: 'USDJPY',
+        symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+        logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+        parameters: {},
+      },
+      {
+        signal: 'BUY',
+        confidence: 0.73,
+        marketQualityScore: 0.82,
+        marketQualityThreshold: 0.6,
+        sl: 146.8,
+        tp: 148.2,
+        metadata: {
+          setupType: 'jpy_macro_reversal',
+          candidatePreset: 'buy_session_conservative',
+        },
+      },
+      {
+        scope: 'paper',
+        logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+        timestamp,
+      }
+    );
+
+    expect(signal).toEqual(expect.objectContaining({
+      scope: 'paper',
+      source: 'symbolCustom',
+      signal: 'BUY',
+      confidence: 0.73,
+      rawConfidence: 0.73,
+      marketQualityScore: 0.82,
+      marketQualityThreshold: 0.6,
+      sl: 146.8,
+      tp: 148.2,
+      timestamp,
+    }));
+    expect(signal.metadata).toEqual(expect.objectContaining({
+      setupType: 'jpy_macro_reversal',
+      candidatePreset: 'buy_session_conservative',
     }));
   });
 

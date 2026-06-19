@@ -216,7 +216,7 @@ describe('oil breakout retest SymbolCustom logics', () => {
     }));
   });
 
-  test('XBRUSD V2 defaults to backtest-only BUY session candidate', () => {
+  test('XBRUSD V2 defaults to paper-testing BUY session candidate with live blocked', () => {
     const logic = new XbrusdOilLongRetestSessionV2();
     const defaults = logic.getDefaultParameters();
     const schemaByKey = new Map(logic.getDefaultParameterSchema().map((field) => [field.key, field]));
@@ -230,11 +230,13 @@ describe('oil breakout retest SymbolCustom logics', () => {
     expect(schemaByKey.get('minConfidence').defaultValue).toBe(0.55);
     expect(logic.analyze({ scope: 'paper', symbol: 'XBRUSD' })).toEqual(expect.objectContaining({
       signal: 'NONE',
-      status: 'BLOCKED',
+      status: 'NO_SETUP',
+      reason: 'Not enough candles for oil breakout retest analysis',
     }));
     expect(logic.analyze({ scope: 'live', symbol: 'XBRUSD' })).toEqual(expect.objectContaining({
       signal: 'NONE',
       status: 'BLOCKED',
+      reasonCode: 'SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED',
     }));
   });
 

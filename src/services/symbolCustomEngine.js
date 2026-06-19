@@ -1,11 +1,17 @@
 const SymbolCustom = require('../models/SymbolCustom');
 const { getSymbolCustomLogic } = require('../symbolCustom/registry');
 
-const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2 = 'SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2';
-const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1 = SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2;
+const SYMBOL_CUSTOM_LIVE_ANALYSIS_DISABLED = 'SYMBOL_CUSTOM_LIVE_ANALYSIS_DISABLED';
+const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2 = SYMBOL_CUSTOM_LIVE_ANALYSIS_DISABLED;
+const SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1 = SYMBOL_CUSTOM_LIVE_ANALYSIS_DISABLED;
+const SYMBOL_CUSTOM_LIVE_NOT_ENABLED = 'SYMBOL_CUSTOM_LIVE_NOT_ENABLED';
+const SYMBOL_CUSTOM_LIVE_NOT_ALLOWED = 'SYMBOL_CUSTOM_LIVE_NOT_ALLOWED';
+const SYMBOL_CUSTOM_LIVE_STATUS_NOT_READY = 'SYMBOL_CUSTOM_LIVE_STATUS_NOT_READY';
+const SYMBOL_CUSTOM_LIVE_PARAMETERS_DISABLED = 'SYMBOL_CUSTOM_LIVE_PARAMETERS_DISABLED';
 const SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED = 'SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED';
 const SYMBOL_CUSTOM_CONTEXT_INVALID = 'SYMBOL_CUSTOM_CONTEXT_INVALID';
 const VALID_SCOPES = Object.freeze(['paper', 'backtest', 'live']);
+const LIVE_READY_STATUSES = Object.freeze(['validated', 'live_ready']);
 
 function cloneValue(value) {
   if (value === undefined) return undefined;
@@ -46,12 +52,54 @@ function getConfigObject(symbolCustom = {}, field) {
   return cloneValue(symbolCustom[field] || {});
 }
 
+function evaluateSymbolCustomLiveReadiness(symbolCustom = {}) {
+  if (symbolCustom.liveEnabled !== true) {
+    return {
+      allowed: false,
+      reasonCode: SYMBOL_CUSTOM_LIVE_NOT_ENABLED,
+      reason: 'SymbolCustom live analysis requires liveEnabled=true',
+    };
+  }
+
+  if (symbolCustom.allowLive !== true) {
+    return {
+      allowed: false,
+      reasonCode: SYMBOL_CUSTOM_LIVE_NOT_ALLOWED,
+      reason: 'SymbolCustom live analysis requires allowLive=true',
+    };
+  }
+
+  const status = String(symbolCustom.status || '').trim();
+  if (!LIVE_READY_STATUSES.includes(status)) {
+    return {
+      allowed: false,
+      reasonCode: SYMBOL_CUSTOM_LIVE_STATUS_NOT_READY,
+      reason: `SymbolCustom live analysis requires status ${LIVE_READY_STATUSES.join(' or ')}`,
+    };
+  }
+
+  if (symbolCustom.parameters && symbolCustom.parameters.enabled === false) {
+    return {
+      allowed: false,
+      reasonCode: SYMBOL_CUSTOM_LIVE_PARAMETERS_DISABLED,
+      reason: 'SymbolCustom live analysis requires parameters.enabled not false',
+    };
+  }
+
+  return { allowed: true, reasonCode: null, reason: null };
+}
+
 function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}) {
   const timeframes = getTimeframes(symbolCustom);
   const timestamp = context.timestamp || new Date();
   const signal = rawResult.signal || 'NONE';
   const stopLoss = rawResult.stopLoss ?? rawResult.sl ?? null;
   const takeProfit = rawResult.takeProfit ?? rawResult.tp ?? null;
+  const rawMetadata = rawResult.metadata || {};
+  const confidence = rawResult.confidence ?? rawMetadata.confidence;
+  const rawConfidence = rawResult.rawConfidence ?? rawMetadata.rawConfidence ?? confidence;
+  const marketQualityScore = rawResult.marketQualityScore ?? rawMetadata.marketQualityScore;
+  const marketQualityThreshold = rawResult.marketQualityThreshold ?? rawMetadata.marketQualityThreshold;
 
   return {
     scope: context.scope || 'paper',
@@ -64,6 +112,10 @@ function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}
     status: rawResult.status || (signal === 'NONE' ? 'NO_SIGNAL' : 'SIGNAL'),
     reason: rawResult.reason || null,
     reasonCode: rawResult.reasonCode,
+    ...(confidence !== undefined ? { confidence } : {}),
+    ...(rawConfidence !== undefined ? { rawConfidence } : {}),
+    ...(marketQualityScore !== undefined ? { marketQualityScore } : {}),
+    ...(marketQualityThreshold !== undefined ? { marketQualityThreshold } : {}),
     sl: rawResult.sl ?? rawResult.stopLoss ?? null,
     tp: rawResult.tp ?? rawResult.takeProfit ?? null,
     stopLoss,
@@ -78,7 +130,7 @@ function buildSymbolCustomSignal(symbolCustom = {}, rawResult = {}, context = {}
     beConfig: getConfigObject(symbolCustom, 'beConfig'),
     entryConfig: getConfigObject(symbolCustom, 'entryConfig'),
     exitConfig: getConfigObject(symbolCustom, 'exitConfig'),
-    metadata: cloneValue(rawResult.metadata || {}),
+    metadata: cloneValue(rawMetadata),
     timestamp,
   };
 }
@@ -113,13 +165,32 @@ async function analyzeSymbolCustom(symbolCustom, getCandlesFn, options = {}) {
   const timestamp = options.timestamp || new Date();
 
   if (scope === 'live') {
+    const liveReadiness = evaluateSymbolCustomLiveReadiness(symbolCustom);
+    if (!liveReadiness.allowed) {
+      return buildSymbolCustomSignal(
+        symbolCustom,
+        {
+          signal: 'NONE',
+          status: 'BLOCKED',
+          reason: liveReadiness.reason,
+          reasonCode: liveReadiness.reasonCode,
+          metadata: {
+            liveReadiness,
+          },
+        },
+        { scope, logicName, timestamp }
+      );
+    }
+  }
+
+  if (scope === 'live' && options.liveAnalysisEnabled === false) {
     return buildSymbolCustomSignal(
       symbolCustom,
       {
         signal: 'NONE',
         status: 'BLOCKED',
-        reason: 'SymbolCustom live execution is not supported in Phase 2',
-        reasonCode: SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
+        reason: 'SymbolCustom live analysis was explicitly disabled by caller',
+        reasonCode: SYMBOL_CUSTOM_LIVE_ANALYSIS_DISABLED,
       },
       { scope, logicName, timestamp }
     );
@@ -150,6 +221,7 @@ async function analyzeSymbolCustom(symbolCustom, getCandlesFn, options = {}) {
     exitConfig: getConfigObject(symbolCustom, 'exitConfig'),
     candles,
     activeProfile: options.activeProfile,
+    liveAnalysisAllowed: scope === 'live',
   };
 
   if (typeof logic.validateContext === 'function') {
@@ -185,12 +257,19 @@ async function listActivePaperSymbolCustoms() {
 }
 
 module.exports = {
+  SYMBOL_CUSTOM_LIVE_ANALYSIS_DISABLED,
   SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_2,
   SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1,
+  SYMBOL_CUSTOM_LIVE_NOT_ENABLED,
+  SYMBOL_CUSTOM_LIVE_NOT_ALLOWED,
+  SYMBOL_CUSTOM_LIVE_STATUS_NOT_READY,
+  SYMBOL_CUSTOM_LIVE_PARAMETERS_DISABLED,
   SYMBOL_CUSTOM_LOGIC_NOT_REGISTERED,
   SYMBOL_CUSTOM_CONTEXT_INVALID,
+  LIVE_READY_STATUSES,
   analyzeSymbolCustom,
   analyzeAllPaperSymbolCustoms,
   listActivePaperSymbolCustoms,
   buildSymbolCustomSignal,
+  evaluateSymbolCustomLiveReadiness,
 };

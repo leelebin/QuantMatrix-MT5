@@ -49,6 +49,13 @@ const {
   getWarmupStart,
   normalizeDateRange,
 } = require('../src/utils/candleRange');
+const {
+  CANDIDATE_BUCKETS,
+  assessWalkForwardMetrics,
+  buildCostStressScenarios,
+  classifyOptimizerCandidate,
+  evaluateCostStressResults,
+} = require('../src/utils/optimizerCandidateValidation');
 
 const STRATEGIES = [
   'TrendFollowing',
@@ -92,17 +99,16 @@ const HIGH_VOLATILITY_SYMBOLS = new Set([
   'DOGEUSD',
 ]);
 
-const COST_SENSITIVITY_SCENARIOS = [
-  { name: 'default', mutate: (costModel) => ({ ...costModel }) },
-  { name: 'spread_x1_5', mutate: (costModel) => ({ ...costModel, spreadPips: Number(costModel.spreadPips || 0) * 1.5 }) },
-  { name: 'slippage_x2', mutate: (costModel) => ({ ...costModel, slippagePips: Number(costModel.slippagePips || 0) * 2 }) },
-  { name: 'commission_x2', mutate: (costModel) => ({ ...costModel, commissionPerLot: Number(costModel.commissionPerLot || 0) * 2 }) },
-];
-
 const VOLUME_FLOW_SUPPORTED_SYMBOLS = new Set([
   ...VOLUME_FLOW_HYBRID_DEFAULT_SYMBOLS,
   ...VOLUME_FLOW_HYBRID_OPTIONAL_SYMBOLS,
 ]);
+
+const DEFAULT_WALK_FORWARD_SPLIT = Object.freeze({
+  train: 0.6,
+  validation: 0.2,
+  outOfSample: 0.2,
+});
 
 function parseArgs(argv) {
   const args = {};
@@ -146,6 +152,53 @@ function formatIso(value) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function summarizeWindow(range) {
+  if (!range) return null;
+  return {
+    start: formatIso(range.start),
+    endExclusive: formatIso(range.endExclusive),
+  };
+}
+
+function buildWalkForwardRanges(range, split = DEFAULT_WALK_FORWARD_SPLIT) {
+  if (!range || !(range.start instanceof Date) || !(range.endExclusive instanceof Date)) {
+    return null;
+  }
+
+  const startMs = range.start.getTime();
+  const endMs = range.endExclusive.getTime();
+  const totalMs = endMs - startMs;
+  if (!Number.isFinite(totalMs) || totalMs <= 0) return null;
+
+  const trainRatio = Number(split.train) > 0 ? Number(split.train) : DEFAULT_WALK_FORWARD_SPLIT.train;
+  const validationRatio = Number(split.validation) > 0 ? Number(split.validation) : DEFAULT_WALK_FORWARD_SPLIT.validation;
+  const trainEndMs = Math.floor(startMs + totalMs * trainRatio);
+  const validationEndMs = Math.floor(startMs + totalMs * (trainRatio + validationRatio));
+
+  const trainEnd = new Date(trainEndMs);
+  const validationEnd = new Date(Math.min(validationEndMs, endMs));
+  if (trainEnd <= range.start || validationEnd <= trainEnd || range.endExclusive <= validationEnd) {
+    return null;
+  }
+
+  return {
+    split,
+    train: { start: range.start, endExclusive: trainEnd },
+    validation: { start: trainEnd, endExclusive: validationEnd },
+    outOfSample: { start: validationEnd, endExclusive: range.endExclusive },
+  };
+}
+
+function serializeWalkForwardRanges(walkForwardRanges) {
+  if (!walkForwardRanges) return null;
+  return {
+    split: walkForwardRanges.split || DEFAULT_WALK_FORWARD_SPLIT,
+    train: summarizeWindow(walkForwardRanges.train),
+    validation: summarizeWindow(walkForwardRanges.validation),
+    outOfSample: summarizeWindow(walkForwardRanges.outOfSample),
+  };
 }
 
 function clone(value) {
@@ -477,73 +530,115 @@ async function fetchCandleBundle({ mt5, symbol, executionConfig, start, endExclu
   };
 }
 
+function buildWalkForwardInsufficientSummary(reason) {
+  return {
+    totalTrades: 0,
+    winningTrades: 0,
+    losingTrades: 0,
+    winRate: 0,
+    profitFactor: 0,
+    expectancyPerTrade: 0,
+    netProfitMoney: 0,
+    returnPercent: 0,
+    maxDrawdownPercent: 0,
+    maxConsecutiveLosses: 0,
+    robustScore: 0,
+    profitConcentrationTop1: 0,
+    warningFlags: ['VERY_SMALL_SAMPLE', 'WALK_FORWARD_INSUFFICIENT_DATA'],
+    walkForwardSkipped: true,
+    walkForwardSkipReason: reason,
+  };
+}
+
+async function simulateFixedParamsForSegment({
+  row,
+  segmentName,
+  segmentRange,
+  config,
+  strategyRecordsByName,
+  activeProfile,
+  mt5,
+}) {
+  const executionConfig = config.forcedTimeframe
+    ? getForcedTimeframeExecutionConfig(row.symbol, row.strategy, config.forcedTimeframe)
+    : getStrategyExecutionConfig(row.symbol, row.strategy);
+  const candleBundle = await fetchCandleBundle({
+    mt5,
+    symbol: row.symbol,
+    executionConfig,
+    start: segmentRange.start,
+    endExclusive: segmentRange.endExclusive,
+  });
+
+  const minimumInRangeCandles = Math.max(10, Math.min(50, Math.floor((config.minimumTrades || 30) / 2)));
+  if (
+    candleBundle.candles.length < DEFAULT_WARMUP_BARS + 2
+    || candleBundle.inRangeCandles.length < minimumInRangeCandles
+  ) {
+    const reason = `INSUFFICIENT_${segmentName.toUpperCase()}_CANDLES inRange=${candleBundle.inRangeCandles.length} warmup=${candleBundle.candles.length}`;
+    return {
+      segmentName,
+      skipped: true,
+      reason,
+      window: summarizeWindow(segmentRange),
+      fetchMeta: candleBundle.fetchMeta,
+      summary: buildWalkForwardInsufficientSummary(reason),
+    };
+  }
+
+  const runtime = await buildEffectiveRuntime(
+    row.strategy,
+    row.symbol,
+    strategyRecordsByName.get(row.strategy),
+    activeProfile
+  );
+  const simulation = await backtestEngine.simulate({
+    symbol: row.symbol,
+    strategyType: row.strategy,
+    timeframe: candleBundle.timeframe,
+    candles: candleBundle.candles,
+    higherTfCandles: candleBundle.higherTfCandles,
+    lowerTfCandles: candleBundle.lowerTfCandles,
+    initialBalance: config.initialBalance,
+    costModel: row.costModelUsed || buildCostModel(getInstrument(row.symbol), config.costPreset).costModel,
+    tradeStartTime: candleBundle.effectiveStart.toISOString(),
+    tradeEndTime: candleBundle.effectiveEnd.toISOString(),
+    storedStrategyParameters: runtime.storedParameters,
+    breakevenConfig: runtime.breakevenConfig,
+    executionPolicy: runtime.executionPolicy,
+    strategyParams: row.bestParameters || {},
+  });
+
+  return {
+    segmentName,
+    skipped: false,
+    window: summarizeWindow(segmentRange),
+    fetchMeta: candleBundle.fetchMeta,
+    summary: simulation.summary || {},
+  };
+}
+
 function classifyResult(row, passType) {
-  const s = row.summary || {};
-  const flags = new Set(Array.isArray(s.warningFlags) ? s.warningFlags : []);
-  const reasons = [];
+  return classifyOptimizerCandidate(row, {
+    passType,
+    symbol: row.symbol,
+    strategy: row.strategy,
+    requireCostStress: false,
+  });
+}
 
-  const liveEligible = numberOrNull(s.robustScore) >= 70
-    && numberOrNull(s.totalTrades) >= 50
-    && numberOrNull(s.profitFactor) >= 1.3
-    && numberOrNull(s.expectancyPerTrade) > 0
-    && numberOrNull(s.returnPercent) > 0
-    && numberOrNull(s.maxDrawdownPercent) <= 15
-    && numberOrNull(s.maxConsecutiveLosses) <= 3
-    && numberOrNull(s.profitConcentrationTop1) <= 0.5
-    && !flags.has('VERY_SMALL_SAMPLE')
-    && !flags.has('LOW_EXPECTANCY')
-    && !flags.has('HIGH_DRAWDOWN');
-
-  if (passType === 'secondary') {
-    reasons.push('LOW_SAMPLE_SECONDARY_PASS: minimumTrades=10 result is observation-only.');
-    const secondaryPaperEligible = numberOrNull(s.netProfitMoney) > 0
-      && numberOrNull(s.profitFactor) > 1
-      && numberOrNull(s.expectancyPerTrade) > 0
-      && numberOrNull(s.robustScore) >= 35;
-    if (secondaryPaperEligible) {
-      return { bucket: 'PAPER_ONLY', reasons };
-    }
-    if (numberOrNull(s.robustScore) < 35) reasons.push('secondary pass robustScore is too low.');
-    if (numberOrNull(s.expectancyPerTrade) <= 0) reasons.push('secondary pass expectancyPerTrade <= 0.');
-    if (numberOrNull(s.netProfitMoney) <= 0) reasons.push('secondary pass netProfitMoney <= 0.');
-    if (numberOrNull(s.profitFactor) <= 1) reasons.push('secondary pass profitFactor <= 1.');
-    return { bucket: 'REJECT', reasons };
-  }
-
-  if (liveEligible) {
-    reasons.push('Meets robust live-candidate screening thresholds.');
-    return { bucket: 'LIVE_CANDIDATE', reasons };
-  }
-
-  const reject = numberOrNull(s.netProfitMoney) <= 0
-    || numberOrNull(s.profitFactor) < 1
-    || numberOrNull(s.expectancyPerTrade) <= 0
-    || numberOrNull(s.robustScore) < 35
-    || numberOrNull(s.maxDrawdownPercent) > 25
-    || numberOrNull(s.maxConsecutiveLosses) > 6;
-
-  if (reject) {
-    if (numberOrNull(s.netProfitMoney) <= 0) reasons.push('netProfitMoney <= 0.');
-    if (numberOrNull(s.profitFactor) < 1) reasons.push('profitFactor < 1.');
-    if (numberOrNull(s.expectancyPerTrade) <= 0) reasons.push('expectancyPerTrade <= 0.');
-    if (numberOrNull(s.robustScore) < 35) reasons.push('robustScore is low.');
-    if (numberOrNull(s.maxDrawdownPercent) > 25) reasons.push('maxDrawdownPercent is too high.');
-    if (numberOrNull(s.maxConsecutiveLosses) > 6) reasons.push('maxConsecutiveLosses is too high.');
-    return { bucket: 'REJECT', reasons };
-  }
-
-  if (numberOrNull(s.netProfitMoney) > 0 && numberOrNull(s.profitFactor) > 1) {
-    if (numberOrNull(s.totalTrades) < 50) reasons.push('Sample is below live threshold.');
-    if (flags.has('PROFIT_CONCENTRATED')) reasons.push('Profit is concentrated.');
-    if (flags.has('AVG_LOSS_GT_AVG_WIN')) reasons.push('Average loss is larger than average win.');
-    if (numberOrNull(s.maxDrawdownPercent) > 15) reasons.push('Drawdown is above live threshold.');
-    if (numberOrNull(s.profitConcentrationTop1) > 0.5) reasons.push('PF high but not recommended because top trade concentration is high.');
-    if (reasons.length === 0) reasons.push('Profitable but does not meet every live-candidate threshold.');
-    return { bucket: 'PAPER_ONLY', reasons };
-  }
-
-  reasons.push('Does not meet live or paper watchlist thresholds.');
-  return { bucket: 'REJECT', reasons };
+function applyUpdatedClassification(row, classification, hiddenDiscovery, extraReasons = []) {
+  row.selection = classification;
+  row.baseBucket = classification.bucket;
+  row.bucket = mapBucketForReport(classification.bucket, hiddenDiscovery);
+  row.suggestedRiskPerTrade = classification.suggestedRiskPerTrade;
+  row.selectionReasons = [
+    ...new Set([
+      ...((classification && classification.reasons) || []),
+      ...extraReasons,
+    ]),
+  ];
+  return row;
 }
 
 function mapBucketForReport(bucket, hiddenDiscovery) {
@@ -618,8 +713,10 @@ function attachIntrabarValidationFlags(row) {
 function flattenResult(row) {
   const s = row.summary || {};
   const rec = row.recommendation || {};
+  const selection = row.selection || {};
   return {
     bucket: row.bucket,
+    baseBucket: row.baseBucket || row.bucket,
     passType: row.passType,
     strategy: row.strategy,
     symbol: row.symbol,
@@ -643,13 +740,31 @@ function flattenResult(row) {
     profitConcentrationTop1: s.profitConcentrationTop1 ?? null,
     maxConsecutiveLosses: s.maxConsecutiveLosses ?? null,
     recommendationTier: rec.tier || null,
+    selectionTier: selection.bucket || row.baseBucket || row.bucket,
     recommendationReasons: Array.isArray(rec.reasons) ? rec.reasons.join('; ') : '',
     riskNotes: Array.isArray(rec.riskNotes) ? rec.riskNotes.join('; ') : '',
-    suggestedRiskPerTrade: rec.suggestedRiskPerTrade ?? null,
+    suggestedRiskPerTrade: row.suggestedRiskPerTrade ?? rec.suggestedRiskPerTrade ?? null,
     selectionReasons: Array.isArray(row.selectionReasons) ? row.selectionReasons.join('; ') : '',
     costRobust: row.costRobust ?? null,
+    costStressPassed: row.costStressResult?.passed ?? null,
+    costStressFailedScenarios: Array.isArray(row.costStressResult?.failedScenarios) ? row.costStressResult.failedScenarios.join(';') : '',
+    walkForwardStatus: row.walkForwardStatus || '',
+    overfittingRisk: row.walkForwardAssessment?.overfittingRisk || '',
+    walkForwardFinalBucket: row.walkForwardAssessment?.finalBucket || '',
+    validationDegradationPercent: row.walkForwardAssessment?.validationDegradationPercent ?? '',
+    outOfSampleDegradationPercent: row.walkForwardAssessment?.outOfSampleDegradationPercent ?? '',
+    trainTrades: row.walkForwardAssessment?.trainMetrics?.totalTrades ?? '',
+    validationTrades: row.walkForwardAssessment?.validationMetrics?.totalTrades ?? '',
+    outOfSampleTrades: row.walkForwardAssessment?.outOfSampleMetrics?.totalTrades ?? '',
+    trainProfitFactor: row.walkForwardAssessment?.trainMetrics?.profitFactor ?? '',
+    validationProfitFactor: row.walkForwardAssessment?.validationMetrics?.profitFactor ?? '',
+    outOfSampleProfitFactor: row.walkForwardAssessment?.outOfSampleMetrics?.profitFactor ?? '',
+    trainNetProfitMoney: row.walkForwardAssessment?.trainMetrics?.netProfitMoney ?? '',
+    validationNetProfitMoney: row.walkForwardAssessment?.validationMetrics?.netProfitMoney ?? '',
+    outOfSampleNetProfitMoney: row.walkForwardAssessment?.outOfSampleMetrics?.netProfitMoney ?? '',
     needsIntrabarValidation: row.needsIntrabarValidation ?? null,
     intrabarValidationReasons: Array.isArray(row.intrabarValidationReasons) ? row.intrabarValidationReasons.join('; ') : '',
+    directionControlNotes: Array.isArray(row.directionControlAuditNotes) ? row.directionControlAuditNotes.join('; ') : '',
     costModel: JSON.stringify(row.costModelUsed || null),
     costModelSource: row.costModelSource || '',
     bestParameters: JSON.stringify(row.bestParameters || {}),
@@ -676,7 +791,7 @@ function toCsv(rows) {
 
 function markdownTable(rows) {
   if (!rows.length) return '_None_\n';
-  const headers = ['strategy', 'symbol', 'timeframe', 'robustScore', 'PF', 'return', 'maxDD', 'trades', 'expectancy', 'warnings', 'suggestedRisk', 'reason'];
+  const headers = ['strategy', 'symbol', 'timeframe', 'robustScore', 'PF', 'return', 'maxDD', 'trades', 'expectancy', 'warnings', 'cost', 'suggestedRisk', 'reason'];
   const lines = [
     `| ${headers.join(' | ')} |`,
     `| ${headers.map(() => '---').join(' | ')} |`,
@@ -695,8 +810,37 @@ function markdownTable(rows) {
       s.totalTrades ?? '',
       formatNumber(s.expectancyPerTrade, 2),
       Array.isArray(s.warningFlags) ? s.warningFlags.join(', ') : '',
-      rec.suggestedRiskPerTrade == null ? '' : formatNumber(rec.suggestedRiskPerTrade, 4),
+      row.costRobust === true ? 'PASS' : row.costRobust === false ? 'FAIL' : '',
+      (row.suggestedRiskPerTrade ?? rec.suggestedRiskPerTrade) == null ? '' : formatNumber(row.suggestedRiskPerTrade ?? rec.suggestedRiskPerTrade, 4),
       safeText((row.selectionReasons || rec.reasons || []).join('; ')),
+    ].map(safeText);
+    lines.push(`| ${cells.join(' | ')} |`);
+  });
+  return `${lines.join('\n')}\n`;
+}
+
+function walkForwardMarkdown(rows) {
+  const testedRows = rows.filter((row) => row.walkForwardAssessment);
+  if (!testedRows.length) return '_None_\n';
+  const lines = [
+    '| strategy | symbol | status | train PF/net/trades | validation PF/net/trades | OOS PF/net/trades | OOS degradation | risk | finalBucket |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+  ];
+  testedRows.forEach((row) => {
+    const assessment = row.walkForwardAssessment || {};
+    const train = assessment.trainMetrics || {};
+    const validation = assessment.validationMetrics || {};
+    const outOfSample = assessment.outOfSampleMetrics || {};
+    const cells = [
+      row.strategy,
+      row.symbol,
+      row.walkForwardStatus || '',
+      `${formatNumber(train.profitFactor, 2)}/${formatNumber(train.netProfitMoney, 2)}/${train.totalTrades ?? ''}`,
+      `${formatNumber(validation.profitFactor, 2)}/${formatNumber(validation.netProfitMoney, 2)}/${validation.totalTrades ?? ''}`,
+      `${formatNumber(outOfSample.profitFactor, 2)}/${formatNumber(outOfSample.netProfitMoney, 2)}/${outOfSample.totalTrades ?? ''}`,
+      assessment.outOfSampleDegradationPercent == null ? '' : `${formatNumber(assessment.outOfSampleDegradationPercent, 1)}%`,
+      assessment.overfittingRisk || '',
+      assessment.finalBucket || '',
     ].map(safeText);
     lines.push(`| ${cells.join(' | ')} |`);
   });
@@ -715,6 +859,39 @@ function skippedTable(rows) {
   return `${lines.join('\n')}\n`;
 }
 
+function getDirectionControlSummary(row = {}) {
+  return row.summary?.directionControl
+    || row.directionControlSummary
+    || row.sharedSummary?.directionControl
+    || row.portfolioSummary?.directionControl
+    || null;
+}
+
+function buildDirectionControlAuditNotes(row = {}) {
+  const summary = getDirectionControlSummary(row);
+  if (!summary) {
+    return ['Direction Control audit data not present for this optimizer result.'];
+  }
+  return [
+    `Direction Control audit: triggeredTrades=${summary.triggeredTrades ?? 0}/${summary.totalTrades ?? row.summary?.totalTrades ?? 'unknown'}`,
+    `netHypotheticalImpactR=${summary.netHypotheticalImpactR ?? summary.hypotheticalExitAtFirstTriggerImpactR ?? 'n/a'}`,
+    'Direction Control remains audit-only; no SL/close/partial action is enabled by this report.',
+  ];
+}
+
+function notesList(rows, extractor) {
+  const notes = [];
+  rows.forEach((row) => {
+    const extracted = extractor(row);
+    if (!extracted) return;
+    const values = Array.isArray(extracted) ? extracted : [extracted];
+    values.filter(Boolean).forEach((note) => {
+      notes.push(`- ${safeText(row.strategy)} ${safeText(row.symbol)}: ${safeText(note)}`);
+    });
+  });
+  return notes.length ? notes.join('\n') : '- None';
+}
+
 function buildMarkdownReport(report) {
   const live = sortRows(report.resultsByBucket.LIVE_CANDIDATE || []);
   const paper = sortRows(report.resultsByBucket.PAPER_ONLY || []);
@@ -724,13 +901,14 @@ function buildMarkdownReport(report) {
     strategy: row.strategy,
     symbol: row.symbol,
     timeframe: row.timeframe,
-    suggestedRiskPerTrade: row.recommendation?.suggestedRiskPerTrade ?? null,
+    suggestedRiskPerTrade: row.suggestedRiskPerTrade ?? row.recommendation?.suggestedRiskPerTrade ?? null,
     reason: (row.selectionReasons || row.recommendation?.reasons || []).join('; '),
   }));
   const suggestedPaper = paper.map((row) => ({
     strategy: row.strategy,
     symbol: row.symbol,
     timeframe: row.timeframe,
+    suggestedRiskPerTrade: row.suggestedRiskPerTrade ?? row.recommendation?.suggestedRiskPerTrade ?? null,
     reason: (row.selectionReasons || row.recommendation?.reasons || []).join('; '),
   }));
   const doNotEnable = reject.map((row) => ({
@@ -743,6 +921,8 @@ function buildMarkdownReport(report) {
   return [
     '# Optimizer Strategy Selection Report',
     '',
+    '> Safety: LIVE_CANDIDATE does not mean guaranteed profit. This report is read-only, does not auto-enable live, and every candidate must pass paper/demo observation before any small-risk live decision.',
+    '',
     '## Run Config',
     `- date/time: ${report.runConfig.generatedAt}`,
     `- optimizeFor: ${report.runConfig.optimizeFor}`,
@@ -752,6 +932,10 @@ function buildMarkdownReport(report) {
     `- strategies tested: ${report.runConfig.strategies.join(', ')}`,
     `- symbols tested: ${report.runConfig.symbols.join(', ')}`,
     `- date range used: ${report.runConfig.from} to ${report.runConfig.to}`,
+    `- walkForward: ${report.runConfig.walkForward === true ? 'true' : 'false'}`,
+    `- optimizationWindowMode: ${report.runConfig.optimizationWindowMode || 'full_range'}`,
+    `- readOnly: ${report.runConfig.readOnly === false ? 'false' : 'true'}`,
+    `- mutates live/paper runtime: ${report.runConfig.mutatesRuntimeState === true ? 'YES' : 'NO'}`,
     '',
     '## Executive Summary',
     `- combinations scheduled: ${report.summary.totalScheduled}`,
@@ -777,12 +961,23 @@ function buildMarkdownReport(report) {
       ? report.costSensitivityNotes.map((note) => `- ${safeText(note)}`).join('\n')
       : '- None',
     '',
-    '## Suggested Live Enable List',
+    '## Walk-Forward / OOS Validation',
+    walkForwardMarkdown(report.results),
+    '',
+    '## Overfitting Risk Notes',
+    notesList(report.results, (row) => row.walkForwardAssessment
+      ? `overfittingRisk=${row.walkForwardAssessment.overfittingRisk}; finalBucket=${row.walkForwardAssessment.finalBucket}`
+      : null),
+    '',
+    '## Direction Control Audit Notes',
+    notesList([...live, ...paper], buildDirectionControlAuditNotes),
+    '',
+    '## Suggested Live Candidate List',
     '```json',
     JSON.stringify(suggestedLive, null, 2),
     '```',
     '',
-    '## Suggested Paper Continue List',
+    '## Suggested Paper Enable List',
     '```json',
     JSON.stringify(suggestedPaper, null, 2),
     '```',
@@ -841,6 +1036,7 @@ function buildHiddenMarkdownReport(report) {
     strategy: row.strategy,
     symbol: row.symbol,
     timeframe: row.timeframe,
+    suggestedRiskPerTrade: row.suggestedRiskPerTrade ?? row.recommendation?.suggestedRiskPerTrade ?? null,
     reason: (row.selectionReasons || row.recommendation?.reasons || []).join('; '),
     riskLevel: row.bucket === 'HIDDEN_LIVE_CANDIDATE' && row.costRobust ? 'LOW' : 'MEDIUM',
   }));
@@ -857,6 +1053,8 @@ function buildHiddenMarkdownReport(report) {
   return [
     '# Hidden Optimizer Combo Discovery Report',
     '',
+    '> Safety: hidden candidates are research leads only. This report is read-only, does not auto-enable paper/live, and any live consideration must first go through paper/demo observation.',
+    '',
     '## Run Config',
     `- date/time: ${report.runConfig.generatedAt}`,
     `- universe: ${report.runConfig.universeMode}`,
@@ -871,6 +1069,10 @@ function buildHiddenMarkdownReport(report) {
     `- strategies tested: ${report.runConfig.strategies.join(', ')}`,
     `- symbols tested: ${report.runConfig.symbols.join(', ')}`,
     `- date range used: ${report.runConfig.from} to ${report.runConfig.to}`,
+    `- walkForward: ${report.runConfig.walkForward === true ? 'true' : 'false'}`,
+    `- optimizationWindowMode: ${report.runConfig.optimizationWindowMode || 'full_range'}`,
+    `- readOnly: ${report.runConfig.readOnly === false ? 'false' : 'true'}`,
+    `- mutates live/paper runtime: ${report.runConfig.mutatesRuntimeState === true ? 'YES' : 'NO'}`,
     `- total combinations in universe: ${report.summary.totalUniverseCount}`,
     `- total combinations scheduled: ${report.summary.totalScheduled}`,
     `- remaining combinations run in this invocation: ${report.summary.remainingScheduledCount ?? report.summary.totalScheduled}`,
@@ -903,6 +1105,14 @@ function buildHiddenMarkdownReport(report) {
     markdownTable(top20),
     '## Cost Sensitivity Quick Test',
     costSensitivityMarkdown(report.results),
+    '## Walk-Forward / OOS Validation',
+    walkForwardMarkdown(report.results),
+    '## Overfitting Risk Notes',
+    notesList(report.results, (row) => row.walkForwardAssessment
+      ? `overfittingRisk=${row.walkForwardAssessment.overfittingRisk}; finalBucket=${row.walkForwardAssessment.finalBucket}`
+      : null),
+    '## Direction Control Audit Notes',
+    notesList(candidateRows, buildDirectionControlAuditNotes),
     '## Intrabar BE Quick Flags',
     markdownTable(needsIntrabar),
     '## Suggested New Paper Whitelist Candidates',
@@ -919,6 +1129,16 @@ function buildHiddenMarkdownReport(report) {
 }
 
 function completeReport(report) {
+  const bucketKeys = bucketKeysForReport(report.runConfig.hiddenDiscovery);
+  report.resultsByBucket = Object.fromEntries(bucketKeys.map((bucket) => [bucket, []]));
+  report.results.forEach((row) => {
+    row.directionControlAuditNotes = buildDirectionControlAuditNotes(row);
+    const bucket = row.bucket || mapBucketForReport(row.baseBucket || 'REJECT', report.runConfig.hiddenDiscovery);
+    if (!report.resultsByBucket[bucket]) {
+      report.resultsByBucket[bucket] = [];
+    }
+    report.resultsByBucket[bucket].push(row);
+  });
   report.results = sortRows(report.results);
   Object.keys(report.resultsByBucket).forEach((bucket) => {
     report.resultsByBucket[bucket] = sortRows(report.resultsByBucket[bucket]);
@@ -930,10 +1150,21 @@ function completeReport(report) {
     report.skipped.length > 0 ? `${report.skipped.length} combinations skipped` : null,
     report.summary.alreadyTestedCount > 0 ? `${report.summary.alreadyTestedCount} combinations already tested in previous report` : null,
     report.costSensitivityNotes.length > 0 ? 'High-cost instruments require sensitivity review' : null,
+    report.summary.walkForwardFailedCount > 0 ? `${report.summary.walkForwardFailedCount} walk-forward validations failed` : null,
+    report.runConfig.walkForward === true && report.summary.walkForwardValidatedCount === 0 && report.results.length > 0
+      ? 'No walk-forward validations completed'
+      : null,
     report.runConfig.secondaryPass ? 'Secondary pass results are paper/watchlist only' : null,
     report.previousReport?.warning || null,
     report.summary.fatalError ? `Fatal: ${report.summary.fatalError}` : null,
   ].filter(Boolean);
+  const costNotes = new Set(report.costSensitivityNotes || []);
+  report.results.forEach((row) => {
+    if (row.costStressResult && row.costStressResult.passed === false) {
+      costNotes.add(`${row.strategy} ${row.symbol} failed cost stress: ${(row.costStressResult.reasons || []).join('; ')}`);
+    }
+  });
+  report.costSensitivityNotes = [...costNotes];
   return report;
 }
 
@@ -1071,12 +1302,16 @@ async function runOptimizerForCombination({
     };
   }
 
+  const walkForwardRanges = config.walkForward
+    ? buildWalkForwardRanges(range)
+    : null;
+  const optimizationRange = walkForwardRanges ? walkForwardRanges.train : range;
   const candleBundle = await fetchCandleBundle({
     mt5,
     symbol,
     executionConfig,
-    start: range.start,
-    endExclusive: range.endExclusive,
+    start: optimizationRange.start,
+    endExclusive: optimizationRange.endExclusive,
   });
 
   if (
@@ -1213,12 +1448,17 @@ async function runOptimizerForCombination({
       minimumTrades,
       bestParameters: best.parameters || {},
       summary,
+      selection: classification,
       recommendation: best.recommendation || null,
+      suggestedRiskPerTrade: classification.suggestedRiskPerTrade,
       selectionReasons,
       riskNotes: best.recommendation?.riskNotes || [],
       costModelUsed: costInfo.costModel,
       costModelSource: costInfo.source,
       costTags,
+      optimizationWindow: walkForwardRanges ? 'train' : 'full_range',
+      walkForwardStatus: walkForwardRanges ? 'pending' : 'disabled',
+      walkForwardWindows: serializeWalkForwardRanges(walkForwardRanges),
       fetchMeta: candleBundle.fetchMeta,
       optimizerMeta: {
         totalCombinations: result.totalCombinations,
@@ -1231,15 +1471,140 @@ async function runOptimizerForCombination({
 }
 
 function buildCostSensitivityTargets(report) {
-  const live = sortRows(report.resultsByBucket.HIDDEN_LIVE_CANDIDATE || report.resultsByBucket.LIVE_CANDIDATE || []);
-  const paper = sortRows(report.resultsByBucket.HIDDEN_PAPER_CANDIDATE || report.resultsByBucket.PAPER_ONLY || []).slice(0, 10);
   const seen = new Set();
-  return [...live, ...paper].filter((row) => {
+  return sortRows(report.results).filter((row) => {
+    if ((row.baseBucket || row.bucket) === 'REJECT' || row.bucket === 'REJECT') return false;
     const key = comboKey(row.strategy, row.symbol);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function buildWalkForwardTargets(report) {
+  const seen = new Set();
+  return sortRows(report.results).filter((row) => {
+    if (row.walkForwardStatus === 'completed') return false;
+    if ((row.baseBucket || row.bucket) === 'REJECT' || row.bucket === 'REJECT') return false;
+    const key = comboKey(row.strategy, row.symbol);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function runWalkForwardValidation({
+  report,
+  config,
+  range,
+  strategyRecordsByName,
+  activeProfile,
+  mt5,
+}) {
+  if (report.runConfig.walkForward !== true) {
+    return;
+  }
+
+  const walkForwardRanges = buildWalkForwardRanges(range);
+  if (!walkForwardRanges) {
+    report.summary.mainWarnings = [
+      ...(report.summary.mainWarnings || []),
+      'Walk-forward validation skipped because the date range cannot be split safely.',
+    ];
+    return;
+  }
+
+  const targets = buildWalkForwardTargets(report);
+  if (!targets.length) {
+    return;
+  }
+
+  console.log(`[OptimizerSelection] Running walk-forward/OOS validation for ${targets.length} candidates...`);
+  report.summary.walkForwardScheduledCount = targets.length;
+  report.summary.walkForwardValidatedCount = report.summary.walkForwardValidatedCount || 0;
+  report.summary.walkForwardFailedCount = report.summary.walkForwardFailedCount || 0;
+
+  for (const row of targets) {
+    try {
+      const validationResult = await simulateFixedParamsForSegment({
+        row,
+        segmentName: 'validation',
+        segmentRange: walkForwardRanges.validation,
+        config,
+        strategyRecordsByName,
+        activeProfile,
+        mt5,
+      });
+      const outOfSampleResult = await simulateFixedParamsForSegment({
+        row,
+        segmentName: 'outOfSample',
+        segmentRange: walkForwardRanges.outOfSample,
+        config,
+        strategyRecordsByName,
+        activeProfile,
+        mt5,
+      });
+      const assessment = assessWalkForwardMetrics({
+        trainSummary: row.summary || {},
+        validationSummary: validationResult.summary || {},
+        outOfSampleSummary: outOfSampleResult.summary || {},
+      });
+
+      row.walkForwardStatus = 'completed';
+      row.walkForwardValidation = {
+        mode: 'train_validation_out_of_sample',
+        optimization: 'train_only',
+        windows: serializeWalkForwardRanges(walkForwardRanges),
+        train: {
+          window: summarizeWindow(walkForwardRanges.train),
+          summary: row.summary || {},
+        },
+        validation: validationResult,
+        outOfSample: outOfSampleResult,
+      };
+      row.walkForwardAssessment = assessment;
+
+      const updatedClassification = classifyOptimizerCandidate(row, {
+        passType: row.passType,
+        symbol: row.symbol,
+        strategy: row.strategy,
+        requireCostStress: Boolean(row.costStressResult),
+        costStressResult: row.costStressResult,
+        walkForwardAssessment: assessment,
+      });
+      applyUpdatedClassification(row, updatedClassification, report.runConfig.hiddenDiscovery, [
+        `Walk-forward overfittingRisk=${assessment.overfittingRisk}; finalBucket=${assessment.finalBucket}.`,
+      ]);
+      report.summary.walkForwardValidatedCount += 1;
+      console.log(`[OptimizerSelection] Walk-forward ${row.strategy} ${row.symbol}: ${assessment.overfittingRisk}/${assessment.finalBucket}`);
+    } catch (error) {
+      const failedAssessment = {
+        trainMetrics: row.summary || {},
+        validationMetrics: {},
+        outOfSampleMetrics: {},
+        validationDegradationPercent: null,
+        outOfSampleDegradationPercent: null,
+        profitFactorDegradationPercent: null,
+        overfittingRisk: 'UNKNOWN',
+        finalBucket: CANDIDATE_BUCKETS.PAPER_ONLY,
+        reasons: [`Walk-forward/OOS validation failed: ${error.message}`],
+      };
+      row.walkForwardStatus = 'failed';
+      row.walkForwardError = error.message;
+      row.walkForwardAssessment = failedAssessment;
+      const failedClassification = classifyOptimizerCandidate(row, {
+        passType: row.passType,
+        symbol: row.symbol,
+        strategy: row.strategy,
+        requireCostStress: Boolean(row.costStressResult),
+        costStressResult: row.costStressResult,
+        walkForwardAssessment: failedAssessment,
+      });
+      applyUpdatedClassification(row, failedClassification, report.runConfig.hiddenDiscovery, failedAssessment.reasons);
+      report.summary.walkForwardFailedCount += 1;
+      console.warn(`[OptimizerSelection] Walk-forward failed ${row.strategy} ${row.symbol}: ${error.message}`);
+    }
+  }
 }
 
 async function runCostSensitivityQuickTests({
@@ -1255,7 +1620,7 @@ async function runCostSensitivityQuickTests({
     return;
   }
 
-  console.log(`[OptimizerSelection] Running cost sensitivity quick tests for ${targets.length} hidden candidates...`);
+  console.log(`[OptimizerSelection] Running cost sensitivity quick tests for ${targets.length} candidates...`);
   for (const row of targets) {
     try {
       const executionConfig = config.forcedTimeframe
@@ -1277,8 +1642,8 @@ async function runCostSensitivityQuickTests({
 
       const baseCostModel = row.costModelUsed || buildCostModel(getInstrument(row.symbol), config.costPreset).costModel;
       const scenarioResults = [];
-      for (const scenario of COST_SENSITIVITY_SCENARIOS) {
-        const costModel = scenario.mutate(baseCostModel);
+      for (const scenario of buildCostStressScenarios(baseCostModel)) {
+        const costModel = scenario.costModel;
         const simulation = await backtestEngine.simulate({
           symbol: row.symbol,
           strategyType: row.strategy,
@@ -1299,22 +1664,38 @@ async function runCostSensitivityQuickTests({
         scenarioResults.push({
           name: scenario.name,
           costModel,
+          summary: simulation.summary || {},
           profitFactor: simulation.summary?.profitFactor ?? null,
           returnPercent: simulation.summary?.returnPercent ?? null,
+          expectancyPerTrade: simulation.summary?.expectancyPerTrade ?? null,
           robustScore: simulation.summary?.robustScore ?? null,
           maxDrawdownPercent: simulation.summary?.maxDrawdownPercent ?? null,
+          maxConsecutiveLosses: simulation.summary?.maxConsecutiveLosses ?? null,
           recommendationTier: classified.bucket,
           netProfitMoney: simulation.summary?.netProfitMoney ?? null,
         });
       }
 
       row.costSensitivityQuickTest = scenarioResults;
-      row.costRobust = scenarioResults.every((scenario) => {
-        return numberOrNull(scenario.netProfitMoney) > 0
-          && numberOrNull(scenario.profitFactor) > 1
-          && numberOrNull(scenario.robustScore) >= 50
-          && scenario.recommendationTier !== 'REJECT';
+      row.costStressResult = evaluateCostStressResults(scenarioResults, {
+        symbol: row.symbol,
+        strategy: row.strategy,
       });
+      row.costRobust = row.costStressResult.passed;
+
+      const updatedClassification = classifyOptimizerCandidate(row, {
+        passType: row.passType,
+        symbol: row.symbol,
+        strategy: row.strategy,
+        requireCostStress: true,
+        costStressResult: row.costStressResult,
+      });
+      row.selection = updatedClassification;
+      row.baseBucket = updatedClassification.bucket;
+      row.bucket = mapBucketForReport(updatedClassification.bucket, report.runConfig.hiddenDiscovery);
+      row.suggestedRiskPerTrade = updatedClassification.suggestedRiskPerTrade;
+      row.selectionReasons = updatedClassification.reasons;
+
       if (!row.costRobust) {
         row.selectionReasons = [
           ...(row.selectionReasons || []),
@@ -1325,8 +1706,28 @@ async function runCostSensitivityQuickTests({
     } catch (error) {
       row.costRobust = false;
       row.costSensitivityError = error.message;
+      row.costStressResult = {
+        passed: false,
+        scenarios: [],
+        missingScenarios: buildCostStressScenarios(row.costModelUsed || {}).map((scenario) => scenario.name),
+        failedScenarios: [],
+        defaultScenarioPassed: false,
+        allScenariosNetNegative: false,
+        reasons: [`Cost sensitivity quick test failed: ${error.message}`],
+      };
+      const failedClassification = classifyOptimizerCandidate(row, {
+        passType: row.passType,
+        symbol: row.symbol,
+        strategy: row.strategy,
+        requireCostStress: true,
+        costStressResult: row.costStressResult,
+      });
+      row.selection = failedClassification;
+      row.baseBucket = failedClassification.bucket;
+      row.bucket = mapBucketForReport(failedClassification.bucket, report.runConfig.hiddenDiscovery);
+      row.suggestedRiskPerTrade = failedClassification.suggestedRiskPerTrade;
       row.selectionReasons = [
-        ...(row.selectionReasons || []),
+        ...(failedClassification.reasons || row.selectionReasons || []),
         `Cost sensitivity quick test failed: ${error.message}`,
       ];
       console.warn(`[OptimizerSelection] Cost quick test failed ${row.strategy} ${row.symbol}: ${error.message}`);
@@ -1353,6 +1754,7 @@ async function main() {
   const skipAlreadyTested = boolArg(args.skipAlreadyTested, hiddenDiscovery);
   const maxComboMs = intArg(args.maxComboMs, 0);
   const skipHeavyVolumeFlow = boolArg(args.skipHeavyVolumeFlow, false);
+  const walkForward = boolArg(args.walkForward, true) && !boolArg(args.skipWalkForward, false);
 
   if (forcedTimeframe && !isValidForcedTimeframe(forcedTimeframe)) {
     throw new Error(`Invalid --timeframe=${forcedTimeframe}`);
@@ -1426,6 +1828,9 @@ async function main() {
       mt5Scope,
       maxComboMs,
       skipHeavyVolumeFlow,
+      walkForward,
+      walkForwardSplit: DEFAULT_WALK_FORWARD_SPLIT,
+      optimizationWindowMode: walkForward ? 'train_only' : 'full_range',
       defaultCostModel: DEFAULT_COST_MODEL,
       strategies: selectedStrategies,
       symbols: selectedSymbols,
@@ -1435,6 +1840,11 @@ async function main() {
       skipAlreadyTested,
       previousReportPath: previousReport.path,
       resumeReportPath: resumeReport?.path || null,
+      readOnly: true,
+      mutatesRuntimeState: false,
+      mutatesStrategyInstances: false,
+      autoEnablesPaper: false,
+      autoEnablesLive: false,
     },
     summary: {
       totalUniverseCount: rawUniverse.assigned.length,
@@ -1518,6 +1928,7 @@ async function main() {
             hiddenDiscovery,
             maxComboMs,
             skipHeavyVolumeFlow,
+            walkForward,
           },
           range,
           strategyRecordsByName,
@@ -1564,6 +1975,20 @@ async function main() {
         console.warn(`${prefix} error: ${error.message}`);
       }
     }
+    await runWalkForwardValidation({
+      report,
+      config: {
+        initialBalance,
+        costPreset,
+        forcedTimeframe,
+        minimumTrades,
+      },
+      range,
+      strategyRecordsByName,
+      activeProfile,
+      mt5,
+    });
+    paths = writeReportFiles(report, reportsDir, reportDate);
     await runCostSensitivityQuickTests({
       report,
       config: {

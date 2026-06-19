@@ -5,6 +5,13 @@ const RECOMMENDATION_TIERS = Object.freeze({
   INSUFFICIENT_SAMPLE: 'INSUFFICIENT_SAMPLE',
 });
 
+const {
+  CANDIDATE_BUCKETS,
+  classifyOptimizerCandidate,
+  getSuggestedRiskPerTrade: getCandidateSuggestedRisk,
+  isHighCostSymbol,
+} = require('./optimizerCandidateValidation');
+
 const WARNING_FLAGS = Object.freeze({
   VERY_SMALL_SAMPLE: 'VERY_SMALL_SAMPLE',
   LOW_EXPECTANCY: 'LOW_EXPECTANCY',
@@ -45,25 +52,27 @@ function deriveSampleQuality(summary = {}) {
 
 function isIndexOrCryptoSymbol(symbol) {
   const normalized = String(symbol || '').toUpperCase();
-  return [
-    'BTC',
-    'ETH',
-    'LTC',
-    'XRP',
-    'DOGE',
-    'US30',
-    'US500',
-    'SPX',
-    'SPX500',
-    'NAS',
-    'NAS100',
-    'NDX',
-    'GER40',
-    'DAX',
-    'UK100',
-    'JP225',
-    'HK50',
-  ].some((token) => normalized.includes(token));
+  return getCandidateSuggestedRisk(CANDIDATE_BUCKETS.PAPER_ONLY, {}, { symbol: normalized }) < 0.001
+    || isHighCostSymbol(normalized)
+    || [
+      'BTC',
+      'ETH',
+      'LTC',
+      'XRP',
+      'DOGE',
+      'US30',
+      'US500',
+      'SPX',
+      'SPX500',
+      'NAS',
+      'NAS100',
+      'NDX',
+      'GER40',
+      'DAX',
+      'UK100',
+      'JP225',
+      'HK50',
+    ].some((token) => normalized.includes(token));
 }
 
 function roundRisk(value) {
@@ -104,28 +113,20 @@ function shouldReject(summary = {}) {
   const robustScore = finiteNumber(summary.robustScore);
   const drawdown = getMaxDrawdownPercent(summary);
 
+  const maxConsecutiveLosses = finiteNumber(summary.maxConsecutiveLosses);
+  const profitConcentrationTop1 = finiteNumber(summary.profitConcentrationTop1);
+
   return profitFactor < 1
     || expectancy <= 0
     || netProfit <= 0
     || drawdown > 25
-    || robustScore < 35;
+    || robustScore < 35
+    || maxConsecutiveLosses > 6
+    || profitConcentrationTop1 > 0.75;
 }
 
 function isLiveCandidate(summary = {}) {
-  const totalTrades = finiteNumber(summary.totalTrades);
-  const robustScore = finiteNumber(summary.robustScore);
-  const profitFactor = finiteNumber(summary.profitFactor);
-  const expectancy = finiteNumber(summary.expectancyPerTrade);
-  const drawdown = getMaxDrawdownPercent(summary);
-
-  return totalTrades >= 50
-    && robustScore >= 70
-    && profitFactor >= 1.3
-    && expectancy > 0
-    && drawdown <= 15
-    && !hasFlag(summary, WARNING_FLAGS.VERY_SMALL_SAMPLE)
-    && !hasFlag(summary, WARNING_FLAGS.LOW_EXPECTANCY)
-    && !hasFlag(summary, WARNING_FLAGS.HIGH_DRAWDOWN);
+  return classifyOptimizerCandidate({ summary }, { requireCostStress: false }).bucket === CANDIDATE_BUCKETS.LIVE_CANDIDATE;
 }
 
 function isStrongLiveCandidate(summary = {}) {
@@ -140,19 +141,7 @@ function getSuggestedRiskPerTrade(tier, summary = {}, context = {}) {
   if (tier === RECOMMENDATION_TIERS.INSUFFICIENT_SAMPLE || tier === RECOMMENDATION_TIERS.REJECT) {
     return null;
   }
-
-  let risk = tier === RECOMMENDATION_TIERS.LIVE_CANDIDATE
-    ? (isStrongLiveCandidate(summary) ? 0.005 : 0.0025)
-    : 0.001;
-
-  if (hasFlag(summary, WARNING_FLAGS.HIGH_DRAWDOWN) || getMaxDrawdownPercent(summary) > 15) {
-    risk *= 0.5;
-  }
-  if (isIndexOrCryptoSymbol(context.symbol)) {
-    risk *= 0.5;
-  }
-
-  return roundRisk(risk);
+  return roundRisk(getCandidateSuggestedRisk(tier, summary, context));
 }
 
 function buildOptimizerRecommendation(row = {}, context = {}) {
@@ -172,6 +161,8 @@ function buildOptimizerRecommendation(row = {}, context = {}) {
     if (finiteNumber(summary.netProfitMoney) <= 0) reasons.push('netProfitMoney is not positive.');
     if (getMaxDrawdownPercent(summary) > 25) reasons.push('max drawdown is above 25%.');
     if (finiteNumber(summary.robustScore) < 35) reasons.push('robustScore is too low.');
+    if (finiteNumber(summary.maxConsecutiveLosses) > 6) reasons.push('maxConsecutiveLosses is too high.');
+    if (finiteNumber(summary.profitConcentrationTop1) > 0.75) reasons.push('profit is too concentrated.');
   } else if (isLiveCandidate(summary)) {
     tier = RECOMMENDATION_TIERS.LIVE_CANDIDATE;
     reasons.push('Meets live-candidate thresholds for sample size, robustScore, profitFactor, expectancy, and drawdown.');

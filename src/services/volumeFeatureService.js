@@ -72,22 +72,19 @@ function cumulativeDeltaSeries(candles = []) {
 }
 
 /**
- * Smooth a delta series with a simple trailing mean. Returns an array
+ * Smooth a delta series with an EMA. Returns an array
  * the same length as the input (the first `period-1` entries are just
  * progressive means so callers never have to worry about alignment).
  */
 function smoothDeltaSeries(series = [], period = 8) {
   if (!Array.isArray(series) || series.length === 0) return [];
   const smoothed = new Array(series.length);
-  const window = [];
-  let sum = 0;
+  const alpha = 2 / (Math.max(1, period) + 1);
+  let ema = Number(series[0]) || 0;
   for (let i = 0; i < series.length; i++) {
-    window.push(series[i]);
-    sum += series[i];
-    if (window.length > period) {
-      sum -= window.shift();
-    }
-    smoothed[i] = sum / window.length;
+    const value = Number(series[i]) || 0;
+    ema = i === 0 ? value : (value * alpha) + (ema * (1 - alpha));
+    smoothed[i] = ema;
   }
   return smoothed;
 }
@@ -247,9 +244,11 @@ function buildFeatureSeries(candles = [], {
   const signed = new Array(candles.length);
 
   let rollingVolumeSum = 0;
-  let rollingCumulativeSum = 0;
   let rollingSignedRecentSum = 0;
   let cumulativeDelta = 0;
+  let previousSmoothedDelta = 0;
+  let smoothedDelta = 0;
+  const deltaAlpha = 2 / (Math.max(1, deltaSmoothing) + 1);
 
   let currentSession = null;
   let sessionCumVolPrice = 0;
@@ -281,11 +280,14 @@ function buildFeatureSeries(candles = [], {
       ? (rollingVolumeSum / volumeAvgPeriod)
       : null;
 
-    rollingCumulativeSum += cumulativeDelta;
-    if (i >= deltaSmoothing) {
-      rollingCumulativeSum -= cumulative[i - deltaSmoothing];
-    }
-    const cumulativeDeltaSmoothed = rollingCumulativeSum / Math.min(i + 1, deltaSmoothing);
+    smoothedDelta = i === 0
+      ? cumulativeDelta
+      : (cumulativeDelta * deltaAlpha) + (smoothedDelta * (1 - deltaAlpha));
+    const cumulativeDeltaSmoothed = smoothedDelta;
+    const previousCumulativeDelta = cumulative[i - 1] ?? 0;
+    const cumulativeDeltaDelta = cumulativeDelta - previousCumulativeDelta;
+    const cumulativeDeltaSlope = cumulativeDeltaSmoothed - previousSmoothedDelta;
+    previousSmoothedDelta = cumulativeDeltaSmoothed;
 
     rollingSignedRecentSum += signedVolume;
     if (i >= 5) {
@@ -319,7 +321,9 @@ function buildFeatureSeries(candles = [], {
       volumeSpikeClass: classifyVolumeSpike(rvol),
       cumulativeDelta,
       cumulativeDeltaSmoothed,
-      cumulativeDeltaPrev: cumulative[i - 1] ?? 0,
+      cumulativeDeltaPrev: previousCumulativeDelta,
+      cumulativeDeltaDelta,
+      cumulativeDeltaSlope,
       signedVolumeLatest: signedVolume,
       signedVolumeRecentSum: rollingSignedRecentSum,
       sessionVwap,

@@ -196,8 +196,8 @@ class MomentumStrategy extends BaseStrategy {
     return {
       signal: direction,
       confidence: this._calcConfidence(currentRsi, currentMacd, prevMacd, direction === 'BUY' ? bullishCount : bearishCount, direction),
-      sl: parseFloat(sl.toFixed(2)),
-      tp: parseFloat(tp.toFixed(2)),
+      sl: this.roundPrice(sl, instrument),
+      tp: this.roundPrice(tp, instrument),
       reason: `${direction === 'BUY' ? 'BUY' : 'SELL'} momentum confirmed | quality ${quality.score}/${this.marketQualityMaxScore} | threshold ${this.marketQualityThreshold} | RSI=${currentRsi.toFixed(1)}`,
       filterReason: '',
       marketQualityScore: quality.score,

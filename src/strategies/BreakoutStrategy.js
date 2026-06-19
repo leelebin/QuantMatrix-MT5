@@ -160,6 +160,7 @@ class BreakoutStrategy extends BaseStrategy {
       avgBody,
       currentRange,
       avgRange10,
+      priceDecimals: this.getPriceDecimals(instrument),
     });
 
     const snapshot = {
@@ -169,17 +170,17 @@ class BreakoutStrategy extends BaseStrategy {
       highestLookback: highest,
       lowestLookback: lowest,
       lookbackPeriod,
-      structureMidpoint: Number(structureMidpoint.toFixed(2)),
-      structureLevel: Number(structureLevel.toFixed(2)),
-      breakDistance: Number(breakDistance.toFixed(2)),
-      breakDistanceThreshold: Number(breakDistanceThreshold.toFixed(2)),
+      structureMidpoint: this.roundPrice(structureMidpoint, instrument),
+      structureLevel: this.roundPrice(structureLevel, instrument),
+      breakDistance: this.roundPrice(breakDistance, instrument),
+      breakDistanceThreshold: this.roundPrice(breakDistanceThreshold, instrument),
       bodyMultiplier,
       currentBody,
       avgBody,
-      currentRange: Number(currentRange.toFixed(2)),
-      avgRange10: Number(avgRange10.toFixed(2)),
+      currentRange: this.roundPrice(currentRange, instrument),
+      avgRange10: this.roundPrice(avgRange10, instrument),
       price: currentPrice,
-      shortTermSlope: Number(shortTermSlope.toFixed(2)),
+      shortTermSlope: this.roundPrice(shortTermSlope, instrument),
       marketQualityScore: quality.score,
       marketQualityThreshold: this.marketQualityThreshold,
       marketQualityDetails: {
@@ -248,9 +249,9 @@ class BreakoutStrategy extends BaseStrategy {
     return {
       signal: direction,
       confidence: this._calcConfidence(currentAtr, avgAtr, currentBody, avgBody, currentRsi),
-      sl: parseFloat(sl.toFixed(2)),
-      tp: parseFloat(tp.toFixed(2)),
-      reason: `${direction === 'BUY' ? 'BUY' : 'SELL'} breakout confirmed | quality ${quality.score}/${this.marketQualityMaxScore} | threshold ${this.marketQualityThreshold} | lookback ${lookbackPeriod} | body x${bodyMultiplier} | break ${breakDistance.toFixed(2)}`,
+      sl: this.roundPrice(sl, instrument),
+      tp: this.roundPrice(tp, instrument),
+      reason: `${direction === 'BUY' ? 'BUY' : 'SELL'} breakout confirmed | quality ${quality.score}/${this.marketQualityMaxScore} | threshold ${this.marketQualityThreshold} | lookback ${lookbackPeriod} | body x${bodyMultiplier} | break ${this.roundPrice(breakDistance, instrument)}`,
       filterReason: '',
       marketQualityScore: quality.score,
       marketQualityThreshold: this.marketQualityThreshold,
@@ -274,7 +275,9 @@ class BreakoutStrategy extends BaseStrategy {
       avgBody,
       currentRange,
       avgRange10,
+      priceDecimals = 2,
     } = metrics;
+    const roundMetric = (value) => Number(Number(value).toFixed(priceDecimals));
 
     const breakDistanceScore = breakDistance >= breakDistanceThreshold;
     const bodyConvictionScore = currentBody >= (avgBody * bodyMultiplier);
@@ -297,13 +300,13 @@ class BreakoutStrategy extends BaseStrategy {
         breakDistanceScore: breakDistanceScore ? 1 : 0,
         bodyConvictionScore: bodyConvictionScore ? 1 : 0,
         rangeExpansionScore: rangeExpansionScore ? 1 : 0,
-        breakDistance: Number(breakDistance.toFixed(2)),
-        breakDistanceThreshold: Number(breakDistanceThreshold.toFixed(2)),
+        breakDistance: roundMetric(breakDistance),
+        breakDistanceThreshold: roundMetric(breakDistanceThreshold),
         bodyMultiplier: Number(bodyMultiplier.toFixed(2)),
-        currentBody: Number(currentBody.toFixed(2)),
-        avgBody: Number(avgBody.toFixed(2)),
-        currentRange: Number(currentRange.toFixed(2)),
-        avgRange10: Number(avgRange10.toFixed(2)),
+        currentBody: roundMetric(currentBody),
+        avgBody: roundMetric(avgBody),
+        currentRange: roundMetric(currentRange),
+        avgRange10: roundMetric(avgRange10),
       },
     };
   }

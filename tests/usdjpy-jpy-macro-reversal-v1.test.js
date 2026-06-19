@@ -77,6 +77,8 @@ function buildContext(candles, overrides = {}) {
       cooldownBarsAfterSL: 0,
       maxDailyLosses: 0,
       maxDailyTrades: 0,
+      maxRollingConsecutiveLosses: 0,
+      rollingLossCooldownBars: 0,
     },
     ...overrides,
   };
@@ -104,6 +106,7 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
 
     expect(result).toEqual(expect.objectContaining({
       signal: 'BUY',
+      confidence: expect.any(Number),
       metadata: expect.objectContaining({
         source: 'symbolCustom',
         symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
@@ -119,8 +122,10 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
         cooldownBarsAfterSL: 18,
         maxDailyLosses: 3,
         maxDailyTrades: 6,
+        confidence: expect.any(Number),
       }),
     }));
+    expect(result.confidence).toBeGreaterThanOrEqual(0.6);
   });
 
   test('scope live returns NONE/BLOCKED', () => {
@@ -175,6 +180,7 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
     const entryClose = candles[candles.length - 1].close;
 
     expect(result.signal).toBe('BUY');
+    expect(result.confidence).toBeGreaterThanOrEqual(0.6);
     expect(result.sl).toBeLessThan(entryClose);
     expect(result.tp).toBeGreaterThan(entryClose);
     expect(result.metadata).toEqual(expect.objectContaining({
@@ -187,6 +193,7 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       slAtrMultiplier: 1.2,
       tpAtrMultiplier: 1.8,
       scope: 'backtest',
+      confidence: expect.any(Number),
     }));
   });
 
@@ -197,6 +204,7 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
     const entryClose = candles[candles.length - 1].close;
 
     expect(result.signal).toBe('SELL');
+    expect(result.confidence).toBeGreaterThanOrEqual(0.6);
     expect(result.sl).toBeGreaterThan(entryClose);
     expect(result.tp).toBeLessThan(entryClose);
     expect(result.metadata).toEqual(expect.objectContaining({
@@ -204,6 +212,7 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       atr: expect.any(Number),
       rsi: expect.any(Number),
       recentMove: expect.any(Number),
+      confidence: expect.any(Number),
     }));
   });
 
@@ -251,6 +260,15 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       'cooldownBarsAfterSL',
       'maxDailyLosses',
       'maxDailyTrades',
+      'maxRollingConsecutiveLosses',
+      'rollingLossCooldownBars',
+      'useHigherTrendFilter',
+      'higherTrendSmaPeriod',
+      'higherTrendAtrPeriod',
+      'minHigherTrendDistanceAtr',
+      'useHigherDriftFilter',
+      'higherDriftLookbackBars',
+      'minHigherDriftAtr',
     ]);
     expect(logic.getDefaultParameters()).toEqual(expect.objectContaining({
       lookbackBars: 36,
@@ -259,8 +277,12 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       enableBuy: true,
       enableSell: true,
       allowedUtcHours: '',
+      maxRollingConsecutiveLosses: 0,
+      rollingLossCooldownBars: 0,
+      useHigherTrendFilter: false,
+      useHigherDriftFilter: false,
     }));
-    expect(UsdjpyJpyMacroReversalV1.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION).toBe(4);
+    expect(UsdjpyJpyMacroReversalV1.USDJPY_JPY_MACRO_REVERSAL_V1_VERSION).toBe(7);
   });
 
   test('enableBuy=false blocks BUY setup', () => {
@@ -509,6 +531,68 @@ describe('USDJPY_JPY_MACRO_REVERSAL_V1', () => {
       signal: 'NONE',
       reason: 'Max daily trades reached',
     }));
+  });
+
+  test('rolling consecutive loss cooldown blocks entries across UTC days', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down' });
+    const result = logic.analyze(buildContext(candles, {
+      currentIndex: 100,
+      closedTrades: [
+        {
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          pnl: -2,
+          exitIndex: 80,
+          exitTime: '2026-01-01T08:00:00.000Z',
+        },
+        {
+          symbol: 'USDJPY',
+          symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          logicName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
+          pnl: -1,
+          exitIndex: 90,
+          exitTime: '2026-01-01T09:00:00.000Z',
+        },
+      ],
+      parameters: {
+        ...buildContext(candles).parameters,
+        maxRollingConsecutiveLosses: 2,
+        rollingLossCooldownBars: 24,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'Rolling loss cooldown active',
+    }));
+  });
+
+  test('higher trend filter blocks BUY when higher timeframe regime is below threshold', () => {
+    const logic = new UsdjpyJpyMacroReversalV1();
+    const candles = buildCandles({ direction: 'down', count: 120 });
+    const result = logic.analyze(buildContext(candles, {
+      parameters: {
+        ...buildContext(candles).parameters,
+        useHigherTrendFilter: true,
+        higherTrendSmaPeriod: 50,
+        higherTrendAtrPeriod: 14,
+        minHigherTrendDistanceAtr: 0,
+      },
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      signal: 'NONE',
+      reason: 'Higher trend filter blocked BUY',
+      metadata: expect.objectContaining({
+        higherRegime: expect.objectContaining({
+          available: true,
+          trendDistanceAtr: expect.any(Number),
+        }),
+      }),
+    }));
+    expect(result.metadata.higherRegime.trendDistanceAtr).toBeLessThan(0);
   });
 
   test('does not reference forbidden execution or old strategy modules', () => {

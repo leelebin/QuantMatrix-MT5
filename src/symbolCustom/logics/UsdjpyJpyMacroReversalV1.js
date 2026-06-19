@@ -1,7 +1,7 @@
 const BaseSymbolCustom = require('../BaseSymbolCustom');
 
 const USDJPY_JPY_MACRO_REVERSAL_V1 = 'USDJPY_JPY_MACRO_REVERSAL_V1';
-const USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = 4;
+const USDJPY_JPY_MACRO_REVERSAL_V1_VERSION = 7;
 const CANDIDATE_PRESET = 'buy_session_conservative';
 const PAPER_AND_BACKTEST_ONLY_REASON = 'USDJPY_JPY_MACRO_REVERSAL_V1 supports paper/backtest only in Phase 2 trial';
 const LIVE_BLOCKED_REASON = 'USDJPY_JPY_MACRO_REVERSAL_V1 live execution is blocked';
@@ -28,6 +28,15 @@ const DEFAULT_PARAMETER_SCHEMA = Object.freeze([
   { key: 'cooldownBarsAfterSL', label: 'Cooldown Bars After SL', type: 'number', defaultValue: 0, min: 0, max: 96, step: 3 },
   { key: 'maxDailyLosses', label: 'Max Daily Losses', type: 'number', defaultValue: 0, min: 0, max: 10, step: 1 },
   { key: 'maxDailyTrades', label: 'Max Daily Trades', type: 'number', defaultValue: 0, min: 0, max: 50, step: 1 },
+  { key: 'maxRollingConsecutiveLosses', label: 'Max Rolling Consecutive Losses', type: 'number', defaultValue: 0, min: 0, max: 20, step: 1 },
+  { key: 'rollingLossCooldownBars', label: 'Rolling Loss Cooldown Bars', type: 'number', defaultValue: 0, min: 0, max: 2000, step: 6 },
+  { key: 'useHigherTrendFilter', label: 'Use Higher Trend Filter', type: 'boolean', defaultValue: false },
+  { key: 'higherTrendSmaPeriod', label: 'Higher Trend SMA Period', type: 'number', defaultValue: 100, min: 20, max: 240, step: 10 },
+  { key: 'higherTrendAtrPeriod', label: 'Higher Trend ATR Period', type: 'number', defaultValue: 14, min: 10, max: 48, step: 1 },
+  { key: 'minHigherTrendDistanceAtr', label: 'Minimum Higher Trend Distance ATR', type: 'number', defaultValue: 0, min: -10, max: 10, step: 0.5 },
+  { key: 'useHigherDriftFilter', label: 'Use Higher Drift Filter', type: 'boolean', defaultValue: false },
+  { key: 'higherDriftLookbackBars', label: 'Higher Drift Lookback Bars', type: 'number', defaultValue: 72, min: 12, max: 240, step: 12 },
+  { key: 'minHigherDriftAtr', label: 'Minimum Higher Drift ATR', type: 'number', defaultValue: 0, min: -12, max: 12, step: 0.5 },
 ]);
 
 function cloneValue(value) {
@@ -52,6 +61,12 @@ function getRange(candle = {}) {
 
 function getCandleTime(candle = {}) {
   return candle.time || candle.timestamp || candle.date || null;
+}
+
+function toEpoch(value) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function parseUtcHours(value) {
@@ -179,6 +194,8 @@ function buildSignalMetadata({ parameters, scope, atr = null, rsi = null, recent
     cooldownBarsAfterSL: parameters.cooldownBarsAfterSL,
     maxDailyLosses: parameters.maxDailyLosses,
     maxDailyTrades: parameters.maxDailyTrades,
+    maxRollingConsecutiveLosses: parameters.maxRollingConsecutiveLosses,
+    rollingLossCooldownBars: parameters.rollingLossCooldownBars,
     atr,
     rsi,
     recentMove,
@@ -187,6 +204,101 @@ function buildSignalMetadata({ parameters, scope, atr = null, rsi = null, recent
     tpAtrMultiplier: parameters.tpAtrMultiplier,
     ...extra,
   };
+}
+
+function calculateHigherRegime(candles = [], parameters = {}) {
+  const higherCandles = Array.isArray(candles) ? candles : [];
+  const trendPeriod = Math.max(1, Math.floor(toNumber(parameters.higherTrendSmaPeriod, 100)));
+  const atrPeriod = Math.max(1, Math.floor(toNumber(parameters.higherTrendAtrPeriod, 14)));
+  const driftLookbackBars = Math.max(1, Math.floor(toNumber(parameters.higherDriftLookbackBars, 72)));
+  const requiredBars = Math.max(trendPeriod, atrPeriod + 1, driftLookbackBars + 1);
+
+  if (higherCandles.length < requiredBars) {
+    return {
+      available: false,
+      reason: 'Not enough higher timeframe candles for regime filter',
+      requiredBars,
+      candleCount: higherCandles.length,
+    };
+  }
+
+  const currentClose = getClose(higherCandles[higherCandles.length - 1]);
+  const trendSma = calculateSMA(higherCandles, trendPeriod);
+  const higherAtr = calculateATR(higherCandles, atrPeriod);
+  const driftClose = getClose(higherCandles[higherCandles.length - 1 - driftLookbackBars]);
+
+  if (
+    !Number.isFinite(currentClose)
+    || !Number.isFinite(trendSma)
+    || !Number.isFinite(higherAtr)
+    || higherAtr <= 0
+    || !Number.isFinite(driftClose)
+  ) {
+    return {
+      available: false,
+      reason: 'Higher timeframe regime values unavailable',
+      trendPeriod,
+      atrPeriod,
+      driftLookbackBars,
+    };
+  }
+
+  const trendDistanceAtr = (currentClose - trendSma) / higherAtr;
+  const driftAtr = (currentClose - driftClose) / higherAtr;
+
+  return {
+    available: true,
+    trendPeriod,
+    atrPeriod,
+    driftLookbackBars,
+    currentClose,
+    trendSma,
+    higherAtr,
+    trendDistanceAtr,
+    driftAtr,
+  };
+}
+
+function shouldBlockByHigherRegime({ side, parameters, higherRegime = {} }) {
+  const useTrend = parameters.useHigherTrendFilter === true;
+  const useDrift = parameters.useHigherDriftFilter === true;
+  if (!useTrend && !useDrift) return null;
+
+  if (!higherRegime.available) {
+    return higherRegime.reason || 'Higher timeframe regime unavailable';
+  }
+
+  if (useTrend) {
+    const threshold = toNumber(parameters.minHigherTrendDistanceAtr, 0);
+    if (side === 'BUY' && higherRegime.trendDistanceAtr < threshold) {
+      return 'Higher trend filter blocked BUY';
+    }
+    if (side === 'SELL' && higherRegime.trendDistanceAtr > -threshold) {
+      return 'Higher trend filter blocked SELL';
+    }
+  }
+
+  if (useDrift) {
+    const threshold = toNumber(parameters.minHigherDriftAtr, 0);
+    if (side === 'BUY' && higherRegime.driftAtr < threshold) {
+      return 'Higher drift filter blocked BUY';
+    }
+    if (side === 'SELL' && higherRegime.driftAtr > -threshold) {
+      return 'Higher drift filter blocked SELL';
+    }
+  }
+
+  return null;
+}
+
+function clamp01(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(1, number));
+}
+
+function roundConfidence(value) {
+  return Number(Math.max(0, Math.min(1, value)).toFixed(4));
 }
 
 function hasBullishRejection(candle = {}) {
@@ -207,6 +319,34 @@ function hasBearishRejection(candle = {}) {
   return close < open && close <= low + (range * 0.5);
 }
 
+function calculateRejectionQuality(candles = [], side = 'BUY') {
+  const values = candles.map((candle) => {
+    const high = toNumber(candle.high, null);
+    const low = toNumber(candle.low, null);
+    const close = toNumber(candle.close, null);
+    const range = getRange(candle);
+    if (!Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close) || !range) return null;
+    if (side === 'BUY') return clamp01((close - low) / range);
+    return clamp01((high - close) / range);
+  }).filter(Number.isFinite);
+  return values.length ? Math.max(...values) : 0;
+}
+
+function calculateSignalConfidence({ side, parameters, atr, rsi, recentMove, confirmBars }) {
+  const impulseThreshold = parameters.impulseAtrMultiplier * atr;
+  const impulseRatio = impulseThreshold > 0 ? Math.abs(recentMove) / impulseThreshold : 1;
+  const impulseScore = clamp01((impulseRatio - 1) / 1.25);
+  const rsiDistance = side === 'BUY'
+    ? parameters.rsiOversold - rsi
+    : rsi - parameters.rsiOverbought;
+  const rsiScore = clamp01(rsiDistance / 18);
+  const rejectionScore = clamp01((calculateRejectionQuality(confirmBars, side) - 0.5) / 0.5);
+
+  // Conditions already prove the setup is valid; confidence reflects how far
+  // the impulse, RSI extreme, and rejection close are beyond their thresholds.
+  return roundConfidence(0.6 + (impulseScore * 0.22) + (rsiScore * 0.13) + (rejectionScore * 0.05));
+}
+
 function countBarsInTrade(entryCandles = [], openPosition = {}, currentIndex = 0) {
   const entryTime = openPosition.entryTime ? Date.parse(openPosition.entryTime) : null;
   if (Number.isFinite(entryTime)) {
@@ -223,6 +363,53 @@ function countBarsInTrade(entryCandles = [], openPosition = {}, currentIndex = 0
   }
 
   return 0;
+}
+
+function tradeBelongsToStrategy(trade = {}, context = {}) {
+  const expectedSymbol = String(context.symbol || 'USDJPY').trim().toUpperCase();
+  const tradeSymbol = String(trade.symbol || expectedSymbol).trim().toUpperCase();
+  if (tradeSymbol && expectedSymbol && tradeSymbol !== expectedSymbol) return false;
+
+  const expectedLogicName = context.logicName || USDJPY_JPY_MACRO_REVERSAL_V1;
+  const tradeLogicName = trade.logicName || trade.executionSignal?.logicName || trade.executionSignal?.metadata?.logicName;
+  if (tradeLogicName && tradeLogicName !== expectedLogicName) return false;
+
+  const expectedName = context.symbolCustomName || USDJPY_JPY_MACRO_REVERSAL_V1;
+  const tradeName = trade.symbolCustomName || trade.strategy || trade.executionSignal?.symbolCustomName;
+  if (tradeName && tradeName !== expectedName) return false;
+
+  return true;
+}
+
+function getScopedTrades(context = {}, fieldName) {
+  const source = Array.isArray(context[fieldName]) ? context[fieldName] : [];
+  return source.filter((trade) => tradeBelongsToStrategy(trade, context));
+}
+
+function getConsecutiveLosses(trades = []) {
+  let count = 0;
+  for (let index = trades.length - 1; index >= 0; index -= 1) {
+    const pnl = toNumber(trades[index].pnl ?? trades[index].profit ?? trades[index].profitLoss, 0);
+    if (pnl < 0) count += 1;
+    else break;
+  }
+  return count;
+}
+
+function getBarsSinceTradeExit(context = {}, trade = {}) {
+  const currentIndex = toNumber(context.currentIndex, null);
+  const exitIndex = toNumber(trade.exitIndex, null);
+  if (Number.isFinite(currentIndex) && Number.isFinite(exitIndex)) {
+    return Math.max(0, currentIndex - exitIndex);
+  }
+
+  const currentEpoch = toEpoch(getCandleTime(context.currentBar || {}));
+  const exitEpoch = toEpoch(trade.exitTime || trade.closeTime || trade.timestamp);
+  if (currentEpoch != null && exitEpoch != null) {
+    return Math.max(0, Math.floor((currentEpoch - exitEpoch) / (5 * 60 * 1000)));
+  }
+
+  return null;
 }
 
 function shouldBlockByGuardrails({ parameters, context, currentBar }) {
@@ -268,6 +455,20 @@ function shouldBlockByGuardrails({ parameters, context, currentBar }) {
   }
   if (parameters.maxDailyTrades > 0 && todayTrades.length >= parameters.maxDailyTrades) {
     return 'Max daily trades reached';
+  }
+
+  const closedTrades = getScopedTrades(context, 'closedTrades');
+  const rollingConsecutiveLosses = getConsecutiveLosses(closedTrades);
+  const rollingLastClosedTrade = closedTrades.length ? closedTrades[closedTrades.length - 1] : null;
+  const barsSinceRollingLossExit = rollingLastClosedTrade ? getBarsSinceTradeExit(context, rollingLastClosedTrade) : null;
+  if (
+    parameters.maxRollingConsecutiveLosses > 0
+    && parameters.rollingLossCooldownBars > 0
+    && rollingConsecutiveLosses >= parameters.maxRollingConsecutiveLosses
+    && Number.isFinite(barsSinceRollingLossExit)
+    && barsSinceRollingLossExit < parameters.rollingLossCooldownBars
+  ) {
+    return 'Rolling loss cooldown active';
   }
 
   return null;
@@ -399,12 +600,14 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
     const hasBullishConfirm = confirmBars.some(hasBullishRejection);
     const hasBearishConfirm = confirmBars.some(hasBearishRejection);
     const impulseThreshold = parameters.impulseAtrMultiplier * atr;
+    const higherRegime = calculateHigherRegime(context.candles?.higher || [], parameters);
     const metadata = buildSignalMetadata({
       parameters,
       scope,
       atr,
       rsi,
       recentMove,
+      extra: { higherRegime },
     });
 
     if (
@@ -422,14 +625,38 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
         };
       }
 
+      const regimeBlockReason = shouldBlockByHigherRegime({ side: 'BUY', parameters, higherRegime });
+      if (regimeBlockReason) {
+        return {
+          signal: 'NONE',
+          reason: regimeBlockReason,
+          symbolCustomName: this.name,
+          symbol,
+          metadata,
+        };
+      }
+
+      const confidence = calculateSignalConfidence({
+        side: 'BUY',
+        parameters,
+        atr,
+        rsi,
+        recentMove,
+        confirmBars,
+      });
+
       return {
         signal: 'BUY',
+        confidence,
         sl: currentClose - (parameters.slAtrMultiplier * atr),
         tp: currentClose + (parameters.tpAtrMultiplier * atr),
         reason: 'USDJPY downside impulse with oversold bullish rejection',
         symbolCustomName: this.name,
         symbol,
-        metadata,
+        metadata: {
+          ...metadata,
+          confidence,
+        },
       };
     }
 
@@ -448,14 +675,38 @@ class UsdjpyJpyMacroReversalV1 extends BaseSymbolCustom {
         };
       }
 
+      const regimeBlockReason = shouldBlockByHigherRegime({ side: 'SELL', parameters, higherRegime });
+      if (regimeBlockReason) {
+        return {
+          signal: 'NONE',
+          reason: regimeBlockReason,
+          symbolCustomName: this.name,
+          symbol,
+          metadata,
+        };
+      }
+
+      const confidence = calculateSignalConfidence({
+        side: 'SELL',
+        parameters,
+        atr,
+        rsi,
+        recentMove,
+        confirmBars,
+      });
+
       return {
         signal: 'SELL',
+        confidence,
         sl: currentClose + (parameters.slAtrMultiplier * atr),
         tp: currentClose - (parameters.tpAtrMultiplier * atr),
         reason: 'USDJPY upside impulse with overbought bearish rejection',
         symbolCustomName: this.name,
         symbol,
-        metadata,
+        metadata: {
+          ...metadata,
+          confidence,
+        },
       };
     }
 
@@ -486,6 +737,11 @@ module.exports._internals = {
   calculatePriceRange,
   calculateRSI,
   calculateSMA,
+  calculateHigherRegime,
+  shouldBlockByHigherRegime,
   buildSignalMetadata,
+  calculateSignalConfidence,
   parseUtcHours,
+  getConsecutiveLosses,
+  getScopedTrades,
 };

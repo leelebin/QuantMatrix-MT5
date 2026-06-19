@@ -71,6 +71,45 @@ function appendBreakoutCandle(candles, { rangeBoost = 8, volBoost = 800 } = {}) 
   return candles;
 }
 
+function buildReversalCandles() {
+  const candles = buildBaselineCandles({ count: 80, drift: 0, baseVol: 100 });
+  for (const candle of candles) {
+    candle.open = 100.2;
+    candle.high = 101;
+    candle.low = 99.5;
+    candle.close = 100.1;
+  }
+  const last = candles[candles.length - 1];
+  Object.assign(last, {
+    open: 100.3,
+    high: 100.8,
+    low: 98.4,
+    close: 100.5,
+    volume: 500,
+    tickVolume: 500,
+  });
+  return candles;
+}
+
+function reversalFeatureSnapshot() {
+  return {
+    rvol: 3.2,
+    volumeSpikeClass: 'extreme',
+    averageVolume: 100,
+    volume: 500,
+    cumulativeDelta: 100,
+    cumulativeDeltaPrev: 50,
+    cumulativeDeltaDelta: 50,
+    cumulativeDeltaSlope: 10,
+    cumulativeDeltaSmoothed: 100,
+    sessionVwap: 100.4,
+    vwapDistance: 0.1,
+    wickUpperRatio: 0,
+    wickLowerRatio: 10,
+    spreadEfficiency: 0.1,
+  };
+}
+
 describe('volumeFeatureService', () => {
   test('resolveVolume prefers real volume over tick volume when > 0', () => {
     expect(volumeFeatures.resolveVolume({ volume: 50, tickVolume: 200 })).toBe(50);
@@ -102,6 +141,8 @@ describe('volumeFeatureService', () => {
     expect(features).not.toBeNull();
     expect(typeof features.rvol).toBe('number');
     expect(typeof features.cumulativeDelta).toBe('number');
+    expect(typeof features.cumulativeDeltaDelta).toBe('number');
+    expect(typeof features.cumulativeDeltaSlope).toBe('number');
     expect(typeof features.sessionVwap).toBe('number');
     expect(typeof features.wickUpperRatio).toBe('number');
     expect(typeof features.wickLowerRatio).toBe('number');
@@ -127,19 +168,28 @@ describe('volumeFeatureService', () => {
 });
 
 describe('VolumeFlowHybridStrategy', () => {
-  function runStrategy(candles, { entryCandles = candles, instrumentSymbol = 'XAUUSD' } = {}) {
+  function runStrategy(candles, {
+    entryCandles = candles,
+    instrumentSymbol = 'XAUUSD',
+    parameterOverrides = {},
+    contextOverrides = {},
+  } = {}) {
     const strategy = new VolumeFlowHybridStrategy();
     const executionConfig = getStrategyExecutionConfig(instrumentSymbol, 'VolumeFlowHybrid');
     const instrument = { ...getInstrument(instrumentSymbol), ...executionConfig };
-    const params = resolveStrategyParameters({
+    const params = {
+      ...resolveStrategyParameters({
       strategyType: 'VolumeFlowHybrid',
       instrument,
       storedParameters: null,
-    });
+      }),
+      ...parameterOverrides,
+    };
     const indicators = indicatorService.calculateAll(candles, params);
     return strategy.analyze(candles, indicators, instrument, {
       strategyParams: params,
       entryCandles,
+      ...contextOverrides,
     });
   }
 
@@ -158,6 +208,281 @@ describe('VolumeFlowHybridStrategy', () => {
     expect(result.sl).toBeLessThan(result.indicatorsSnapshot.entryPrice);
     expect(result.tp).toBeGreaterThan(result.indicatorsSnapshot.entryPrice);
     expect(result.exitPlan).toBeTruthy();
+  });
+
+  test('module and direction gates default to enabled for backward compatibility', () => {
+    const strategy = new VolumeFlowHybridStrategy();
+
+    expect(strategy._isModuleEnabled(VolumeFlowHybridStrategy.MODULE_BREAKOUT, {})).toBe(true);
+    expect(strategy._isModuleEnabled(VolumeFlowHybridStrategy.MODULE_REVERSAL, {})).toBe(true);
+    expect(strategy._isDirectionAllowed('BUY', {})).toBe(true);
+    expect(strategy._isDirectionAllowed('SELL', {})).toBe(true);
+  });
+
+  test('unknown UTC session is allowed by default but can be disabled', () => {
+    const strategy = new VolumeFlowHybridStrategy();
+    const unknownTime = '2026-04-01T22:30:00Z';
+
+    expect(strategy._resolveSessionInfo(unknownTime, {}, VolumeFlowHybridStrategy.MODULE_BREAKOUT))
+      .toEqual(expect.objectContaining({
+        sessionName: 'UNKNOWN',
+        sessionAllowed: true,
+      }));
+    expect(strategy._resolveSessionInfo(unknownTime, { allow_unknown_session: 0 }, VolumeFlowHybridStrategy.MODULE_BREAKOUT))
+      .toEqual(expect.objectContaining({
+        sessionName: 'UNKNOWN',
+        sessionAllowed: false,
+        sessionFilterReason: 'Unknown session disabled',
+      }));
+  });
+
+  test('enable_breakout_module=0 suppresses an otherwise valid breakout', () => {
+    const candles = appendBreakoutCandle(buildBaselineCandles({ count: 280 }));
+    const enabled = runStrategy(candles, {
+      parameterOverrides: {
+        min_confidence: 0.1,
+        use_entry_confirmation: 0,
+      },
+    });
+    const disabled = runStrategy(candles, {
+      parameterOverrides: {
+        enable_breakout_module: 0,
+        min_confidence: 0.1,
+        use_entry_confirmation: 0,
+      },
+    });
+
+    expect(enabled.signal).toBe('BUY');
+    expect(enabled.indicatorsSnapshot.module).toBe('BREAKOUT_CONTINUATION');
+    expect(disabled.signal).toBe('NONE');
+  });
+
+  test('allow_buy=0 suppresses an otherwise valid BUY signal', () => {
+    const candles = appendBreakoutCandle(buildBaselineCandles({ count: 280 }));
+    const enabled = runStrategy(candles, {
+      parameterOverrides: {
+        min_confidence: 0.1,
+        use_entry_confirmation: 0,
+      },
+    });
+    const disabled = runStrategy(candles, {
+      parameterOverrides: {
+        allow_buy: 0,
+        min_confidence: 0.1,
+        use_entry_confirmation: 0,
+      },
+    });
+
+    expect(enabled.signal).toBe('BUY');
+    expect(disabled.signal).toBe('NONE');
+  });
+
+  test('enable_reversal_module=0 suppresses an otherwise valid reversal', () => {
+    const candles = buildReversalCandles();
+    const commonOverrides = {
+      rvol_reversal: 2.0,
+      min_confidence: 0.1,
+      use_entry_confirmation: 0,
+      use_session_filter: 0,
+    };
+    const enabled = runStrategy(candles, {
+      parameterOverrides: commonOverrides,
+      contextOverrides: {
+        volumeFeatureSnapshot: reversalFeatureSnapshot(),
+      },
+    });
+    const disabled = runStrategy(candles, {
+      parameterOverrides: {
+        ...commonOverrides,
+        enable_reversal_module: 0,
+      },
+      contextOverrides: {
+        volumeFeatureSnapshot: reversalFeatureSnapshot(),
+      },
+    });
+
+    expect(enabled.signal).toBe('BUY');
+    expect(enabled.indicatorsSnapshot.module).toBe('EXHAUSTION_REVERSAL');
+    expect(disabled.signal).toBe('NONE');
+  });
+
+  test('reversal VWAP reclaim cannot be bypassed by structure reclaim alone', () => {
+    const candles = buildBaselineCandles({ count: 80, drift: 0, baseVol: 100 });
+    for (const candle of candles) {
+      candle.open = 100.2;
+      candle.high = 101;
+      candle.low = 99.5;
+      candle.close = 100.1;
+    }
+    const last = candles[candles.length - 1];
+    Object.assign(last, {
+      open: 100.3,
+      high: 100.8,
+      low: 98.4,
+      close: 100.5,
+      volume: 500,
+      tickVolume: 500,
+    });
+
+    const result = runStrategy(candles, {
+      parameterOverrides: {
+        rvol_reversal: 2.0,
+        min_confidence: 0.1,
+        use_entry_confirmation: 0,
+        use_session_filter: 0,
+      },
+      contextOverrides: {
+        volumeFeatureSnapshot: {
+          rvol: 3.2,
+          volumeSpikeClass: 'extreme',
+          averageVolume: 100,
+          volume: 500,
+          cumulativeDelta: 100,
+          cumulativeDeltaPrev: 50,
+          cumulativeDeltaDelta: 50,
+          cumulativeDeltaSlope: 10,
+          sessionVwap: 110,
+          vwapDistance: -9.5,
+          wickUpperRatio: 0,
+          wickLowerRatio: 10,
+          spreadEfficiency: 0.1,
+        },
+      },
+    });
+
+    expect(result.signal).toBe('NONE');
+    expect(result.status).toBe('FILTERED');
+    expect(result.filterReason).toContain('VWAP reclaim/reject missing');
+  });
+
+  test('tiny-body doji candle does not trigger reversal from wick ratio explosion', () => {
+    const candles = buildBaselineCandles({ count: 80, drift: 0, baseVol: 100 });
+    for (const candle of candles) {
+      candle.open = 100.2;
+      candle.high = 101;
+      candle.low = 99.5;
+      candle.close = 100.1;
+    }
+    const last = candles[candles.length - 1];
+    Object.assign(last, {
+      open: 100.49,
+      high: 100.8,
+      low: 98.4,
+      close: 100.5,
+      volume: 500,
+      tickVolume: 500,
+    });
+
+    const result = runStrategy(candles, {
+      parameterOverrides: {
+        rvol_reversal: 2.0,
+        min_confidence: 0.1,
+        use_entry_confirmation: 0,
+        use_session_filter: 0,
+      },
+      contextOverrides: {
+        volumeFeatureSnapshot: {
+          rvol: 2.8,
+          volumeSpikeClass: 'extreme',
+          averageVolume: 100,
+          volume: 500,
+          cumulativeDelta: 100,
+          cumulativeDeltaPrev: 50,
+          cumulativeDeltaDelta: 50,
+          cumulativeDeltaSlope: 10,
+          sessionVwap: 100.4,
+          vwapDistance: 0.1,
+          wickUpperRatio: 0,
+          wickLowerRatio: 100,
+          spreadEfficiency: 0.01,
+        },
+      },
+    });
+
+    expect(result.signal).toBe('NONE');
+    expect(result.status).toBe('FILTERED');
+    expect(result.filterReason).toContain('doji body below minimum ratio');
+  });
+
+  test('missing optional spread, news, higher TF, and exposure data does not crash', () => {
+    const candles = appendBreakoutCandle(buildBaselineCandles({ count: 280 }));
+    const result = runStrategy(candles);
+
+    expect(result.indicatorsSnapshot).toEqual(expect.objectContaining({
+      spreadFilterAvailable: false,
+      spreadUnavailable: true,
+      newsFilterAvailable: false,
+      exposureFilterAvailable: false,
+      htfRegime: expect.any(String),
+    }));
+  });
+
+  test('spread filter converts MT5-style spread points into price units before ATR comparison', () => {
+    const strategy = new VolumeFlowHybridStrategy();
+    const instrument = getInstrument('XAUUSD');
+
+    const result = strategy._resolveSpreadInfo(
+      { spread: 25 },
+      {},
+      instrument,
+      5,
+      { use_spread_filter: 1, max_spread_atr_xau: 0.08 }
+    );
+
+    expect(result.blocked).toBe(false);
+    expect(result.snapshot.spreadRaw).toBe(25);
+    expect(result.snapshot.spread).toBeCloseTo(0.25, 8);
+    expect(result.snapshot.spreadAtr).toBeCloseTo(0.05, 8);
+    expect(result.snapshot.spreadUnit).toBe('pips');
+  });
+
+  test('spreadPrice remains a direct price-unit input for spread filtering', () => {
+    const strategy = new VolumeFlowHybridStrategy();
+    const instrument = getInstrument('XAUUSD');
+
+    const result = strategy._resolveSpreadInfo(
+      { spreadPrice: 0.5 },
+      {},
+      instrument,
+      5,
+      { use_spread_filter: 1, max_spread_atr_xau: 0.08 }
+    );
+
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toBe('Spread too high relative to ATR');
+    expect(result.snapshot.spread).toBeCloseTo(0.5, 8);
+    expect(result.snapshot.spreadAtr).toBeCloseTo(0.1, 8);
+    expect(result.snapshot.spreadUnit).toBe('price');
+  });
+
+  test('entry timeframe confirmation filters structure loss', () => {
+    const candles = appendBreakoutCandle(buildBaselineCandles({ count: 280 }));
+    const structureHigh = Math.max(...candles.slice(-14, -1).map((candle) => candle.high));
+    const entryCandles = buildBaselineCandles({
+      count: 12,
+      drift: 0,
+      baseVol: 80,
+      startMs: Date.parse(candles[candles.length - 1].time) - 11 * 60 * 1000,
+    });
+    const lastEntry = entryCandles[entryCandles.length - 1];
+    Object.assign(lastEntry, {
+      open: structureHigh - 2,
+      high: structureHigh - 1,
+      low: structureHigh - 4,
+      close: structureHigh - 3,
+    });
+
+    const result = runStrategy(candles, {
+      entryCandles,
+      parameterOverrides: {
+        min_confidence: 0.1,
+        entry_confirm_reject_strong_opposite_wick: 0,
+      },
+    });
+
+    expect(result.signal).toBe('NONE');
+    expect(result.status).toBe('FILTERED');
+    expect(result.filterReason).toContain('structure hold failed');
   });
 
   test('exposes both module identifiers', () => {
@@ -195,6 +520,34 @@ describe('VolumeFlowHybrid registration', () => {
     });
     expect(result.summary.totalTrades).toBeGreaterThanOrEqual(0);
     expect(result.parameters).toHaveProperty('rvol_continuation');
+    expect(result.volumeFlowHybridBreakdown).toEqual(expect.objectContaining({
+      module: expect.any(Object),
+      symbol: expect.any(Object),
+      session: expect.any(Object),
+      direction: expect.any(Object),
+      filterReason: expect.any(Object),
+    }));
+  });
+
+  test('backtest engine keeps VolumeFlowHybrid filter stats when no trades are opened', () => {
+    const breakdown = backtestEngine._generateVolumeFlowHybridBreakdown([], 'XAUUSD', {
+      'Spread too high relative to ATR': {
+        totalSignals: 42,
+        module: null,
+        session: null,
+        status: 'FILTERED',
+      },
+    });
+
+    expect(breakdown.module).toEqual({});
+    expect(breakdown.filterReason).toEqual({
+      'Spread too high relative to ATR': {
+        totalSignals: 42,
+        module: null,
+        session: null,
+        status: 'FILTERED',
+      },
+    });
   });
 
   test('backtest engine skips lower timeframe indicator builds for VolumeFlowHybrid', async () => {

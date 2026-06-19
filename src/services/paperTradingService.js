@@ -1795,6 +1795,23 @@ class PaperTradingService {
               : 'Position update'),
         details: update,
       });
+
+      if (actionKind === 'SL_UPDATE' && update.newSl !== undefined) {
+        await tradeNotificationService.notifyStopMoved({
+          scope: 'paper',
+          source: localPosition.source,
+          symbol: localPosition.symbol,
+          strategy: localPosition.strategy,
+          symbolCustomName: localPosition.symbolCustomName,
+          logicName: localPosition.logicName,
+          oldSl: update.oldSl ?? localPosition.currentSl,
+          newSl: update.newSl,
+          phase: update.phase,
+          positionId: localPosition.mt5PositionId || localPosition._id,
+          mt5PositionId: localPosition.mt5PositionId,
+          managerActionId: update.managerActionId,
+        });
+      }
     }
 
     const refreshedPositions = await paperPositionsDb.find({});

@@ -99,6 +99,25 @@ class BaseStrategy {
     return context.strategyParams || {};
   }
 
+  getPriceDecimals(instrument = {}) {
+    const explicitPrecision = Number(instrument.pricePrecision ?? instrument.digits);
+    if (Number.isInteger(explicitPrecision) && explicitPrecision >= 0 && explicitPrecision <= 8) {
+      return explicitPrecision;
+    }
+
+    const pipSize = Number(instrument.pipSize);
+    if (!Number.isFinite(pipSize) || pipSize <= 0) return 5;
+    if (pipSize < 0.001) return 5;
+    if (pipSize < 0.01) return 3;
+    return 2;
+  }
+
+  roundPrice(value, instrument = {}) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    return parseFloat(number.toFixed(this.getPriceDecimals(instrument)));
+  }
+
   /**
    * Helper: build a no-signal response
    */

@@ -89,6 +89,33 @@ class TradeNotificationService {
     };
   }
 
+  async notifyStopMoved(event = {}) {
+    const normalized = normalizeStopMoveEvent(event);
+    if (!normalized) {
+      return { queued: false, reason: 'invalid_stop_move_event' };
+    }
+
+    const message = buildStopMoveMessage(normalized);
+    if (!message) {
+      return { queued: false, reason: 'empty_stop_move_message' };
+    }
+
+    const result = await this.sendTelegram(message, {
+      type: 'stop_move',
+      scope: normalized.scope,
+      priority: normalized.scope === 'live' ? 8 : 6,
+      title: `${normalized.symbol} stop moved`,
+      dedupeKey: buildStopMoveDedupeKey(normalized),
+      immediate: true,
+    });
+
+    return {
+      queued: result.queued > 0,
+      message,
+      delivery: result,
+    };
+  }
+
   async notifyDataSyncResult(result = {}) {
     const message = buildDataSyncMessage(result);
     const delivery = await this.sendTelegram(message, {
@@ -208,7 +235,7 @@ function normalizeOpenEvent(event) {
     source: cleanText(event.source || ''),
     symbol,
     side,
-    strategy: cleanText(event.strategy || 'Unknown'),
+    strategy: resolveDisplayStrategy(event),
     timeframe: cleanText(event.timeframe || event.setupTimeframe || event.entryTimeframe || ''),
     entryPrice: firstDefined(event.entryPrice, event.entry, event.openPrice),
     stopLoss: firstDefined(event.stopLoss, event.currentSl, event.sl, event.initialSl, event.finalSl),
@@ -235,20 +262,21 @@ function normalizeCloseEvent(event = {}) {
   const side = String(event.side || event.type || event.signal || '').trim().toUpperCase();
   const openedAt = toValidDate(event.openedAt);
   const closedAt = toValidDate(event.closedAt) || new Date();
+  const rawExitReason = cleanText(event.exitReason || event.reason || event.brokerExitReason || 'CLOSED');
 
   return {
     scope: scope === 'paper' ? 'paper' : 'live',
     source: cleanText(event.source || ''),
     symbol,
     side,
-    strategy: cleanText(event.strategy || 'Unknown'),
+    strategy: resolveDisplayStrategy(event),
     timeframe: cleanText(event.timeframe || event.setupTimeframe || event.entryTimeframe || ''),
     entryPrice: firstDefined(event.entryPrice, event.entry, event.openPrice),
     exitPrice: firstDefined(event.exitPrice, event.closePrice),
     profitLoss: firstDefined(event.profitLoss, event.pnl),
     profitPips: event.profitPips,
     realizedRMultiple: event.realizedRMultiple,
-    exitReason: cleanText(event.exitReason || event.reason || 'CLOSED'),
+    exitReason: normalizeCloseReason(rawExitReason, event),
     holdingTime: event.holdingTime || formatDuration(event.holdingTimeMs, openedAt, closedAt),
     symbolCustomName: cleanText(event.symbolCustomName || ''),
     logicName: cleanText(event.logicName || ''),
@@ -256,7 +284,32 @@ function normalizeCloseEvent(event = {}) {
     parameterSnapshot: event.parameterSnapshot || null,
     setupType: cleanText(event.setupType || ''),
     positionId: firstDefined(event.positionId, event.mt5PositionId, event._id),
+    openedAt,
     closedAt,
+  };
+}
+
+function normalizeStopMoveEvent(event = {}) {
+  const scope = normalizeScope(event.scope || (event.source === 'symbolCustom' ? 'paper' : 'live'));
+  const symbol = String(event.symbol || '').trim().toUpperCase();
+  if (!symbol) return null;
+
+  const oldSl = firstDefined(event.oldSl, event.previousSl, event.fromSl, event.currentSl);
+  const newSl = firstDefined(event.newSl, event.toSl, event.stopLoss);
+  if (oldSl === undefined || oldSl === null || oldSl === '' || newSl === undefined || newSl === null || newSl === '') {
+    return null;
+  }
+
+  return {
+    scope: scope === 'paper' ? 'paper' : 'live',
+    source: cleanText(event.source || ''),
+    symbol,
+    strategy: resolveDisplayStrategy(event),
+    phase: normalizeStopMovePhase(event.phase || event.reasonCode || event.action || event.kind),
+    oldSl,
+    newSl,
+    positionId: firstDefined(event.positionId, event.mt5PositionId, event._id),
+    managerActionId: firstDefined(event.managerActionId, event.actionId, event.eventId),
   };
 }
 
@@ -275,6 +328,19 @@ function buildCloseDedupeKey(event) {
     event.side,
     positionId,
     closedAt,
+  ].join('|');
+}
+
+function buildStopMoveDedupeKey(event) {
+  return [
+    'stop_move',
+    event.scope,
+    event.symbol,
+    event.positionId || 'unknown-position',
+    event.phase || 'sl',
+    normalizeDedupeNumber(event.oldSl),
+    normalizeDedupeNumber(event.newSl),
+    event.managerActionId || 'no-action',
   ].join('|');
 }
 
@@ -307,34 +373,16 @@ function buildOpenMessage(events = {}) {
   const source = live || paper;
   if (!source) return null;
 
-  const metadataSource = paper?.source === 'symbolCustom' ? paper : source;
   const label = getOpenScopeLabel({ live, paper });
   const lines = [
     `[${label} OPEN]`,
     joinCompact([
-      `${source.symbol} ${source.side}`,
-      source.strategy,
-      source.timeframe,
+      `${escapeHtml(source.symbol)} ${escapeHtml(source.side)}`,
+      escapeHtml(source.strategy),
     ], ' | '),
-    joinCompact([
-      formatField('Entry', source.entryPrice),
-      formatField('SL', source.stopLoss),
-      formatField('TP', source.takeProfit),
-      formatField('Vol', source.volume),
-    ], ' | '),
+    `Time ${formatMessageTime(source.timestamp)}`,
   ];
 
-  const metadataLine = buildSymbolCustomLine(metadataSource);
-  if (metadataLine) lines.push(metadataLine);
-
-  const detailLine = joinCompact([
-    formatRiskPercent(source.riskPercent),
-    formatQuality(source),
-    source.setupType ? `Setup ${escapeHtml(source.setupType)}` : null,
-  ], ' | ');
-  if (detailLine) lines.push(detailLine);
-
-  if (source.reason) lines.push(`Reason: ${escapeHtml(source.reason)}`);
   return truncateMessage(lines.filter(Boolean).join('\n'), MAX_OPEN_MESSAGE_LENGTH);
 }
 
@@ -345,27 +393,24 @@ function buildCloseMessage(event = {}) {
   const lines = [
     `[${getScopeLabel(trade)} CLOSE]`,
     joinCompact([
-      `${trade.symbol} ${trade.side}`,
-      trade.strategy,
-      trade.timeframe,
+      `${escapeHtml(trade.symbol)} ${escapeHtml(trade.side)}`,
+      escapeHtml(trade.strategy),
     ], ' | '),
-    joinCompact([
-      formatField('Entry', trade.entryPrice),
-      formatField('Exit', trade.exitPrice),
-      formatProfitLoss(trade.profitLoss),
-      formatPips(trade.profitPips),
-      formatRMultiple(trade.realizedRMultiple),
-    ], ' | '),
-    joinCompact([
-      trade.exitReason ? `Reason ${escapeHtml(trade.exitReason)}` : null,
-      trade.holdingTime ? `Duration ${escapeHtml(trade.holdingTime)}` : null,
-    ], ' | '),
+    buildTimeRangeLine(trade),
+    buildPriceRangeLine(trade),
+    trade.exitReason ? `Reason ${escapeHtml(trade.exitReason)}` : null,
   ];
 
-  const metadataLine = buildSymbolCustomLine(trade);
-  if (metadataLine) lines.push(metadataLine);
-
   return lines.filter(Boolean).join('\n');
+}
+
+function buildStopMoveMessage(event = {}) {
+  const label = event.phase === 'breakeven' ? 'BE MOVE' : 'SL MOVE';
+  return [
+    `[${getScopeLabel(event)} ${label}]`,
+    joinCompact([escapeHtml(event.symbol), escapeHtml(event.strategy)], ' | '),
+    `SL ${escapeHtml(formatNumber(event.oldSl))} -> ${escapeHtml(formatNumber(event.newSl))}`,
+  ].filter(Boolean).join('\n');
 }
 
 function getOpenScopeLabel({ live, paper }) {
@@ -390,6 +435,98 @@ function buildSymbolCustomLine(event) {
     event.logicName ? `Logic ${escapeHtml(event.logicName)}` : null,
     event.candidatePreset ? `Preset ${escapeHtml(event.candidatePreset)}` : null,
   ], ' | ');
+}
+
+function resolveDisplayStrategy(event = {}) {
+  return cleanText(event.strategy || event.symbolCustomName || event.logicName || 'Unknown');
+}
+
+function buildTimeRangeLine(trade = {}) {
+  const opened = formatMessageTime(trade.openedAt);
+  const closed = formatMessageTime(trade.closedAt);
+  const duration = cleanText(trade.holdingTime || '');
+  if (opened && closed) {
+    const closePart = opened.slice(0, 10) === closed.slice(0, 10) ? closed.slice(11) : closed;
+    return joinCompact([
+      `Time ${opened} -> ${closePart}`,
+      duration,
+    ], ' | ');
+  }
+  if (closed) {
+    return joinCompact([`Time ${closed}`, duration], ' | ');
+  }
+  return duration ? `Time ${escapeHtml(duration)}` : null;
+}
+
+function buildPriceRangeLine(trade = {}) {
+  const entry = formatPriceValue(trade.entryPrice);
+  const exit = formatPriceValue(trade.exitPrice);
+  if (!entry && !exit) return null;
+  return `Price ${entry || '--'} -> ${exit || '--'}`;
+}
+
+function normalizeCloseReason(rawReason, event = {}) {
+  const reason = cleanText(rawReason || 'CLOSED') || 'CLOSED';
+  if (hasBreakevenEvidence(event) && isStopLikeExitReason(reason, event)) {
+    return 'BE_TRIGGERED';
+  }
+  return reason;
+}
+
+function hasBreakevenEvidence(event = {}) {
+  if (event.breakevenActivated === true) return true;
+  if (String(event.protectiveStopState?.phase || '').toLowerCase() === 'breakeven') return true;
+
+  const events = Array.isArray(event.managementEvents) ? event.managementEvents : [];
+  return events.some((managementEvent) => {
+    const haystack = [
+      managementEvent?.type,
+      managementEvent?.action,
+      managementEvent?.reasonCode,
+      managementEvent?.phase,
+      managementEvent?.triggerType,
+      managementEvent?.eventType,
+    ].map((value) => String(value || '').toUpperCase());
+    return haystack.some((value) => (
+      value === 'BREAKEVEN'
+      || value === 'BREAKEVEN_SET'
+      || value === 'TRAILING_TO_BE'
+      || value.includes('BREAKEVEN')
+    ));
+  });
+}
+
+function isStopLikeExitReason(reason, event = {}) {
+  const values = [
+    reason,
+    event.exitReason,
+    event.reason,
+    event.brokerExitReason,
+    event.brokerCloseComment,
+  ].map((value) => String(value || '').toUpperCase());
+
+  return values.some((value) => (
+    value.includes('SL')
+    || value.includes('STOP')
+    || value.includes('BREAKEVEN')
+    || value.includes('PROTECTIVE')
+    || value.includes('[SL ')
+  ));
+}
+
+function normalizeStopMovePhase(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized.includes('breakeven') || normalized === 'be' || normalized === 'breakeven_set') {
+    return 'breakeven';
+  }
+  if (normalized.includes('trail')) return 'trailing';
+  return 'sl';
+}
+
+function normalizeDedupeNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return cleanText(value);
+  return trimTrailingZeros(numeric.toFixed(8));
 }
 
 function buildDataSyncMessage(result = {}) {
@@ -558,6 +695,17 @@ function formatNumber(value) {
   return trimTrailingZeros(numeric.toFixed(decimals));
 }
 
+function formatPriceValue(value) {
+  if (value === undefined || value === null || value === '') return '';
+  return escapeHtml(formatNumber(value));
+}
+
+function formatMessageTime(value) {
+  const date = toValidDate(value);
+  if (!date) return '';
+  return date.toISOString().replace('T', ' ').slice(0, 16);
+}
+
 function formatDuration(holdingTimeMs, openedAt, closedAt) {
   const explicit = Number(holdingTimeMs);
   const ms = Number.isFinite(explicit)
@@ -611,12 +759,16 @@ module.exports._internals = {
   buildDedupeKey,
   buildFingerprint,
   buildOpenMessage,
+  buildStopMoveDedupeKey,
+  buildStopMoveMessage,
   findMergeKey,
   formatBytes,
+  formatMessageTime,
   formatRemotePath,
   formatRiskPercent,
   getMergeWindowMs,
   normalizeCloseEvent,
   normalizeDataSyncFailureCode,
   normalizeOpenEvent,
+  normalizeStopMoveEvent,
 };

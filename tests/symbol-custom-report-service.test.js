@@ -172,7 +172,7 @@ describe('symbolCustomReportService', () => {
     expect(SymbolCustom.findAll).toHaveBeenCalledWith({ symbol: 'USDJPY', status: 'draft' });
   });
 
-  test('warnings include liveEnabled true but Phase 1 has no live support', async () => {
+  test('warnings identify incomplete SymbolCustom live runtime gates', async () => {
     const { service } = loadReportService({
       symbolCustoms: [
         {
@@ -188,7 +188,7 @@ describe('symbolCustomReportService', () => {
 
     const report = await service.buildSymbolCustomReport();
 
-    expect(report.symbolCustoms[0].warnings).toContain('SYMBOL_CUSTOM_LIVE_NOT_SUPPORTED_IN_PHASE_1');
+    expect(report.symbolCustoms[0].warnings).toContain('SYMBOL_CUSTOM_LIVE_RUNTIME_SAFETY_GATED');
   });
 
   test('missing or unregistered logic returns PLACEHOLDER_ONLY warning', async () => {

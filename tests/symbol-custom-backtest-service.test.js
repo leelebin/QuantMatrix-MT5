@@ -350,7 +350,7 @@ describe('symbolCustomBacktestService', () => {
 
   test('mock non-placeholder logic can complete a profitable backtest and save result', async () => {
     const analyze = jest.fn(async (context) => (context.currentIndex === 0
-      ? { signal: 'BUY', sl: 95, tp: 110, reason: 'mock buy' }
+      ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'mock buy' }
       : { signal: 'NONE' }));
     const {
       service,
@@ -419,7 +419,7 @@ describe('symbolCustomBacktestService', () => {
 
   test('candleProvider can provide candles for non-placeholder logic', async () => {
     const analyze = jest.fn(async (context) => (context.currentIndex === 0
-      ? { signal: 'SELL', sl: 105, tp: 90, reason: 'mock sell' }
+      ? { signal: 'SELL', confidence: 0.8, sl: 105, tp: 90, reason: 'mock sell' }
       : { signal: 'NONE' }));
     const candleProvider = jest.fn(async () => ({
       entry: [
@@ -467,7 +467,7 @@ describe('symbolCustomBacktestService', () => {
 
   test('historical provider can supply setup entry and higher candles for runner execution', async () => {
     const analyze = jest.fn(async (context) => (context.currentIndex === 0
-      ? { signal: 'BUY', sl: 95, tp: 110, reason: 'historical buy' }
+      ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'historical buy' }
       : { signal: 'NONE' }));
     const historicalCandles = {
       setup: [

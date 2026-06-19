@@ -87,10 +87,109 @@ function usdjpyReversalCandles({ direction = 'down', count = 48, startHourUtc = 
 }
 
 describe('symbolCustomBacktestRunnerService', () => {
+  test('BUY signal without confidence is rejected by execution score gate', async () => {
+    const logic = {
+      analyze: jest.fn(async (context) => (context.currentIndex === 0
+        ? { signal: 'BUY', sl: 95, tp: 110, reason: 'mock buy without confidence' }
+        : { signal: 'NONE' })),
+    };
+
+    const result = await runWithLogic(logic, [
+      bar(0, { close: 100 }),
+      bar(1, { high: 110, low: 99, close: 109 }),
+    ]);
+
+    expect(result.trades).toHaveLength(0);
+    expect(result.summary).toEqual(expect.objectContaining({
+      rawSignals: 1,
+      openedSignals: 0,
+      rejectedSignals: 1,
+      warnings: expect.arrayContaining([
+        expect.objectContaining({ reasonCode: runner.ZERO_COST_BACKTEST_WARNING }),
+      ]),
+    }));
+    expect(result.summary.rejectedSignalDetails[0]).toEqual(expect.objectContaining({
+      reasonCode: runner.EXECUTION_SCORE_TOO_LOW,
+      reasonText: 'Execution score too low: 0.00 < 0.60',
+      executionScore: 0,
+      minExecutionScore: 0.6,
+      signal: 'BUY',
+    }));
+  });
+
+  test('BUY signal with sufficient confidence passes execution score gate', async () => {
+    const logic = {
+      analyze: jest.fn(async (context) => (context.currentIndex === 0
+        ? { signal: 'BUY', confidence: 0.75, sl: 95, tp: 110, reason: 'mock buy with confidence' }
+        : { signal: 'NONE' })),
+    };
+
+    const result = await runWithLogic(logic, [
+      bar(0, { close: 100 }),
+      bar(1, { high: 110, low: 99, close: 109 }),
+    ]);
+
+    expect(result.trades).toHaveLength(1);
+    expect(result.summary).toEqual(expect.objectContaining({
+      rawSignals: 1,
+      openedSignals: 1,
+      rejectedSignals: 0,
+    }));
+    expect(result.trades[0]).toEqual(expect.objectContaining({
+      confidence: 0.75,
+      executionScore: 0.75,
+      executionPolicy: expect.objectContaining({ minExecutionScore: 0.6 }),
+    }));
+  });
+
+  test('duplicate entry window applies a backtest-safe execution score penalty', async () => {
+    const logic = {
+      analyze: jest.fn(async (context) => {
+        if (context.currentIndex === 0 || context.currentIndex === 2) {
+          return { signal: 'BUY', confidence: 0.7, sl: 95, tp: 110, reason: 'duplicate probe' };
+        }
+        return { signal: 'NONE' };
+      }),
+    };
+
+    const result = await runWithLogic(logic, [
+      bar(0, { close: 100 }),
+      bar(1, { high: 110, low: 99, close: 110 }),
+      bar(2, { close: 100 }),
+      bar(3, { high: 110, low: 99, close: 110 }),
+    ], {
+      options: {
+        executionPolicy: {
+          duplicateEntryWindowBars: 3,
+        },
+      },
+    });
+
+    expect(result.trades).toHaveLength(1);
+    expect(result.summary).toEqual(expect.objectContaining({
+      rawSignals: 2,
+      openedSignals: 1,
+      rejectedSignals: 1,
+    }));
+    expect(result.summary.rejectedSignalDetails[0]).toEqual(expect.objectContaining({
+      reasonCode: runner.EXECUTION_SCORE_TOO_LOW,
+      executionScore: 0.55,
+      executionScoreDetails: expect.objectContaining({
+        rawConfidence: 0.7,
+        duplicatePenalty: 0.15,
+      }),
+      duplicateReference: expect.objectContaining({
+        side: 'BUY',
+        entryIndex: 0,
+        exitIndex: 1,
+      }),
+    }));
+  });
+
   test('mock BUY hits TP and creates profitable trade', async () => {
     const logic = {
       analyze: jest.fn(async (context) => (context.currentIndex === 0
-        ? { signal: 'BUY', sl: 95, tp: 110, reason: 'mock buy' }
+        ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'mock buy' }
         : { signal: 'NONE' })),
     };
 
@@ -115,7 +214,7 @@ describe('symbolCustomBacktestRunnerService', () => {
   test('mock BUY hits SL and records loss', async () => {
     const logic = {
       analyze: jest.fn(async (context) => (context.currentIndex === 0
-        ? { signal: 'BUY', sl: 95, tp: 110, reason: 'mock buy' }
+        ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'mock buy' }
         : { signal: 'NONE' })),
     };
 
@@ -133,7 +232,7 @@ describe('symbolCustomBacktestRunnerService', () => {
   test('mock SELL hits TP and creates profitable trade', async () => {
     const logic = {
       analyze: jest.fn(async (context) => (context.currentIndex === 0
-        ? { signal: 'SELL', sl: 105, tp: 90, reason: 'mock sell' }
+        ? { signal: 'SELL', confidence: 0.8, sl: 105, tp: 90, reason: 'mock sell' }
         : { signal: 'NONE' })),
     };
 
@@ -153,7 +252,7 @@ describe('symbolCustomBacktestRunnerService', () => {
   test('same bar SL/TP ambiguity uses SL-first conservative rule', async () => {
     const logic = {
       analyze: jest.fn(async (context) => (context.currentIndex === 0
-        ? { signal: 'BUY', sl: 95, tp: 110, reason: 'ambiguous setup' }
+        ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'ambiguous setup' }
         : { signal: 'NONE' })),
     };
 
@@ -170,7 +269,7 @@ describe('symbolCustomBacktestRunnerService', () => {
   test('CLOSE signal exits at current close', async () => {
     const logic = {
       analyze: jest.fn(async (context) => {
-        if (context.currentIndex === 0) return { signal: 'BUY', sl: 95, tp: 110, reason: 'open' };
+        if (context.currentIndex === 0) return { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'open' };
         if (context.currentIndex === 1) return { signal: 'CLOSE', reason: 'custom close' };
         return { signal: 'NONE' };
       }),
@@ -189,7 +288,7 @@ describe('symbolCustomBacktestRunnerService', () => {
   test('open position is closed at end of backtest', async () => {
     const logic = {
       analyze: jest.fn(async (context) => (context.currentIndex === 0
-        ? { signal: 'BUY', sl: 95, tp: 110, reason: 'hold to end' }
+        ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'hold to end' }
         : { signal: 'NONE' })),
     };
 
@@ -203,11 +302,50 @@ describe('symbolCustomBacktestRunnerService', () => {
     expect(result.trades[0].exitPrice).toBe(104);
   });
 
+  test('equity curve and context mark open SymbolCustom positions to market', async () => {
+    const observed = [];
+    const logic = {
+      analyze: jest.fn(async (context) => {
+        observed.push({
+          currentIndex: context.currentIndex,
+          balance: context.balance,
+          equity: context.equity,
+          unrealizedPnl: context.unrealizedPnl,
+        });
+        return context.currentIndex === 0
+          ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'hold floating profit' }
+          : { signal: 'NONE' };
+      }),
+    };
+
+    const result = await runWithLogic(logic, [
+      bar(0, { close: 100 }),
+      bar(1, { high: 104, low: 99, close: 103 }),
+      bar(2, { high: 104, low: 99, close: 102 }),
+    ]);
+
+    const floatingPoint = result.equityCurve.find((point) => point.time === bar(1).time);
+    expect(floatingPoint).toEqual(expect.objectContaining({
+      balance: 1000,
+      equity: 1006,
+      openPosition: expect.objectContaining({
+        markPrice: 103,
+        unrealizedPnl: 6,
+      }),
+    }));
+    const floatingContext = observed.find((context) => context.currentIndex === 1);
+    expect(floatingContext).toEqual(expect.objectContaining({
+      balance: 1000,
+      equity: 1006,
+      unrealizedPnl: 6,
+    }));
+  });
+
   test('summary metrics include profitFactor, winRate, avgR, drawdown, and max loss', async () => {
     const logic = {
       analyze: jest.fn(async (context) => {
-        if (context.currentIndex === 0) return { signal: 'BUY', sl: 95, tp: 110, reason: 'winner' };
-        if (context.currentIndex === 2) return { signal: 'BUY', sl: 95, tp: 110, reason: 'loser' };
+        if (context.currentIndex === 0) return { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'winner' };
+        if (context.currentIndex === 2) return { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'loser' };
         return { signal: 'NONE' };
       }),
     };
@@ -239,7 +377,7 @@ describe('symbolCustomBacktestRunnerService', () => {
     const logic = {
       analyze: jest.fn(async (context) => {
         observed.push(context);
-        if (context.currentIndex === 0) return { signal: 'BUY', sl: 95, tp: 110, reason: 'open' };
+        if (context.currentIndex === 0) return { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'open' };
         return { signal: 'NONE' };
       }),
     };
@@ -268,10 +406,37 @@ describe('symbolCustomBacktestRunnerService', () => {
     }));
   });
 
+  test('optimized candle context exposes the same current history prefixes', async () => {
+    const observedLengths = [];
+    const logic = {
+      analyze: jest.fn(async (context) => {
+        observedLengths.push({
+          index: context.currentIndex,
+          setup: context.candles.setup.length,
+          entry: context.candles.entry.length,
+          higher: context.candles.higher.length,
+        });
+        return { signal: 'NONE' };
+      }),
+    };
+
+    await runWithLogic(logic, [
+      bar(0, { close: 100 }),
+      bar(1, { close: 101 }),
+      bar(2, { close: 102 }),
+    ]);
+
+    expect(observedLengths).toEqual([
+      { index: 0, setup: 1, entry: 1, higher: 1 },
+      { index: 1, setup: 2, entry: 2, higher: 2 },
+      { index: 2, setup: 3, entry: 3, higher: 3 },
+    ]);
+  });
+
   test('trade records include entryIndex, exitIndex, entryHourUtc, and entryDateUtc', async () => {
     const logic = {
       analyze: jest.fn(async (context) => (context.currentIndex === 0
-        ? { signal: 'BUY', sl: 95, tp: 110, reason: 'indexed trade' }
+        ? { signal: 'BUY', confidence: 0.8, sl: 95, tp: 110, reason: 'indexed trade' }
         : { signal: 'NONE' })),
     };
 
@@ -288,7 +453,7 @@ describe('symbolCustomBacktestRunnerService', () => {
     }));
   });
 
-  test('USDJPY combined conservative cooldown guardrails produce at least one backtest trade', async () => {
+  test('USDJPY combined conservative raw signal passes execution gate with calculated confidence', async () => {
     const logic = new UsdjpyJpyMacroReversalV1();
     const candles = usdjpyReversalCandles({ direction: 'down', startHourUtc: 22 });
 
@@ -311,14 +476,16 @@ describe('symbolCustomBacktestRunnerService', () => {
       },
     });
 
-    expect(result.summary.trades).toBeGreaterThan(0);
+    expect(result.summary.rawSignals).toBeGreaterThan(0);
+    expect(result.summary.openedSignals).toBeGreaterThan(0);
+    expect(result.summary.rejectedSignals).toBe(0);
     expect(result.trades[0]).toEqual(expect.objectContaining({
       symbolCustomName: 'USDJPY_JPY_MACRO_REVERSAL_V1',
-      entryIndex: expect.any(Number),
-      exitIndex: expect.any(Number),
-      entryHourUtc: expect.any(Number),
-      entryDateUtc: expect.any(String),
-      exitReason: expect.any(String),
+      side: 'BUY',
+      confidence: expect.any(Number),
+      executionScore: expect.any(Number),
     }));
+    expect(result.trades[0].confidence).toBeGreaterThanOrEqual(0.6);
+    expect(result.trades[0].executionScore).toBeGreaterThanOrEqual(0.6);
   });
 });

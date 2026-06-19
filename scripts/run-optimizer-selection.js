@@ -714,6 +714,9 @@ function flattenResult(row) {
   const s = row.summary || {};
   const rec = row.recommendation || {};
   const selection = row.selection || {};
+  const vfhAudit = row.volumeFlowHybridAudit || {};
+  const vfhManagement = vfhAudit.management || {};
+  const vfhFilterImpact = vfhAudit.filterImpact || {};
   return {
     bucket: row.bucket,
     baseBucket: row.baseBucket || row.bucket,
@@ -765,6 +768,22 @@ function flattenResult(row) {
     needsIntrabarValidation: row.needsIntrabarValidation ?? null,
     intrabarValidationReasons: Array.isArray(row.intrabarValidationReasons) ? row.intrabarValidationReasons.join('; ') : '',
     directionControlNotes: Array.isArray(row.directionControlAuditNotes) ? row.directionControlAuditNotes.join('; ') : '',
+    volumeFlowHybridAuditNotes: Array.isArray(vfhAudit.notes) ? vfhAudit.notes.join('; ') : '',
+    vfhBreakoutTrades: vfhAudit.moduleBreakout?.totalTrades ?? '',
+    vfhBreakoutProfitFactor: vfhAudit.moduleBreakout?.profitFactor ?? '',
+    vfhReversalTrades: vfhAudit.moduleReversal?.totalTrades ?? '',
+    vfhReversalProfitFactor: vfhAudit.moduleReversal?.profitFactor ?? '',
+    vfhSessionFilteredSignals: countFilterImpactSignals(vfhFilterImpact, 'session') || '',
+    vfhNewsFilteredSignals: countFilterImpactSignals(vfhFilterImpact, 'news') || '',
+    vfhSpreadFilteredSignals: countFilterImpactSignals(vfhFilterImpact, 'spread') || '',
+    vfhBreakevenExitTrades: vfhManagement.breakevenExitTrades ?? '',
+    vfhTrailingExitTrades: vfhManagement.trailingExitTrades ?? '',
+    vfhPartialCloseTrades: vfhManagement.partialCloseTrades ?? '',
+    vfhMaxHoldingExitTrades: vfhManagement.maxHoldingExitTrades ?? '',
+    vfhDirectionControlTriggeredTrades: vfhManagement.directionControlTriggeredTrades ?? '',
+    vfhDirectionControlTpRateAfterTrigger: vfhManagement.directionControlTpRateAfterTrigger ?? '',
+    vfhDirectionControlSlRateAfterTrigger: vfhManagement.directionControlSlRateAfterTrigger ?? '',
+    vfhIntrabarOptimisticBiasRisk: vfhAudit.intrabarOptimisticBiasRisk ?? '',
     costModel: JSON.stringify(row.costModelUsed || null),
     costModelSource: row.costModelSource || '',
     bestParameters: JSON.stringify(row.bestParameters || {}),
@@ -879,6 +898,99 @@ function buildDirectionControlAuditNotes(row = {}) {
   ];
 }
 
+function countFilterImpactSignals(filterImpact = {}, category) {
+  return Number(filterImpact?.[category]?.totalSignals) || 0;
+}
+
+function getVfhModuleStats(breakdown = {}, moduleName) {
+  return breakdown?.module?.[moduleName] || {};
+}
+
+function buildVolumeFlowHybridAudit(row = {}) {
+  if (row.strategy !== STRATEGY_TYPES.VOLUME_FLOW_HYBRID) {
+    return null;
+  }
+
+  const breakdown = row.volumeFlowHybridBreakdown || {};
+  const management = breakdown.management || {};
+  const filterImpact = breakdown.filterImpact || {};
+  const breakout = getVfhModuleStats(breakdown, 'BREAKOUT_CONTINUATION');
+  const reversal = getVfhModuleStats(breakdown, 'EXHAUSTION_REVERSAL');
+  const timeframe = String(row.timeframe || '').toLowerCase();
+  const setupTimeframes = new Set();
+  if (timeframe) setupTimeframes.add(timeframe);
+  Object.values(breakdown.module || {}).forEach((moduleStats) => {
+    if (moduleStats?.setupTimeframe) setupTimeframes.add(String(moduleStats.setupTimeframe).toLowerCase());
+    if (moduleStats?.entryTimeframe) setupTimeframes.add(String(moduleStats.entryTimeframe).toLowerCase());
+  });
+
+  const notes = [
+    'VolumeFlowHybrid audit is report-only; it does not change entries, exits, P/L, equity, or runtime state.',
+  ];
+  const hasFineTimeframeBias = timeframe === '5m'
+    || timeframe === '1m'
+    || setupTimeframes.has('5m')
+    || setupTimeframes.has('1m');
+  if (hasFineTimeframeBias) {
+    notes.push('Uses 5m/1m replay assumptions; require MT5 paper/demo confirmation before live consideration.');
+  }
+  if (countFilterImpactSignals(filterImpact, 'session') > 0) {
+    notes.push(`Session filter blocked ${countFilterImpactSignals(filterImpact, 'session')} setup(s).`);
+  }
+  if (countFilterImpactSignals(filterImpact, 'news') > 0) {
+    notes.push(`News filter blocked ${countFilterImpactSignals(filterImpact, 'news')} setup(s).`);
+  }
+  if (countFilterImpactSignals(filterImpact, 'spread') > 0) {
+    notes.push(`Spread filter blocked ${countFilterImpactSignals(filterImpact, 'spread')} setup(s).`);
+  }
+  if (management.configuredPartialPlanTrades > 0 && management.partialCloseTrades === 0) {
+    notes.push('Partial close plan exists but no executed partial event was observed in this backtest result.');
+  }
+  if (management.configuredTimeExitTrades > 0 && management.maxHoldingExitTrades === 0) {
+    notes.push('Max-holding time plan exists but no max-hold exit was observed in this backtest result.');
+  }
+  if (management.bePostExitTpReachStatus === 'requires_post_exit_candle_capture') {
+    notes.push('BE-after-exit TP reach requires post-exit candle capture; this optimizer report does not infer it from closed-trade P/L.');
+  }
+  if (management.directionControlTriggeredTrades > 0) {
+    notes.push(`Direction Control triggered ${management.directionControlTriggeredTrades} VFH trade(s): TP rate ${management.directionControlTpRateAfterTrigger}, SL rate ${management.directionControlSlRateAfterTrigger}.`);
+  }
+
+  return {
+    moduleBreakout: breakout,
+    moduleReversal: reversal,
+    filterImpact,
+    management,
+    intrabarOptimisticBiasRisk: hasFineTimeframeBias,
+    notes,
+  };
+}
+
+function volumeFlowHybridMarkdown(rows) {
+  const auditedRows = rows.filter((row) => row.volumeFlowHybridAudit);
+  if (!auditedRows.length) return '_None_\n';
+  const lines = [
+    '| strategy | symbol | breakout trades/PF | reversal trades/PF | session/news/spread filtered | BE/trailing/partial/maxHold | DC TP/SL after trigger | notes |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+  ];
+  auditedRows.forEach((row) => {
+    const audit = row.volumeFlowHybridAudit || {};
+    const management = audit.management || {};
+    const cells = [
+      row.strategy,
+      row.symbol,
+      `${audit.moduleBreakout?.totalTrades ?? 0}/${formatNumber(audit.moduleBreakout?.profitFactor, 2)}`,
+      `${audit.moduleReversal?.totalTrades ?? 0}/${formatNumber(audit.moduleReversal?.profitFactor, 2)}`,
+      `${countFilterImpactSignals(audit.filterImpact, 'session')}/${countFilterImpactSignals(audit.filterImpact, 'news')}/${countFilterImpactSignals(audit.filterImpact, 'spread')}`,
+      `${management.breakevenExitTrades ?? 0}/${management.trailingExitTrades ?? 0}/${management.partialCloseTrades ?? 0}/${management.maxHoldingExitTrades ?? 0}`,
+      `${management.directionControlThenHitTp ?? 0}/${management.directionControlThenHitSl ?? 0}`,
+      Array.isArray(audit.notes) ? audit.notes.join('; ') : '',
+    ].map(safeText);
+    lines.push(`| ${cells.join(' | ')} |`);
+  });
+  return `${lines.join('\n')}\n`;
+}
+
 function notesList(rows, extractor) {
   const notes = [];
   rows.forEach((row) => {
@@ -971,6 +1083,9 @@ function buildMarkdownReport(report) {
     '',
     '## Direction Control Audit Notes',
     notesList([...live, ...paper], buildDirectionControlAuditNotes),
+    '',
+    '## VolumeFlowHybrid Audit Notes',
+    volumeFlowHybridMarkdown(report.results),
     '',
     '## Suggested Live Candidate List',
     '```json',
@@ -1113,6 +1228,8 @@ function buildHiddenMarkdownReport(report) {
       : null),
     '## Direction Control Audit Notes',
     notesList(candidateRows, buildDirectionControlAuditNotes),
+    '## VolumeFlowHybrid Audit Notes',
+    volumeFlowHybridMarkdown(report.results),
     '## Intrabar BE Quick Flags',
     markdownTable(needsIntrabar),
     '## Suggested New Paper Whitelist Candidates',
@@ -1133,6 +1250,7 @@ function completeReport(report) {
   report.resultsByBucket = Object.fromEntries(bucketKeys.map((bucket) => [bucket, []]));
   report.results.forEach((row) => {
     row.directionControlAuditNotes = buildDirectionControlAuditNotes(row);
+    row.volumeFlowHybridAudit = buildVolumeFlowHybridAudit(row);
     const bucket = row.bucket || mapBucketForReport(row.baseBucket || 'REJECT', report.runConfig.hiddenDiscovery);
     if (!report.resultsByBucket[bucket]) {
       report.resultsByBucket[bucket] = [];
@@ -1456,6 +1574,7 @@ async function runOptimizerForCombination({
       costModelUsed: costInfo.costModel,
       costModelSource: costInfo.source,
       costTags,
+      volumeFlowHybridBreakdown: best.volumeFlowHybridBreakdown || null,
       optimizationWindow: walkForwardRanges ? 'train' : 'full_range',
       walkForwardStatus: walkForwardRanges ? 'pending' : 'disabled',
       walkForwardWindows: serializeWalkForwardRanges(walkForwardRanges),

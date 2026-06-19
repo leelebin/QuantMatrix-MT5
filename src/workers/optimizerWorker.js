@@ -68,6 +68,7 @@ async function run() {
           parameters: simulation.parameters,
           parameterSource: simulation.parameterSource,
           breakevenConfigUsed: simulation.breakevenConfigUsed || sharedRunParams.breakevenConfig || null,
+          volumeFlowHybridBreakdown: simulation.volumeFlowHybridBreakdown || null,
           summary: simulation.summary,
         });
       }

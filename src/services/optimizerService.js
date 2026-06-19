@@ -218,6 +218,7 @@ class OptimizerService {
       storedStrategyParameters = null,
       breakevenConfig = null,
       executionPolicy = null,
+      executionConfigOverride = null,
       onProgress = null,
       minimumTrades = DEFAULT_OPTIMIZER_MINIMUM_TRADES,
       paramSpecs,
@@ -258,6 +259,7 @@ class OptimizerService {
           storedStrategyParameters,
           breakevenConfig,
           executionPolicy,
+          executionConfigOverride,
         });
 
         if (simulation.summary.totalTrades >= minimumTrades) {
@@ -266,6 +268,7 @@ class OptimizerService {
             parameters: simulation.parameters,
             parameterSource: simulation.parameterSource,
             breakevenConfigUsed: simulation.breakevenConfigUsed || breakevenConfig || null,
+            volumeFlowHybridBreakdown: simulation.volumeFlowHybridBreakdown || null,
             summary: simulation.summary,
           });
         }
@@ -324,6 +327,7 @@ class OptimizerService {
       storedStrategyParameters = null,
       breakevenConfig = null,
       executionPolicy = null,
+      executionConfigOverride = null,
       onProgress = null,
       minimumTrades = DEFAULT_OPTIMIZER_MINIMUM_TRADES,
       paramSpecs,
@@ -349,6 +353,7 @@ class OptimizerService {
       storedStrategyParameters,
       breakevenConfig,
       executionPolicy,
+      executionConfigOverride,
     };
 
     this.activeWorkers = workers;
@@ -485,6 +490,7 @@ class OptimizerService {
       storedStrategyParameters = null,
       breakevenConfig = null,
       executionPolicy = null,
+      executionConfigOverride = null,
       onProgress = null,
       minimumTrades = DEFAULT_OPTIMIZER_MINIMUM_TRADES,
       parallelWorkers = null,
@@ -546,6 +552,7 @@ class OptimizerService {
             storedStrategyParameters,
             breakevenConfig,
             executionPolicy,
+            executionConfigOverride,
             onProgress,
             minimumTrades: normalizedMinimumTrades,
             paramSpecs,
@@ -566,6 +573,7 @@ class OptimizerService {
             storedStrategyParameters,
             breakevenConfig,
             executionPolicy,
+            executionConfigOverride,
             onProgress,
             minimumTrades: normalizedMinimumTrades,
             paramSpecs,
@@ -650,6 +658,7 @@ class OptimizerService {
           storedStrategyParameters,
           breakevenConfig,
           executionPolicy,
+          executionConfigOverride,
           onProgress,
           minimumTrades: normalizedMinimumTrades,
           paramSpecs,

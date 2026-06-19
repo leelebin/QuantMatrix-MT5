@@ -540,6 +540,13 @@ describe('VolumeFlowHybrid registration', () => {
     });
 
     expect(breakdown.module).toEqual({});
+    expect(breakdown.filterImpact.spread.totalSignals).toBe(42);
+    expect(breakdown.management).toEqual(expect.objectContaining({
+      totalTrades: 0,
+      partialCloseTrades: 0,
+      maxHoldingExitTrades: 0,
+      directionControlTriggeredTrades: 0,
+    }));
     expect(breakdown.filterReason).toEqual({
       'Spread too high relative to ATR': {
         totalSignals: 42,
@@ -548,6 +555,95 @@ describe('VolumeFlowHybrid registration', () => {
         status: 'FILTERED',
       },
     });
+  });
+
+  test('VolumeFlowHybrid breakdown exposes module, filter, and management audit stats', () => {
+    const breakdown = backtestEngine._generateVolumeFlowHybridBreakdown([
+      {
+        type: 'BUY',
+        profitLoss: -1.5,
+        realizedRMultiple: -0.1,
+        exitReason: 'BREAKEVEN_SL_HIT',
+        breakevenActivated: true,
+        trailingActivated: false,
+        exitPlanSnapshot: {
+          partials: [{ atProfitAtr: 1, closeFraction: 0.4 }],
+          timeExit: { reason: 'VFH_BREAKOUT_MAX_HOLD', maxHoldMinutes: 120 },
+        },
+        indicatorsAtEntry: {
+          module: 'BREAKOUT_CONTINUATION',
+          sessionName: 'LONDON',
+        },
+        directionControl: { firstTriggered: true },
+        directionControlEvents: [{ type: 'POST_ENTRY_DIRECTION_CONTROL' }],
+      },
+      {
+        type: 'SELL',
+        profitLoss: 8,
+        realizedRMultiple: 1.2,
+        exitReason: 'TP_HIT',
+        breakevenActivated: true,
+        trailingActivated: true,
+        exitPlanSnapshot: {
+          partials: [{ atProfitAtr: 0.8, closeFraction: 0.4 }],
+          timeExit: { reason: 'VFH_REVERSAL_MAX_HOLD', maxHoldMinutes: 45 },
+        },
+        indicatorsAtEntry: {
+          module: 'EXHAUSTION_REVERSAL',
+          sessionName: 'NEWYORK',
+        },
+        directionControl: { firstTriggered: true },
+      },
+    ], 'XAUUSD', {
+      'BREAKOUT_CONTINUATION not allowed in Asia session': {
+        totalSignals: 3,
+        module: 'BREAKOUT_CONTINUATION',
+        session: 'ASIA',
+        status: 'FILTERED',
+      },
+      'News blackout: CPI': {
+        totalSignals: 2,
+        module: null,
+        session: null,
+        status: 'FILTERED',
+      },
+      'Spread too high relative to ATR': {
+        totalSignals: 5,
+        module: null,
+        session: null,
+        status: 'FILTERED',
+      },
+    });
+
+    expect(breakdown.module.BREAKOUT_CONTINUATION).toEqual(expect.objectContaining({
+      totalTrades: 1,
+      netPnl: -1.5,
+    }));
+    expect(breakdown.module.EXHAUSTION_REVERSAL).toEqual(expect.objectContaining({
+      totalTrades: 1,
+      netPnl: 8,
+    }));
+    expect(breakdown.filterImpact.session.totalSignals).toBe(3);
+    expect(breakdown.filterImpact.news.totalSignals).toBe(2);
+    expect(breakdown.filterImpact.spread.totalSignals).toBe(5);
+    expect(breakdown.management).toEqual(expect.objectContaining({
+      breakevenExitTrades: 1,
+      breakevenTriggeredTrades: 2,
+      trailingTriggeredTrades: 1,
+      configuredPartialPlanTrades: 2,
+      partialCloseTrades: 0,
+      partialCloseSimulationStatus: 'not_simulated_or_not_triggered',
+      configuredTimeExitTrades: 2,
+      maxHoldingExitTrades: 0,
+      maxHoldingSimulationStatus: 'not_simulated_or_not_triggered',
+      directionControlTriggeredTrades: 2,
+      directionControlThenHitTp: 1,
+      directionControlThenHitSl: 1,
+      bePostExitTpReachStatus: 'requires_post_exit_candle_capture',
+    }));
+    expect(breakdown.managementByModule.BREAKOUT_CONTINUATION).toEqual(expect.objectContaining({
+      directionControlThenHitSl: 1,
+    }));
   });
 
   test('backtest engine skips lower timeframe indicator builds for VolumeFlowHybrid', async () => {

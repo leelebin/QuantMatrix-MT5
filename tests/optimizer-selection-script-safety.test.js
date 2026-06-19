@@ -38,6 +38,21 @@ describe('run-optimizer-selection safety contract', () => {
     expect(source).toContain('outOfSampleDegradationPercent');
   });
 
+  test('VolumeFlowHybrid audit is report-only and exposes filter/management fields', () => {
+    const source = readSelectionScript();
+
+    expect(source).toContain('buildVolumeFlowHybridAudit');
+    expect(source).toContain('VolumeFlowHybrid Audit Notes');
+    expect(source).toContain('volumeFlowHybridBreakdown');
+    expect(source).toContain('vfhBreakoutTrades');
+    expect(source).toContain('vfhSessionFilteredSignals');
+    expect(source).toContain('vfhBreakevenExitTrades');
+    expect(source).toContain('vfhPartialCloseTrades');
+    expect(source).toContain('vfhDirectionControlTpRateAfterTrigger');
+    expect(source).toContain('VolumeFlowHybrid audit is report-only');
+    expect(source).toContain('Uses 5m/1m replay assumptions');
+  });
+
   test('does not write strategy runtime or paper/live enable flags', () => {
     const source = readSelectionScript();
     const withoutReportWrites = source.replace(/fs\.writeFileSync\([^)]+\);/g, '');

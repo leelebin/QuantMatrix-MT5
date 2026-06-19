@@ -1391,6 +1391,116 @@ class BacktestEngine {
   }
 
   _generateVolumeFlowHybridBreakdown(trades = [], symbol = null, filterStats = {}) {
+    const categorizeFilterReason = (reason) => {
+      const text = String(reason || '').toLowerCase();
+      if (text.includes('session') || text.includes('rollover') || text.includes('asia') || text.includes('london') || text.includes('new york')) {
+        return 'session';
+      }
+      if (text.includes('news')) return 'news';
+      if (text.includes('spread')) return 'spread';
+      if (text.includes('execution score')) return 'execution';
+      if (text.includes('module disabled')) return 'module';
+      if (text.includes('correlation') || text.includes('exposure')) return 'exposure';
+      if (
+        text.includes('structure')
+        || text.includes('vwap')
+        || text.includes('confidence')
+        || text.includes('delta')
+        || text.includes('doji')
+        || text.includes('body')
+        || text.includes('rvol')
+        || text.includes('wick')
+        || text.includes('trend')
+      ) {
+        return 'setup_quality';
+      }
+      return 'other';
+    };
+
+    const summarizeFilterImpact = (stats = {}) => {
+      const impact = {};
+      Object.entries(stats || {}).forEach(([reason, details]) => {
+        const category = categorizeFilterReason(reason);
+        if (!impact[category]) {
+          impact[category] = {
+            totalSignals: 0,
+            reasons: {},
+          };
+        }
+        const totalSignals = Number(details?.totalSignals) || 0;
+        impact[category].totalSignals += totalSignals;
+        impact[category].reasons[reason] = {
+          totalSignals,
+          module: details?.module || null,
+          session: details?.session || null,
+          status: details?.status || null,
+        };
+      });
+      return impact;
+    };
+
+    const hasPartialEvent = (trade) => (Array.isArray(trade?.managementEvents) ? trade.managementEvents : [])
+      .some((event) => String(event?.type || event?.action || event?.reason || '').toUpperCase().includes('PARTIAL'));
+
+    const hasDirectionControlTrigger = (trade) => Boolean(
+      trade?.directionControl?.firstTriggered
+      || (Array.isArray(trade?.directionControlEvents) && trade.directionControlEvents.length > 0)
+    );
+
+    const isStopExit = (reason) => (
+      reason === 'INITIAL_SL_HIT'
+      || PROTECTIVE_STOP_REASONS.has(reason)
+      || String(reason || '').includes('SL')
+    );
+
+    const summarizeManagement = (groupTrades = []) => {
+      const totalTrades = groupTrades.length;
+      const breakevenExitTrades = groupTrades.filter((trade) => trade.exitReason === 'BREAKEVEN_SL_HIT' || trade.exitReason === 'BREAKEVEN').length;
+      const trailingExitTrades = groupTrades.filter((trade) => trade.exitReason === 'TRAILING_SL_HIT' || trade.exitReason === 'TRAILING_STOP').length;
+      const breakevenTriggeredTrades = groupTrades.filter((trade) => Boolean(trade.breakevenActivated || trade.trailingActivated)).length;
+      const trailingTriggeredTrades = groupTrades.filter((trade) => Boolean(trade.trailingActivated)).length;
+      const partialCloseTrades = groupTrades.filter(hasPartialEvent).length;
+      const configuredPartialPlanTrades = groupTrades.filter((trade) => Array.isArray(trade.exitPlanSnapshot?.partials) && trade.exitPlanSnapshot.partials.length > 0).length;
+      const configuredTimeExitTrades = groupTrades.filter((trade) => Boolean(trade.exitPlanSnapshot?.timeExit)).length;
+      const maxHoldingExitTrades = groupTrades.filter((trade) => String(trade.exitReason || '').includes('MAX_HOLD')).length;
+      const directionControlTriggeredTrades = groupTrades.filter(hasDirectionControlTrigger).length;
+      const directionControlThenHitTp = groupTrades.filter((trade) => hasDirectionControlTrigger(trade) && trade.exitReason === 'TP_HIT').length;
+      const directionControlThenHitSl = groupTrades.filter((trade) => hasDirectionControlTrigger(trade) && isStopExit(trade.exitReason)).length;
+      const directionControlThenOther = Math.max(0, directionControlTriggeredTrades - directionControlThenHitTp - directionControlThenHitSl);
+
+      return {
+        totalTrades,
+        breakevenExitTrades,
+        breakevenTriggeredTrades,
+        breakevenTriggerRate: totalTrades > 0 ? parseFloat((breakevenTriggeredTrades / totalTrades).toFixed(4)) : 0,
+        trailingExitTrades,
+        trailingTriggeredTrades,
+        partialCloseTrades,
+        configuredPartialPlanTrades,
+        partialCloseSimulationStatus: configuredPartialPlanTrades > 0 && partialCloseTrades === 0
+          ? 'not_simulated_or_not_triggered'
+          : 'observed_or_not_configured',
+        configuredTimeExitTrades,
+        maxHoldingExitTrades,
+        maxHoldingSimulationStatus: configuredTimeExitTrades > 0 && maxHoldingExitTrades === 0
+          ? 'not_simulated_or_not_triggered'
+          : 'observed_or_not_configured',
+        directionControlTriggeredTrades,
+        directionControlThenHitTp,
+        directionControlThenHitSl,
+        directionControlThenOther,
+        directionControlTpRateAfterTrigger: directionControlTriggeredTrades > 0
+          ? parseFloat((directionControlThenHitTp / directionControlTriggeredTrades).toFixed(4))
+          : 0,
+        directionControlSlRateAfterTrigger: directionControlTriggeredTrades > 0
+          ? parseFloat((directionControlThenHitSl / directionControlTriggeredTrades).toFixed(4))
+          : 0,
+        bePostExitTpReachStatus: breakevenExitTrades > 0
+          ? 'requires_post_exit_candle_capture'
+          : 'not_applicable',
+      };
+    };
+
     const emptyBuckets = () => ({
       module: {},
       symbol: {},
@@ -1403,6 +1513,8 @@ class BacktestEngine {
       return {
         ...emptyBuckets(),
         filterReason: filterStats || {},
+        filterImpact: summarizeFilterImpact(filterStats || {}),
+        management: summarizeManagement([]),
       };
     }
 
@@ -1479,6 +1591,11 @@ class BacktestEngine {
       session: summarizeBuckets(buckets.session),
       direction: summarizeBuckets(buckets.direction),
       filterReason: filterStats || buckets.filterReason,
+      filterImpact: summarizeFilterImpact(filterStats || buckets.filterReason),
+      management: summarizeManagement(trades),
+      managementByModule: Object.fromEntries(
+        Object.entries(buckets.module).map(([key, groupTrades]) => [key, summarizeManagement(groupTrades)])
+      ),
     };
   }
 
